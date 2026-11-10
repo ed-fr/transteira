@@ -49,6 +49,7 @@
     "internal/provisioning": 100,
     "internal/quota": 100,
     "internal/scan": 100,
+    "internal/secret": 100,
     "internal/stats": 100,
     "internal/storage": 100,
     "internal/store": 100,

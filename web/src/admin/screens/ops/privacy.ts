@@ -47,6 +47,7 @@ export const ERASED_KEYS: readonly string[] = [
   'opsPrivacy.erase.erased.invitations',
   'opsPrivacy.erase.erased.proofs',
   'opsPrivacy.erase.erased.dropLinks',
+  'opsPrivacy.erase.erased.secrets',
   'opsPrivacy.erase.erased.audit',
 ];
 
@@ -91,14 +92,15 @@ export function hasData(summary: DataSubjectSummary): boolean {
     summary.invitations > 0 ||
     summary.auditEvents > 0 ||
     (summary.proofs ?? 0) > 0 ||
-    (summary.dropLinks ?? 0) > 0
+    (summary.dropLinks ?? 0) > 0 ||
+    (summary.secrets ?? 0) > 0
   );
 }
 
 /**
  * Rows of the search summary. The security log count is left out: it is always 0, since that
- * log never records addresses (the screen says so in a note). The proofs row, an optional field
- * since 2.0, is shown when the server reports it.
+ * log never records addresses (the screen says so in a note). The proofs, drop links (since 2.0) and
+ * secrets (since 2.1) rows are optional fields, shown when the server reports them.
  */
 export function summaryRows(summary: DataSubjectSummary, t: Translate, format: FormatCount): CountRow[] {
   const rows: CountRow[] = [
@@ -125,6 +127,9 @@ export function summaryRows(summary: DataSubjectSummary, t: Translate, format: F
   }
   if (summary.dropLinks !== undefined) {
     rows.push({ id: 'dropLinks', term: t('opsPrivacy.summary.dropLinks'), value: format(summary.dropLinks) });
+  }
+  if (summary.secrets !== undefined) {
+    rows.push({ id: 'secrets', term: t('opsPrivacy.summary.secrets'), value: format(summary.secrets) });
   }
   return rows;
 }
@@ -177,6 +182,13 @@ export function reportRows(report: DataSubjectEraseReport, t: Translate, format:
       id: 'dropLinksDisabled',
       term: t('opsPrivacy.report.dropLinksDisabled'),
       value: format(report.dropLinksDisabled),
+    });
+  }
+  if (report.secretsDeleted !== undefined) {
+    rows.push({
+      id: 'secretsDeleted',
+      term: t('opsPrivacy.report.secretsDeleted'),
+      value: format(report.secretsDeleted),
     });
   }
   return rows;

@@ -292,6 +292,7 @@ screens; what each setting does and who may change it is described in
 | SMTP | server, port and security, optional username, password kept, replaced or removed (it must be typed again when the server, port or username changes), test email and SPF / DKIM / DMARC check |
 | Mail templates | one entry per template and language, marked when customised; editor with variable buttons (required variables flagged), line and column of server errors, preview, save and reset to the default |
 | Legal texts | legal notice and privacy policy per language, in Markdown, with a preview rendered by the server; saving an empty text deletes the document |
+| One-time secrets (since 2.1) | the settings of the module: enabled, durations and default, file and its maximum size, e-mail delivery and passphrase requirement, see [One-time secrets](tenants.md#one-time-secrets) |
 
 A tenant outside the admin's scope shows "not found". Leaving a screen with
 unsaved changes asks for a confirmation.
@@ -346,10 +347,10 @@ off on their account.
 ### Tenant navigation
 
 The sub-navigation of a tenant has two groups: **Configuration** (General,
-Branding, Network, SMTP, Mail templates, Legal texts, see
+Branding, Network, SMTP, Mail templates, Legal texts, One-time secrets, see
 [Tenant configuration](#tenant-configuration)) and **Operations**
-(Transfers, Invitations, Blocklist, API tokens, Audit log, Statistics,
-Personal data).
+(Transfers, Invitations, Blocklist, API tokens, One-time secrets, Audit log,
+Statistics, Personal data).
 
 The filters of the lists (transfers, invitations, blocklist, audit log)
 and the period of the statistics are kept in the page address, so a
@@ -448,8 +449,8 @@ write personal data you do not need in the comment.
 
 Choose the period (last 7 days, 30 days, the default, or 12 months). The
 screen shows the key figures (transfers deposited, volume deposited,
-downloads, volume downloaded, virus detections, highlighted when at least
-one), the current storage level and two bar charts (transfers and volume
+downloads, volume downloaded, one-time secrets created, virus detections,
+highlighted when at least one), the current storage level and two bar charts (transfers and volume
 per day, or per month for 12 months), each with a table of its values.
 The figures are indicative: the counters are written about every 30
 seconds (see [Statistics](#statistics) for their definitions).
@@ -467,7 +468,8 @@ The **Personal data** screen applies the
 tenant only:
 
 1. **Search** an address: the screen lists what is held (verified address
-   record, transfers sent and received, invitations, audit entries). The
+   record, transfers sent and received, invitations, one-time secrets created
+   or received, audit entries). The
    security log never records addresses, so it is not counted.
 2. **Erase all data**: the confirmation lists what is erased and what is
    kept on purpose (see
@@ -765,6 +767,29 @@ a blocked fingerprint refuses the file at finalization. Adding or removing
 an entry records `blocklist.updated`, with the value for a domain or a
 fingerprint, never for an address (only its kind and identifier).
 
+### One-time secrets
+
+Since 2.1. The metadata of the one-time secrets of the tenant; the content is
+never readable (it is encrypted in the browser, see the
+[threat model](../security/threat-model.md)).
+
+- **List** (`GET …/secrets`, filters `state`: `pending`, `active` and the
+  ended states, and `sender`): metadata only (sender, delivery, dates, state,
+  end reason, declared file size). Ended secrets stay listed as tombstones for
+  30 days. An auditor may read the list but not filter by sender (`403
+  read-only-role`).
+- **Delete** (`DELETE …/secrets/{secretId}`): a pending or active secret is
+  ended at once, its keys are destroyed and its file removed. `204` also when
+  the secret had already ended. Not allowed to an auditor. Audited as
+  `secret.deleted`.
+- **Settings** (`GET` and `PUT …/secret-settings`, delegated admin and super
+  admin, `403` for an auditor): `enabled`, `durations` (from `1h`, `12h`,
+  `1d`, `3d`, `7d`, `30d`), `defaultDuration`, `fileAllowed`, `fileMaxBytes`
+  (1 to 25 MiB), `emailAllowed` and `emailRequiresPassphrase`. Audited as
+  `secret.settings_updated`. **The module is on by default**, existing
+  entities included (see [Upgrade](upgrade.md#from-20-to-21)); the defaults
+  are in [Tenants](tenants.md#one-time-secrets).
+
 ### API tokens
 
 API tokens let scripts and third-party software deposit files without a
@@ -908,7 +933,10 @@ message, see [errors](../api/errors.md#maintenance)):
   `Tus-Resumable` and `Retry-After`): uploads in progress pause and resume
   after the maintenance;
 - finalizing a transfer (`POST /transfers/{id}/finalize`);
-- creating an invitation (`POST /invitations`).
+- creating an invitation (`POST /invitations`);
+- creating a one-time secret (`POST /secrets`), uploading its file (`PUT /secrets/{id}/file`) and sending it by e-mail (`POST /secrets/{id}/send`).
+
+Reading a secret (status, reveal, file download) keeps working, like downloads.
 
 Everything else keeps working: downloads, the public tenant information
 (`GET /tenant` reports `maintenance: true`, the `maintenanceMessage` for
@@ -1094,7 +1122,8 @@ them. They carry identifiers and counts (for example `fileCount`,
 | Admin accounts and sign-in | `setup.completed`, `admin.login`, `admin.login_failed`, `admin.logout`, `admin.totp_enrolled`, `admin.totp_disabled`, `admin.recovery_code_used`, `admin.password_changed`, `admin.created`, `admin.updated`, `admin.deleted`, `admin.credentials_reset`, `admin.activated`, `admin.totp_reset_local`, `admin.password_reset_local` |
 | Tenant configuration | `tenant.created`, `tenant.updated`, `tenant.branding_updated`, `tenant.asset_uploaded`, `tenant.asset_deleted`, `tenant.network_updated`, `tenant.recipient_rules_updated` (the domains), `tenant.confidentiality_updated` (the level keys), `tenant.smtp_updated`, `tenant.template_updated`, `tenant.template_reset`, `tenant.legal_updated`, `tenant.deletion_started`, `tenant.deleted` |
 | Configuration export and import (2.0) | `tenant.exported` (on the exported tenant; details: `includeBranding`), `tenant.imported` (on the new tenant; details: the name and FQDN of the new tenant, the `sourceVersion` and `exportedAt` of the file and, in `counts`, the size of each imported section and the number of webhooks not recreated, never a setting value) |
-| Transfers | `transfer.created`, `transfer.finalized`, `transfer.downloaded` (start of a file or archive download, never HEAD requests or resumed ranges; details: the file ID or `archive`), `transfer.deleted` (admin, with the redacted reason), `transfer.notification_resent` (number of recipients only), `transfer.recipient_refused` (refused by the recipient domain rules; details: the refused domains; never written to the security log) |
+| Transfers | `transfer.created`, `transfer.finalized`, `transfer.downloaded` (start of a file or archive download, never HEAD requests or resumed ranges; details: the file ID or `archive`), `transfer.deleted` (admin, with the redacted reason), `transfer.notification_resent` (number of recipients only), `transfer.recipient_refused` (refused by the recipient domain rules, for a secret e-mail too, with `object: secret` in the details; details: the refused domains; never written to the security log) |
+| One-time secrets (2.1) | `secret.created`, `secret.sent` (the recipient domain only, never the address), `secret.revealed`, `secret.file_downloaded`, `secret.expired`, `secret.deleted`, `secret.locked` (5 wrong passphrases), `secret.settings_updated` |
 | Invitations and addresses | `invitation.created`, `invitation.used`, `invitation.revoked`, `address.verified` |
 | Antivirus | `file.infected` (signature name), `file.not_scanned` (reason `too_large`, `encrypted`, `disabled` or, since 2.0, `e2e`) |
 | Quotas | `quota.warning` (80 %), `quota.reached` (100 %), see [Tenants](tenants.md#quota-alerts) |
@@ -1135,7 +1164,8 @@ concerned (the super admin has access to them all).
 
 1. **Search** (`POST /admin/tenants/{tenantId}/data-subjects/search`): it
    counts the verified address record, the transfers sent and received,
-   the invitations and the audit entries of that address. The security log
+   the invitations, the one-time secrets (`secrets`: any state, created or
+   received by the address) and the audit entries of that address. The security log
    never records addresses, so it always counts 0. The search is audited
    (`data_subject.searched`, without the address).
 2. **Erase** (`POST …/data-subjects/erase`): it returns a report with the
@@ -1161,6 +1191,9 @@ concerned (the super admin has access to them all).
   so it never mails the erased address: if its analysis concluded during
   the erasure, its notification mails are held back and sent afterwards,
   from the transfer as it then stands, to the remaining recipients only.
+- One-time secrets created or received by the address (since 2.1): deleted
+  before the invitations, rows first, then their keys, then their files, and
+  counted in `secretsDeleted`.
 - Invitations of which it is the invitee: deleted. Invitations it issued:
   revoked, and their issuer replaced by the pseudonym.
 - Audit log: wherever the address is the actor (as a depositor or a
@@ -1192,6 +1225,9 @@ address gives another pseudonym.
   still has other recipients is kept, and its link with it; the link is
   dead (410), and the files unreadable (keys destroyed), only once the
   transfer itself is erased.
+- **Secret e-mails already queued**: like the other mails, one handed to the
+  queue still goes out, and its link with the key stays readable until the
+  secret is erased.
 - **Messages and file names of other senders' transfers.** The free-text
   message and the file names of a transfer sent by someone else (to the
   person, or merely mentioning them) are not analysed and are kept until
@@ -1221,8 +1257,9 @@ and `GET /admin/system/stats` (super admin only, 403 otherwise), with
 | `transferCount`, `bytesUploaded` | Transfers **finalized** during the period and their declared size, whatever happened to them afterwards (deleted, expired, rejected). |
 | `downloadCount` | Distinct download **starts** during the period: a file read from its first byte (whole, or a range starting at 0), or the archive. HEAD requests and resumed ranges are not counted. Repeated starts of the same file (or of the archive) of a transfer by the same client (IPv4 address, or IPv6 /64) count once per hour, and at most 1,000 starts of one transfer count per hour whatever the clients; the same rule applies to the `transfer.downloaded` audit events and to the download count of each transfer. |
 | `bytesDownloaded` | Plaintext bytes actually served to recipients during the period, counted exactly (not deduplicated). |
+| `secretsCreated` | Since 2.1. One-time secrets created during the period, whatever happened to them afterwards (a count only, counted at creation, with the `secret.created` audit event). The Statistics screen shows it, the global statistics add it per tenant. |
 | `virusDetections` | Files found infected during the period. |
-| `storageUsedBytes`, `storageQuotaBytes`, `storageUsedRatio` | Current values, not limited to the period: declared size of the transfers uploading, scanning or available, against the quota (the ratio may exceed 1). |
+| `storageUsedBytes`, `storageQuotaBytes`, `storageUsedRatio` | Current values, not limited to the period: declared size of the transfers uploading, scanning or available, plus, since 2.1, the declared size of the stored one-time secret files (pending ones included), against the quota (the ratio may exceed 1). |
 | `series` | One point per UTC day for `7d` and `30d` (today included), one per calendar month for `12m` (the current one included, dated on the 1st); days without activity are present with zeros. |
 
 The global statistics add the disk holding the data directory (total, used

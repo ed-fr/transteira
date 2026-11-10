@@ -1,6 +1,6 @@
 # Envoyer des fichiers
 
-Ce service vous permet d’envoyer des fichiers volumineux à une ou plusieurs personnes : chaque destinataire reçoit un mail avec un lien de téléchargement. Les fichiers sont stockés chiffrés sur le serveur et supprimés automatiquement à l’expiration du transfert. Vous n’avez aucun compte à créer. Les utilisateurs internes de l’organisation envoient des fichiers directement ; une personne externe a besoin d’une invitation.
+Ce service vous permet d’envoyer des fichiers volumineux à une ou plusieurs personnes : chaque destinataire reçoit un mail avec un lien de téléchargement. Les fichiers sont stockés chiffrés sur le serveur et supprimés automatiquement à l’expiration du transfert. Vous n’avez aucun compte à créer. Les utilisateurs internes de l’organisation envoient des fichiers directement ; une personne externe a besoin d’une invitation. La même page permet aussi de transmettre un mot de passe, une clé ou un code sous forme de [secret à usage unique](topic:secret-share).
 
 ## Qui peut envoyer des fichiers
 
@@ -37,6 +37,8 @@ Un envoi se déroule en quatre étapes, détaillées ci-dessous :
 1. Attendre l’[analyse antivirus](topic:deposit-antivirus) : les destinataires sont alors prévenus par mail.
 
 Ce que voient vos destinataires est décrit dans [Télécharger les fichiers](topic:download).
+
+Pour transmettre un mot de passe, une clé ou un code, utilisez plutôt l’onglet **Partager un secret** de la même page : voir [Partager un secret](topic:secret-share).
 
 > **Note** Une nouvelle entité reste fermée tant que son administrateur n’a pas terminé de la configurer. D’ici là, la page affiche **Service en cours de mise en service** et aucun dépôt n’est possible : revenez un peu plus tard, ou contactez votre administrateur.
 
@@ -226,30 +228,42 @@ Pour un envoi en [lien seul](topic:link-only), l’écran affiche le **lien comp
 
 Pour transmettre un mot de passe, une clé ou un code, préférez un secret à usage unique à un transfert de fichiers. Le secret est chiffré dans votre navigateur : le serveur ne le voit jamais en clair. Il ne peut être lu qu’une seule fois, puis il est détruit ; il est aussi détruit à son expiration, même si personne ne l’a lu.
 
-Une fois identifié sur la page d’envoi (voir [Vous identifier par un code](topic:deposit-identify)), choisissez l’onglet **Partager un secret**. Il n’apparaît que si votre organisation a activé les secrets.
+Une fois identifié sur la page d’envoi (voir [Vous identifier par un code](topic:deposit-identify)), choisissez l’onglet **Partager un secret**. Il n’apparaît que si votre organisation a activé les secrets. Le module est activé par défaut pour toutes les entités, y compris celles qui existaient avant son introduction, et votre administrateur peut le désactiver. L’onglet n’est pas proposé quand vous déposez par un [lien de dépôt](topic:drop-link) ou en réponse à un transfert.
 
 ![Formulaire Partager un secret avec le champ Secret, la durée de validité, le mode de remise du lien et la phrase de passe, avec le choix d’un fichier](../screenshots/fr/secret-create.png)
 
 1. Saisissez le **Secret** : 10 000 caractères au plus. Il peut rester vide si vous joignez un fichier.
 1. Choisissez la durée dans **Valable pendant** (de 1 heure à 30 jours, selon les durées que votre organisation propose).
 1. Indiquez comment le destinataire reçoit le lien : **Je copie le lien moi-même**, ou **Envoyer le lien par mail** à une seule adresse (si votre organisation l’autorise).
-1. Ajoutez une **Phrase de passe** si vous le souhaitez. Le destinataire en aura besoin pour lire le secret, et elle n’est jamais envoyée au serveur. Transmettez-la **par un autre canal** que le lien (téléphone, SMS, de vive voix) : si le lien est envoyé par mail, une phrase de passe peut être obligatoire.
+1. Ajoutez une **Phrase de passe** si vous le souhaitez. Le destinataire en aura besoin pour lire le secret, et elle n’est jamais envoyée au serveur. Transmettez-la **par un autre canal** que le lien (téléphone, SMS, de vive voix) : si le lien est envoyé par mail, une phrase de passe peut être obligatoire. Préférez une phrase de passe longue, de plusieurs mots.
 1. Joignez au besoin un **Fichier** : un petit fichier seulement (la taille maximale est indiquée sous le champ). Il est chiffré dans votre navigateur et n’est donc pas analysé par l’antivirus ; le destinataire en est prévenu.
 1. Cochez **Me prévenir par mail quand le secret est lu** pour recevoir un accusé de lecture. Vous êtes aussi prévenu si le secret expire sans avoir été lu, ou s’il est verrouillé après trop de phrases de passe erronées.
 1. Cliquez sur **Créer le secret**.
+
+Si l’envoi du fichier ou du mail échoue après la création du secret, le formulaire affiche **Le secret n’est pas terminé**. Cliquez sur **Réessayer** (rien n’est rechiffré) ou sur **Recommencer**. Un secret inachevé n’est conservé qu’une heure, puis il est purgé : s’il a expiré, le formulaire vous invite à le créer de nouveau.
+
+**Remise par mail et phrase de passe.** Le mail contient le lien complet, clé comprise, et reste dans une boîte aux lettres. Ouvrir la page ne consomme rien, mais certains outils de sécurité du courrier ouvrent les liens des messages qu’ils analysent, et la boîte peut être lue par une autre personne que le destinataire. Une phrase de passe, transmise par un autre canal, garde le secret illisible dans ces cas. Si un secret apparaît comme **Lu** alors que le destinataire ne l’a pas ouvert, autre chose l’a probablement ouvert : l’accusé de lecture vous aide à le remarquer. Partagez de nouveau le secret, avec une phrase de passe.
 
 Avec **Je copie le lien moi-même**, l’écran **Secret créé** affiche le lien complet, clé comprise. **Ce lien n’est affiché qu’une seule fois** : cliquez sur **Copier le lien** avant de quitter cet écran : le lien est oublié dès que vous passez à l’autre onglet, créez un autre secret, terminez la session ou quittez la page. Le lien copié peut rester dans l’historique du presse-papiers de votre appareil : effacez-le une fois le lien transmis. Toute personne qui possède le lien peut lire le secret une fois ; transmettez-le donc par un canal de confiance. Avec l’envoi par mail, le lien part directement au destinataire et n’est pas affiché.
 
 ![Écran Secret créé avec le lien complet affiché une seule fois et le bouton Copier le lien](../screenshots/fr/secret-link-shown.png)
 
+**Accusé de lecture.** L’accusé et les avis (expiré sans lecture, verrouillé) sont envoyés par mail dans la langue par défaut de votre organisation, au mieux : un échec d’envoi n’affecte pas le secret. Aucun accusé n’est envoyé quand le secret est supprimé, par vous ou par un administrateur.
+
+**Préférez des durées courtes.** Une fois le secret lu, le serveur détruit son contenu et ses clés. Une sauvegarde du serveur faite pendant que le secret attendait encore conserve en revanche le texte chiffré, et ne peut plus être effacée ensuite. Ce qui protège alors le secret, c’est sa clé (la fin du lien) et la phrase de passe. Choisissez donc la **durée la plus courte** qui vous convient, et utilisez une phrase de passe, surtout pour la remise par mail.
+
+**Personnes externes invitées.** Si vous avez été invité, vous pouvez aussi partager un secret, uniquement par mail et uniquement à la personne qui vous a invité : le formulaire affiche **Le lien sera envoyé par mail à…** suivi de son adresse, et il n’y a rien à choisir. L’onglet est absent si votre organisation n’autorise pas les secrets par mail. Voir [Envoyer des fichiers avec une invitation](topic:invitation).
+
+**Depuis un script.** Un jeton d’API peut créer des secrets par l’API (voir `docs/api/` dans le dépôt TransTeira). Le client en ligne de commande `transteira-cli` ne gère pas les secrets.
+
 ### Mes secrets
 
-Dans [Mes envois](topic:my-transfers), la section **Mes secrets** liste vos secrets, du plus récent au plus ancien, avec leur état (**En attente**, **Disponible**, **Lu**, **Expiré**, **Supprimé** ou **Verrouillé**). Leur contenu n’y est jamais affiché, et le lien ne peut pas être retrouvé. Tant qu’un secret n’est pas lu, cliquez sur **Supprimer** : il est détruit aussitôt, même si le destinataire a déjà le lien.
+Dans [Mes envois](topic:my-transfers), dès que vous avez créé au moins un secret et si votre organisation propose les secrets, la section **Mes secrets** liste vos secrets, du plus récent au plus ancien. Pour chacun, elle indique la date de création, la remise (un lien à transmettre, ou l’adresse mail), la taille du fichier joint s’il y en a un, l’état (**En attente**, **Disponible**, **Lu**, **Expiré**, **Supprimé** ou **Verrouillé**), la date d’expiration et la date de lecture. **En attente** désigne un secret inachevé (voir plus haut). Leur contenu n’y est jamais affiché, et le lien ne peut pas être retrouvé. Tant qu’un secret n’est pas lu, cliquez sur **Supprimer** : il est détruit aussitôt, même si le destinataire a déjà le lien. Il reste dans la liste avec l’état **Supprimé**. Vous y accédez avec le même lien d’accès que vos transferts.
 
 <!-- topic: my-transfers -->
 ## Mes envois
 
-Sans créer de compte, vous pouvez gérer les transferts que vous avez envoyés : voir où ils en sont, les supprimer ou les garder disponibles plus longtemps.
+Sans créer de compte, vous pouvez gérer les transferts que vous avez envoyés : voir où ils en sont, les supprimer ou les garder disponibles plus longtemps. Vos secrets à usage unique figurent au même endroit : voir [Mes secrets](topic:secret-share).
 
 ### Obtenir votre lien d’accès
 
@@ -331,6 +345,8 @@ Cliquez sur **Continuer**. Vous devez ensuite [vous identifier par un code](topi
 
 Le formulaire affiche ensuite **Les fichiers seront envoyés à** suivi de l’adresse de la personne qui vous a invité : aucun destinataire n’est à saisir. Le reste du formulaire fonctionne comme décrit dans [Remplir le transfert](topic:deposit-options).
 
+La page peut aussi proposer l’onglet **Partager un secret** : avec une invitation, vous pouvez transmettre un secret par mail à la personne qui vous a invité, et à personne d’autre. Voir [Partager un secret](topic:secret-share).
+
 Si le lien ne fonctionne pas :
 
 - **Invitation introuvable** : le lien est incomplet. Copiez-le en entier depuis le mail, ou cliquez directement dessus.
@@ -353,6 +369,8 @@ Si la page indique que le lien est introuvable, il est incomplet, désactivé, r
 
 Pour envoyer des fichiers automatiquement (un export nocturne, un outil qui dépose des fichiers), le formulaire de transfert n’est pas nécessaire : demandez un **jeton d’API** à l’administrateur de votre entité. Un jeton permet à un script de déposer des fichiers sans qu’une personne vérifie une adresse, dans les limites fixées par l’administrateur (adresses réseau et expéditeurs autorisés).
 
+Un jeton peut aussi créer des secrets à usage unique par l’API, mais le client en ligne de commande décrit plus bas ne les gère pas : voir [Partager un secret](topic:secret-share).
+
 Votre administrateur peut aussi vous fournir le client en ligne de commande `transteira-cli`, qui dépose et télécharge depuis un terminal ou un script, avec le jeton, et reprend de lui-même un envoi interrompu. Ses binaires sont publiés avec chaque version sur GitHub, avec une signature à vérifier avant de les exécuter. Le guide complet est `docs/api/cli.md` dans le dépôt TransTeira. Ne collez jamais un jeton dans un message ou un document partagé : il donne le même accès qu’un script de votre entité.
 
 <!-- topic: deposit-problems -->
@@ -367,13 +385,17 @@ Voici les messages que vous pouvez rencontrer, et la conduite à tenir.
 - **L’espace de stockage de ce service est plein. Réessayez plus tard.** : réessayez plus tard, ou contactez votre administrateur.
 - **Certains fichiers ne sont pas acceptés par ce service.** : votre organisation a bloqué ces fichiers ; contactez votre administrateur si vous pensez qu’il s’agit d’une erreur.
 - **Votre session a expiré. Identifiez-vous à nouveau, puis sélectionnez les mêmes fichiers pour reprendre.** : l’envoi continue alors là où il s’était arrêté.
+- **Vous avez atteint la limite de secrets. Veuillez réessayer plus tard.** : une personne peut garder 50 secrets ouverts et en créer 200 par 24 heures. Supprimez les secrets inutiles dans [Mes secrets](topic:secret-share), ou patientez.
+- **Ce service n’autorise pas l’envoi vers le domaine de cette adresse.** (secret par mail) : votre organisation restreint les domaines destinataires, pour les secrets comme pour les transferts. Choisissez **Je copie le lien moi-même** ou une autre adresse.
+- **Une phrase de passe est obligatoire pour un secret envoyé par mail.** : ajoutez une phrase de passe, et transmettez-la par un autre canal.
+- **Le fichier est trop volumineux pour un secret.** : un secret ne contient qu’un petit fichier, dont la taille maximale est indiquée sous le champ. Pour un fichier plus gros, envoyez un transfert. Les fichiers des secrets comptent dans l’espace de stockage de votre organisation : un secret peut donc aussi être refusé quand il est plein.
 
 <!-- topic: maintenance -->
 ## Service en maintenance
 
 Le service est parfois brièvement arrêté pour une mise à jour.
 
-La page **Service en maintenance** s’affiche : les nouveaux transferts et les invitations sont suspendus, mais les téléchargements restent disponibles. Un envoi en cours est mis en pause et reprend après la maintenance. Revenez plus tard.
+La page **Service en maintenance** s’affiche : les nouveaux transferts, les invitations et les secrets sont suspendus, mais les téléchargements restent disponibles. Un envoi en cours est mis en pause et reprend après la maintenance. Revenez plus tard.
 
 ![Page Service en maintenance avec un message de l’administrateur](../screenshots/fr/maintenance.png)
 

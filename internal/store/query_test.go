@@ -740,12 +740,12 @@ var tenantAllowlist = map[string]int{
 	`DELETE FROM deposit_sessions WHERE tenant_id = ? AND email = ?`:                                                     0,
 	`SELECT count(*) FROM audit_events WHERE tenant_id = ? AND actor = ? AND actor_kind IN ('depositor', 'recipient')`:   0,
 	`UPDATE tenant_daily_stats SET transfers = transfers + ?, bytes_uploaded = bytes_uploaded + ?, ` +
-		`downloads = downloads + ?, bytes_downloaded = bytes_downloaded + ?, virus_detections = virus_detections + ? ` +
-		`WHERE tenant_id = ? AND day = ?`: 5,
+		`downloads = downloads + ?, bytes_downloaded = bytes_downloaded + ?, virus_detections = virus_detections + ?, ` +
+		`secrets_created = secrets_created + ? WHERE tenant_id = ? AND day = ?`: 6,
 	`INSERT INTO tenant_daily_stats (tenant_id, day, transfers, bytes_uploaded, downloads, bytes_downloaded, ` +
-		`virus_detections) VALUES (?, ?, ?, ?, ?, ?, ?)`: 0,
-	`SELECT day, transfers, bytes_uploaded, downloads, bytes_downloaded, virus_detections FROM tenant_daily_stats ` +
-		`WHERE tenant_id = ? AND day >= ? ORDER BY day`: 0,
+		`virus_detections, secrets_created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT day, transfers, bytes_uploaded, downloads, bytes_downloaded, virus_detections, secrets_created ` +
+		`FROM tenant_daily_stats WHERE tenant_id = ? AND day >= ? ORDER BY day`: 0,
 	`SELECT level, changed_at FROM tenant_quota_alerts WHERE tenant_id = ?`:                      0,
 	`UPDATE tenant_quota_alerts SET level = ?, changed_at = ? WHERE tenant_id = ? AND level = ?`: 2,
 	`INSERT INTO tenant_quota_alerts (tenant_id, level, changed_at) VALUES (?, ?, ?)`:            0,
@@ -1024,6 +1024,12 @@ var systemAllowlist = map[string]string{
 	// Supervision metrics (counts only).
 	`SELECT count(*) FROM transfer_files f JOIN transfers t ON t.tenant_id = f.tenant_id AND t.id = f.transfer_id WHERE t.status = 'scanning' AND f.scan_status IN ('pending', 'scanning')`:                                                                                                      reasonSupervision,
 	`SELECT tenant_id, CAST(COALESCE(SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END), 0) AS BIGINT), CAST(COALESCE(SUM(CASE WHEN available_at >= ? THEN 1 ELSE 0 END), 0) AS BIGINT) FROM transfers WHERE status = 'available' OR available_at >= ? GROUP BY tenant_id ORDER BY tenant_id`: reasonSupervision,
+	// One-time secret supervision (counts and sizes only).
+	`SELECT tenant_id, CAST(COALESCE(SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END), 0) AS BIGINT), ` +
+		`CAST(COALESCE(SUM(CASE WHEN read_at >= ? THEN 1 ELSE 0 END), 0) AS BIGINT), ` +
+		`CAST(COALESCE(SUM(CASE WHEN end_reason = 'locked' AND ended_at >= ? THEN 1 ELSE 0 END), 0) AS BIGINT), ` +
+		`CAST(COALESCE(SUM(CASE WHEN file_storage_name IS NOT NULL THEN file_size ELSE 0 END), 0) AS BIGINT) ` +
+		`FROM secrets GROUP BY tenant_id ORDER BY tenant_id`: reasonSecretSupervision,
 	// Deletion after the first download (identifiers only).
 	`SELECT tenant_id, id, delete_after FROM transfers WHERE delete_after IS NOT NULL AND delete_after <= ? ` +
 		`AND status = 'available' AND (delete_after, tenant_id, id) > (?, ?, ?) ` +
@@ -1097,8 +1103,8 @@ var systemAllowlist = map[string]string{
 		`WHERE status IN ('uploading', 'scanning', 'available') GROUP BY tenant_id ORDER BY tenant_id`: reasonUsedBytesAll,
 	`UPDATE audit_events SET actor = ? WHERE tenant_id = ? AND actor = ? AND actor_kind IN ('depositor', 'recipient')`: reasonAuditPseudonymise,
 	`SELECT tenant_id, CAST(sum(transfers) AS BIGINT), CAST(sum(bytes_uploaded) AS BIGINT), ` +
-		`CAST(sum(downloads) AS BIGINT), CAST(sum(bytes_downloaded) AS BIGINT), CAST(sum(virus_detections) AS BIGINT) ` +
-		`FROM tenant_daily_stats WHERE day >= ? GROUP BY tenant_id ORDER BY tenant_id`: reasonUsageAll,
+		`CAST(sum(downloads) AS BIGINT), CAST(sum(bytes_downloaded) AS BIGINT), CAST(sum(virus_detections) AS BIGINT), ` +
+		`CAST(sum(secrets_created) AS BIGINT) FROM tenant_daily_stats WHERE day >= ? GROUP BY tenant_id ORDER BY tenant_id`: reasonUsageAll,
 	`DELETE FROM tenant_daily_stats WHERE day < ?`: reasonUsagePurge,
 	`SELECT a.id, a.email, a.language FROM admins a JOIN admin_tenants t ON t.admin_id = a.id ` +
 		`WHERE t.tenant_id = ? AND a.role = 'delegated_admin' AND a.disabled = false AND a.password_hash IS NOT NULL ` +

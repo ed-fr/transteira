@@ -23,16 +23,17 @@ remain anonymous.
 
 | Version | Supported |
 |---|---|
-| 2.0.x | Yes |
+| 2.1.x | Yes |
+| 2.0.x | No |
 | 1.2.x | No |
 | 1.1.x | No |
 | 1.0.x | No |
 | < 1.0 (development builds `0.0.0-dev`) | No |
 
-Security fixes are provided for the latest minor version only, as patch releases (2.0.1,
-2.0.2...): when 2.1.0 is released, 2.0.x stops receiving fixes. 1.2.x no longer receives fixes:
-upgrade to 2.0, which needs no configuration change (see
-[Upgrade](docs/operations/upgrade.md#from-12-to-20)). Always run the latest patch
+Security fixes are provided for the latest minor version only, as patch releases (2.1.1,
+2.1.2...): when 2.2.0 is released, 2.1.x stops receiving fixes. 2.0.x no longer receives fixes:
+upgrade to 2.1, which needs no configuration change (see
+[Upgrade](docs/operations/upgrade.md#from-20-to-21)). Always run the latest patch
 release of the supported version.
 
 Only the provided deployment (`deploy/`, `integrations/`) is supported. The third-party images it
@@ -94,3 +95,23 @@ trusting a new key.
 The [threat model](docs/security/threat-model.md) describes the assets, trust boundaries and
 assumptions of TransTeira. Issues that require control of the host, of the Docker daemon or of
 the master key are out of scope.
+
+### One-time secrets
+
+In scope:
+
+- any path where the fragment key or the passphrase of a secret reaches the server, the logs or a
+  request (the only exception is the `fragmentKey` of `sendSecret` for e-mail delivery, which is
+  never stored nor logged, T-344 and T-363);
+- reading or consuming a secret without the key proof;
+- access to the secrets of another entity.
+
+Accepted limits of the design, documented in the threat model, not to be reported as bugs:
+
+- a malicious or compromised server can serve modified JavaScript (TB22);
+- anyone who holds the full link can read the secret once, by design;
+- copies of the link or of the secret in the clipboard or the browser history (T-344);
+- a mail gateway sandbox that runs JavaScript and clicks links can consume an e-mailed secret
+  that has no passphrase (T-349, P83; require a passphrase for e-mail delivery to avoid it);
+- malicious locking of a secret by someone who holds the full link (T-352, P80);
+- the encrypted channel that the antivirus cannot scan, enabled by default (T-343, T-372, P81).

@@ -492,12 +492,94 @@ zabbix_export:
                   value: tenant
                 - tag: tenant
                   value: '{#TENANT}'
+            - uuid: 1ef4bbf352d0466887d04f0be0f6f240
+              name: 'Tenant {#TENANT}: one-time secrets created'
+              type: DEPENDENT
+              key: 'transteira.tenant.secrets_created[{#TENANT}]'
+              delay: '0'
+              history: 14d
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'transteira_secrets_created_total{tenant="{#TENANT}"}'
+                    - value
+                    - ''
+              master_item:
+                key: transteira.metrics.raw
+              tags:
+                - tag: component
+                  value: tenant
+                - tag: tenant
+                  value: '{#TENANT}'
+            - uuid: ed91a977e7be4f37ac1071cbdb4b0e7d
+              name: 'Tenant {#TENANT}: one-time secrets read'
+              type: DEPENDENT
+              key: 'transteira.tenant.secrets_read[{#TENANT}]'
+              delay: '0'
+              history: 14d
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'transteira_secrets_read_total{tenant="{#TENANT}"}'
+                    - value
+                    - ''
+              master_item:
+                key: transteira.metrics.raw
+              tags:
+                - tag: component
+                  value: tenant
+                - tag: tenant
+                  value: '{#TENANT}'
+            - uuid: 50c0f69a18794350b75d4fdd08e500aa
+              name: 'Tenant {#TENANT}: one-time secrets locked'
+              type: DEPENDENT
+              key: 'transteira.tenant.secrets_locked[{#TENANT}]'
+              delay: '0'
+              history: 14d
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'transteira_secrets_locked_total{tenant="{#TENANT}"}'
+                    - value
+                    - ''
+              master_item:
+                key: transteira.metrics.raw
+              tags:
+                - tag: component
+                  value: tenant
+                - tag: tenant
+                  value: '{#TENANT}'
+            - uuid: e8c6142e0b184469834133f9018c4fde
+              name: 'Tenant {#TENANT}: one-time secret files stored'
+              type: DEPENDENT
+              key: 'transteira.tenant.secret_file_bytes[{#TENANT}]'
+              delay: '0'
+              history: 14d
+              units: B
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'transteira_secret_file_bytes{tenant="{#TENANT}"}'
+                    - value
+                    - ''
+              master_item:
+                key: transteira.metrics.raw
+              tags:
+                - tag: component
+                  value: tenant
+                - tag: tenant
+                  value: '{#TENANT}'
           trigger_prototypes:
             - uuid: dfdacafaf822465ab3bfa09903ddffae
               expression: 'last(/TransTeira/transteira.tenant.storage_quota[{#TENANT}])>0 and last(/TransTeira/transteira.tenant.storage_used[{#TENANT}])>={$TRANSTEIRA.QUOTA.WARN}*last(/TransTeira/transteira.tenant.storage_quota[{#TENANT}])'
               name: 'Tenant {#TENANT}: storage quota reached {$TRANSTEIRA.QUOTA.WARN}'
               priority: WARNING
               description: New deposits are blocked once the quota is full.
+            - uuid: a44ea2976576439bac8cd5678a6d04ab
+              expression: 'change(/TransTeira/transteira.tenant.secrets_locked[{#TENANT}])>0'
+              name: 'Tenant {#TENANT}: a one-time secret was locked after wrong passphrases'
+              priority: INFO
+              description: 'Five wrong passphrase proofs destroyed a secret: someone holding its link guessed the passphrase. See the secret_proof_invalid events of the security log.'
           master_item:
             key: transteira.metrics.raw
           preprocessing:

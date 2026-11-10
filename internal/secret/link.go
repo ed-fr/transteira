@@ -140,6 +140,7 @@ func (s *Service) Reveal(ctx context.Context, t *tenant.Tenant, ip netip.Addr, t
 		s.record(ctx, t, audit.Event{
 			ActorKind: store.ActorRecipient, Actor: linkActor, IP: ip, Action: audit.ActionSecretRevealed, ObjectID: out.Secret.ID,
 		})
+		s.usage.SecretRead(t.ID)
 		s.receipt(ctx, t, out.Secret, mail.SecretOutcomeRead, out.Secret.ReadAt)
 		return Revealed{
 			EncryptedText: out.SealedText, EncryptedMetadata: out.FileMetadata,
@@ -162,6 +163,7 @@ func (s *Service) Reveal(ctx context.Context, t *tenant.Tenant, ip netip.Addr, t
 		s.record(ctx, t, audit.Event{
 			ActorKind: store.ActorRecipient, Actor: linkActor, IP: ip, Action: audit.ActionSecretLocked, ObjectID: wrong.ID,
 		})
+		s.usage.SecretLocked(t.ID)
 		s.lockedReceipt(ctx, t, wrong.ID)
 		return Revealed{}, &GoneError{Reason: ReasonLocked}
 	}

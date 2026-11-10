@@ -24,19 +24,21 @@ const dayLength = 24 * time.Hour
 var (
 	qUsageAdd = tenantQuery(
 		`UPDATE tenant_daily_stats SET transfers = transfers + ?, bytes_uploaded = bytes_uploaded + ?,
-		downloads = downloads + ?, bytes_downloaded = bytes_downloaded + ?, virus_detections = virus_detections + ?
+		downloads = downloads + ?, bytes_downloaded = bytes_downloaded + ?, virus_detections = virus_detections + ?,
+		secrets_created = secrets_created + ?
 		WHERE tenant_id = ? AND day = ?`)
 	qUsageInsert = tenantQuery(
 		`INSERT INTO tenant_daily_stats (tenant_id, day, transfers, bytes_uploaded, downloads, bytes_downloaded,
-		virus_detections) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		virus_detections, secrets_created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	qUsageRange = tenantQuery(
-		`SELECT day, transfers, bytes_uploaded, downloads, bytes_downloaded, virus_detections FROM tenant_daily_stats
-		WHERE tenant_id = ? AND day >= ? ORDER BY day`)
+		`SELECT day, transfers, bytes_uploaded, downloads, bytes_downloaded, virus_detections, secrets_created
+		FROM tenant_daily_stats WHERE tenant_id = ? AND day >= ? ORDER BY day`)
 	// qUsageRangeAll sums the counters of every tenant since a day. The
 	// CASTs keep integer results on PostgreSQL (sum of BIGINT is NUMERIC).
 	qUsageRangeAll = systemQuery(
 		`SELECT tenant_id, CAST(sum(transfers) AS BIGINT), CAST(sum(bytes_uploaded) AS BIGINT),
-		CAST(sum(downloads) AS BIGINT), CAST(sum(bytes_downloaded) AS BIGINT), CAST(sum(virus_detections) AS BIGINT)
+		CAST(sum(downloads) AS BIGINT), CAST(sum(bytes_downloaded) AS BIGINT), CAST(sum(virus_detections) AS BIGINT),
+		CAST(sum(secrets_created) AS BIGINT)
 		FROM tenant_daily_stats WHERE day >= ? GROUP BY tenant_id ORDER BY tenant_id`,
 		reasonUsageAll)
 	qUsagePurge = systemQuery(
@@ -64,6 +66,9 @@ type UsageCounts struct {
 	BytesDownloaded int64
 	// VirusDetections counts the infected files.
 	VirusDetections int64
+	// SecretsCreated counts the one-time secrets created (since 2.1),
+	// whatever happened to them afterwards.
+	SecretsCreated int64
 }
 
 // IsZero reports whether every counter is zero.
@@ -107,24 +112,27 @@ func (r *TenantUsage) Add(ctx context.Context, tid tenant.ID, day time.Time, del
 		return invalid("day must be 00:00 UTC")
 	}
 	if delta.Transfers < 0 || delta.BytesUploaded < 0 || delta.Downloads < 0 || delta.BytesDownloaded < 0 ||
-		delta.VirusDetections < 0 {
+		delta.VirusDetections < 0 || delta.SecretsCreated < 0 {
 		return invalid("usage counters only grow")
 	}
 	if delta.IsZero() {
 		return nil
 	}
 	d := toMillis(day)
-	counts := []any{delta.Transfers, delta.BytesUploaded, delta.Downloads, delta.BytesDownloaded, delta.VirusDetections}
+	counts := []any{
+		delta.Transfers, delta.BytesUploaded, delta.Downloads, delta.BytesDownloaded, delta.VirusDetections,
+		delta.SecretsCreated,
+	}
 	return writeScoped(ctx, r.db, tid, "add usage", func(tx *ScopedTx) error {
 		return upsert(ctx, tx, qUsageAdd, append(append([]any{}, counts...), d), qUsageInsert, append([]any{d}, counts...))
 	})
 }
 
-// scanUsage reads the five counters after the scanned prefix.
+// scanUsage reads the six counters after the scanned prefix.
 func scanUsage(sc interface{ Scan(...any) error }, prefix ...any) (UsageCounts, error) {
 	var c UsageCounts
-	dest := append(append(make([]any, 0, len(prefix)+5), prefix...), &c.Transfers, &c.BytesUploaded, &c.Downloads,
-		&c.BytesDownloaded, &c.VirusDetections)
+	dest := append(append(make([]any, 0, len(prefix)+6), prefix...), &c.Transfers, &c.BytesUploaded, &c.Downloads,
+		&c.BytesDownloaded, &c.VirusDetections, &c.SecretsCreated)
 	err := sc.Scan(dest...)
 	return c, err
 }

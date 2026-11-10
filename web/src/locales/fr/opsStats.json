@@ -15,6 +15,7 @@
     "bytesUploaded": "Volume déposé",
     "downloads": "Téléchargements",
     "bytesDownloaded": "Volume téléchargé",
+    "secretsCreated": "Secrets à usage unique créés",
     "virusDetections": "Virus détectés"
   },
   "charts": {

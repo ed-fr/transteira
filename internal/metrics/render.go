@@ -32,6 +32,9 @@ func renderMetrics(b *bytes.Buffer, s *snapshot, v countersView) {
 		e.add(nameDownloads, formatInt(u.Downloads), id)
 		e.add(nameDownloadedBytes, formatInt(u.DownloadedBytes), id)
 		e.add(nameDetections, formatInt(u.VirusDetections), id)
+		e.add(nameSecretsCreated, formatInt(u.SecretsCreated), id)
+		e.add(nameSecretsRead, formatInt(u.SecretsRead), id)
+		e.add(nameSecretsLocked, formatInt(u.SecretsLocked), id)
 	}
 
 	if s.hasState {
@@ -40,6 +43,7 @@ func renderMetrics(b *bytes.Buffer, s *snapshot, v countersView) {
 			e.add(nameStorageUsed, formatInt(t.StorageUsedBytes), t.ID)
 			e.add(nameStorageQuota, formatInt(t.StorageQuotaBytes), t.ID)
 			e.add(nameActiveTransfers, formatInt(t.ActiveTransfers), t.ID)
+			e.add(nameSecretFileBytes, formatInt(max(t.SecretFileBytes, 0)), t.ID)
 		}
 		e.add(nameScanQueue, formatInt(st.ScanQueueFiles))
 		e.add(nameDiskUsedRatio, formatFloat(diskRatio(st)))
@@ -147,6 +151,14 @@ type statusTenant struct {
 	StorageUsedRatio  float64 `json:"storageUsedRatio"`
 	ActiveTransfers   int64   `json:"activeTransfers"`
 	TransfersLast24h  int64   `json:"transfersLast24h"`
+	// SecretFileBytes is the size of the stored one-time secret files. Since 2.1.
+	SecretFileBytes int64 `json:"secretFileBytes"`
+	// SecretsCreatedLast24h counts the secrets created in the last 24 hours. Since 2.1.
+	SecretsCreatedLast24h int64 `json:"secretsCreatedLast24h"`
+	// SecretsReadLast24h counts the secrets read in the last 24 hours. Since 2.1.
+	SecretsReadLast24h int64 `json:"secretsReadLast24h"`
+	// SecretsLockedLast24h counts the secrets locked in the last 24 hours. Since 2.1.
+	SecretsLockedLast24h int64 `json:"secretsLockedLast24h"`
 }
 
 // componentStatus maps a health status to the ComponentHealth enum:
@@ -201,13 +213,17 @@ func buildStatus(s *snapshot) instanceStatus {
 			ratio = max(float64(t.StorageUsedBytes)/float64(t.StorageQuotaBytes), 0)
 		}
 		out.Tenants = append(out.Tenants, statusTenant{
-			ID:                t.ID,
-			Name:              t.Name,
-			StorageUsedBytes:  max(t.StorageUsedBytes, 0),
-			StorageQuotaBytes: max(t.StorageQuotaBytes, 0),
-			StorageUsedRatio:  ratio,
-			ActiveTransfers:   max(t.ActiveTransfers, 0),
-			TransfersLast24h:  max(t.TransfersLast24h, 0),
+			ID:                    t.ID,
+			Name:                  t.Name,
+			StorageUsedBytes:      max(t.StorageUsedBytes, 0),
+			StorageQuotaBytes:     max(t.StorageQuotaBytes, 0),
+			StorageUsedRatio:      ratio,
+			ActiveTransfers:       max(t.ActiveTransfers, 0),
+			TransfersLast24h:      max(t.TransfersLast24h, 0),
+			SecretFileBytes:       max(t.SecretFileBytes, 0),
+			SecretsCreatedLast24h: max(t.SecretsCreatedLast24h, 0),
+			SecretsReadLast24h:    max(t.SecretsReadLast24h, 0),
+			SecretsLockedLast24h:  max(t.SecretsLockedLast24h, 0),
 		})
 	}
 	return out

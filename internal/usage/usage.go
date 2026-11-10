@@ -1,7 +1,9 @@
 // Package usage counts the activity of the tenants for the statistics of
 // the administration (CLAUDE.md section 21.2): transfers finalized and
-// their bytes, download starts, bytes served and virus detections, per
-// tenant and per UTC day.
+// their bytes, download starts, bytes served, virus detections and
+// one-time secrets created, per tenant and per UTC day. The one-time
+// secrets read and locked are only handed to the Sink of the supervision
+// counters.
 //
 // A [Recorder] accumulates the counters in memory, without touching the
 // database on the request path, and adds them to the store
@@ -179,6 +181,32 @@ func (r *Recorder) VirusDetected(tid tenant.ID, at time.Time) {
 	r.record(tid, at, store.UsageCounts{VirusDetections: 1})
 }
 
+// SecretCreated counts a one-time secret of tenant tid created at at (the
+// secret.created audit event). A zero at means now.
+func (r *Recorder) SecretCreated(tid tenant.ID, at time.Time) {
+	r.record(tid, at, store.UsageCounts{SecretsCreated: 1})
+}
+
+// SecretRead counts a one-time secret of tenant tid read. It has no daily
+// aggregate: only the Sink receives it.
+func (r *Recorder) SecretRead(tid tenant.ID) {
+	r.notify(tid, metricstate.Usage{SecretsRead: 1})
+}
+
+// SecretLocked counts a one-time secret of tenant tid locked after wrong
+// proofs. It has no daily aggregate: only the Sink receives it.
+func (r *Recorder) SecretLocked(tid tenant.ID) {
+	r.notify(tid, metricstate.Usage{SecretsLocked: 1})
+}
+
+// notify hands u to the Sink, if any.
+func (r *Recorder) notify(tid tenant.ID, u metricstate.Usage) {
+	if r == nil || tid == "" || r.sink == nil {
+		return
+	}
+	r.sink.AddUsage(string(tid), u)
+}
+
 // record adds c to the pending entry of tid for the day of at.
 func (r *Recorder) record(tid tenant.ID, at time.Time, c store.UsageCounts) {
 	if r == nil || tid == "" {
@@ -194,12 +222,10 @@ func (r *Recorder) record(tid tenant.ID, at time.Time, c store.UsageCounts) {
 	if ok {
 		r.logDropped(dropped, dc)
 	}
-	if r.sink != nil {
-		r.sink.AddUsage(string(tid), metricstate.Usage{
-			Transfers: c.Transfers, UploadedBytes: c.BytesUploaded, Downloads: c.Downloads,
-			DownloadedBytes: c.BytesDownloaded, VirusDetections: c.VirusDetections,
-		})
-	}
+	r.notify(tid, metricstate.Usage{
+		Transfers: c.Transfers, UploadedBytes: c.BytesUploaded, Downloads: c.Downloads,
+		DownloadedBytes: c.BytesDownloaded, VirusDetections: c.VirusDetections, SecretsCreated: c.SecretsCreated,
+	})
 }
 
 // add adds c to the pending entry k. When k is new and the bound is
@@ -239,6 +265,7 @@ func sum(a, b store.UsageCounts) store.UsageCounts {
 		Downloads:       a.Downloads + b.Downloads,
 		BytesDownloaded: a.BytesDownloaded + b.BytesDownloaded,
 		VirusDetections: a.VirusDetections + b.VirusDetections,
+		SecretsCreated:  a.SecretsCreated + b.SecretsCreated,
 	}
 }
 
@@ -247,7 +274,7 @@ func countsAttr(c store.UsageCounts) slog.Attr {
 	return slog.Group("counts",
 		slog.Int64("transfers", c.Transfers), slog.Int64("bytes_uploaded", c.BytesUploaded),
 		slog.Int64("downloads", c.Downloads), slog.Int64("bytes_downloaded", c.BytesDownloaded),
-		slog.Int64("virus_detections", c.VirusDetections))
+		slog.Int64("virus_detections", c.VirusDetections), slog.Int64("secrets_created", c.SecretsCreated))
 }
 
 // Flush adds the pending counters to the store, by day then tenant. The

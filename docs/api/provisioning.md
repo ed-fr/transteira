@@ -233,6 +233,11 @@ password, configures the two-factor authentication, then goes through the setup 
 becomes `active`. The super admins receive a mail when an entity is created and when its setup
 is completed (and the instance-wide webhooks receive the matching events).
 
+Since 2.1, a provisioned entity has the one-time secrets module **enabled by default** (durations
+1 hour, 1 day and 7 days, a file of up to 10 MiB allowed, e-mail delivery allowed). The
+`ProvisionTenantRequest` body has no secret setting: the delegated admin or the super admin
+changes them afterwards with `PUT /admin/tenants/{tenantId}/secret-settings`.
+
 **The MSP's responsibilities** (threat model T-272, assumption H15):
 
 - It **chooses the address of the delegated admin** of each entity it creates. Whoever reads

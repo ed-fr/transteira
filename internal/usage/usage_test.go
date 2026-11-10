@@ -81,6 +81,10 @@ func TestRecordAndFlush(t *testing.T) {
 		r.BytesServed(ta, 0, late)  // ignored
 		r.BytesServed(ta, -1, late) // ignored
 		r.VirusDetected(ta, midnight)
+		r.SecretCreated(ta, midnight)
+		r.SecretCreated(ta, midnight)
+		r.SecretRead(ta)                        // in memory only: no daily counter
+		r.SecretLocked(ta)                      // in memory only: no daily counter
 		r.TransferFinalized(ta, 7, time.Time{}) // now: day 2
 		r.DownloadStarted(tb, midnight)
 		r.BytesServed(tb, 9, midnight)
@@ -97,7 +101,7 @@ func TestRecordAndFlush(t *testing.T) {
 
 		a := usageOf(t, db, ta)
 		want1 := store.UsageCounts{Transfers: 2, BytesUploaded: 100, Downloads: 1, BytesDownloaded: 40}
-		want2 := store.UsageCounts{Transfers: 1, BytesUploaded: 7, VirusDetections: 1}
+		want2 := store.UsageCounts{Transfers: 1, BytesUploaded: 7, VirusDetections: 1, SecretsCreated: 2}
 		if len(a) != 2 || a[day1] != want1 || a[day2] != want2 {
 			t.Errorf("tenant A usage = %+v, want %v: %+v, %v: %+v", a, day1, want1, day2, want2)
 		}

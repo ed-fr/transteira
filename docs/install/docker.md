@@ -350,7 +350,9 @@ Remove `TT_SETUP_TOKEN` from `deploy/.env` afterwards if you had set it.
 Create the tenants in the administration (**Entities**, super admin only):
 name, FQDN, default language, storage quota. Then configure, or let their
 delegated admins configure, branding, internal IP ranges and email domains,
-SMTP settings and mail templates.
+SMTP settings and mail templates. Every new tenant has the **one-time secrets
+module enabled by default**: review its settings (durations, file, e-mail
+delivery) in [Tenants](../operations/tenants.md#one-time-secrets).
 
 For each tenant:
 
@@ -413,7 +415,8 @@ wrong ([Reverse proxy](reverse-proxy.md#tt_trusted_proxies)).
 ## 12. Security log, fail2ban and CrowdSec
 
 TransTeira writes a dedicated security log (failed codes, wrong transfer
-passwords, failed admin logins, invalid API tokens, unknown FQDNs, refused
+passwords, failed admin logins, invalid API tokens, invalid secret links and wrong secret passphrases,
+unknown FQDNs, refused
 deposits, rate limiting) with the real client IP, at
 `/var/lib/docker/volumes/transteira_logs/_data/security.log` on the host.
 

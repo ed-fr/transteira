@@ -53,8 +53,12 @@ export interface paths {
          *
          *     Metric names (all prefixed `transteira_`): `build_info`, `uptime_seconds`, `maintenance`,
          *     `transfers_total`, `uploaded_bytes_total`, `downloads_total`, `downloaded_bytes_total`,
-         *     `antivirus_detections_total` (per tenant), `storage_used_bytes`, `storage_quota_bytes`,
-         *     `active_transfers` (per tenant), `scan_queue_files`, `antivirus_up`, `antivirus_alert`,
+         *     `antivirus_detections_total` (per tenant), `secrets_created_total`, `secrets_read_total`,
+         *     `secrets_locked_total` (per tenant, since 2.1; these three counters are in memory and reset
+         *     on a restart, so use `increase()` or `rate()`, while the `secrets*Last24h` fields of
+         *     `/status` come from the database), `storage_used_bytes`, `storage_quota_bytes`,
+         *     `active_transfers`, `secret_file_bytes` (per tenant, since 2.1), `scan_queue_files`,
+         *     `antivirus_up`, `antivirus_alert`,
          *     `disk_used_ratio`, `disk_used_bytes`, `disk_total_bytes`, `disk_alert`, `download_streams`,
          *     `http_requests_total` (per status class), `tls_ask_total` (per result: allowed, unknown or
          *     refused, since 1.2), `webhook_deliveries_total` (per result),
@@ -92,8 +96,8 @@ export interface paths {
          * @description Since 1.1. A JSON summary of the instance state, for monitoring tools that do not read the
          *     Prometheus format (Observium, scripts): component health as in `/healthz`, maintenance,
          *     disk usage and alert, antivirus queue and outage alert, last successful run of each
-         *     cleanup task, and per tenant the storage usage
-         *     and transfer counters. Served outside any tenant and protected exactly like `/metrics`
+         *     cleanup task, and per tenant the storage usage, the transfer counters and, since 2.1, the
+         *     one-time secret figures. Served outside any tenant and protected exactly like `/metrics`
          *     (same token, same optional IP allowlist, `404` when `TT_METRICS_TOKEN` is unset). Tenants
          *     are named by identifier and name only, never with an e-mail address. The answer is `200`
          *     even when a component is unhealthy: read `status`.
@@ -1054,14 +1058,18 @@ export interface paths {
          *     secret was live still holds the sealed text, protected by the key of the fragment).
          *     With a file, the sealed file metadata (`encryptedMetadata`, returned only here, never
          *     by `getSecretLink`) and a one-time `fileGrant` are returned, valid 10 minutes
-         *     (`fileGrantExpiresAt`), to be sent to `downloadSecretFile`. If the answer is lost after the commit the secret is lost
-         *     (accepted, documented). A wrong proof never consumes the secret; the 5th counted
+         *     (`fileGrantExpiresAt`), to be sent to `downloadSecretFile`. If the answer is lost after
+         *     the commit the secret is lost (accepted, documented). A wrong proof never consumes the secret; the 5th counted
          *     failure sets it `locked` (content destroyed) and answers `410 secret-gone` with reason
          *     `locked`. Like the status call, the reveal checks `expiresAt` itself (`410` with reason
          *     `expired` before the sweep). Both kinds of wrong proof are written to the security log
          *     (`secret_proof_invalid`, `reason=key` or `reason=passphrase`); an unknown token (or one
          *     of another tenant) is `404 not-found` and writes `secret_invalid`, like the status call;
-         *     a reveal is rate limited per client IP. No credential: the token and the proof are the credentials. Answered with
+         *     a reveal is rate limited per client IP. No credential: the token and the proof are the
+         *     credentials. The operation is protected from cross-site use, as `unlockDownload` is: an
+         *     `Origin` header other than `https://<entity host>` or a `Sec-Fetch-Site` other than
+         *     `same-origin` gets `403 csrf-invalid` (before any proof is read, so nothing is counted);
+         *     requests without these headers (scripts) are not affected. Answered with
          *     `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. Audited as
          *     `secret.revealed` (and `secret.locked`); a read receipt is mailed to the creator when
          *     requested.
@@ -1095,9 +1103,11 @@ export interface paths {
          *     `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, `Referrer-Policy:
          *     no-referrer`); no range is supported. The grant is single use: the file is deleted and
          *     its key destroyed at the first complete download, or when the grant expires after 10
-         *     minutes. A missing, wrong, already used or expired grant gets `404 not-found`, like a
-         *     secret without file, **without** a security event: intentional, the grant has 256 bits
-         *     and the per-IP limiter bounds the attempts. An unknown token (or one of another tenant)
+         *     minutes. A missing `TransTeira-Secret-Grant` header, or one that is not shaped like a
+         *     grant, is `400 validation-failed` (field `TransTeira-Secret-Grant`). A well-formed grant
+         *     that is wrong, already used or expired gets `404 not-found`, like a secret without file,
+         *     **without** a security event: intentional, the grant has 256 bits and the per-IP limiter
+         *     bounds the attempts. An unknown token (or one of another tenant)
          *     is `404 not-found` and writes `secret_invalid`, like the status call. Audited as
          *     `secret.file_downloaded`. Rate limited per client IP, and bounded by the concurrent
          *     stream limits of the transfer downloads (the secret counts as one transfer, and its
@@ -2133,8 +2143,8 @@ export interface paths {
          *
          *     Since 2.0, `delegatedAdmin.delivery: none` is refused: a new tenant has no single
          *     sign-on configured yet, so its first delegated admin always needs an activation link.
-         *     Until single sign-on is implemented, the refusal is the interim one
-         *     (`400 validation-failed`, field `/delegatedAdmin/delivery`, code `not-supported`).
+         *     The refusal is `400 validation-failed`, field `/delegatedAdmin/delivery`, code
+         *     `not-supported`.
          */
         post: operations["createTenant"];
         delete?: never;
@@ -2218,8 +2228,7 @@ export interface paths {
          *     Since 2.0, `linkOnlyAllowed` and `e2ePolicy` are super admin only, like
          *     `antivirusEnabled`: an end-to-end encrypted file is never scanned, so `e2ePolicy:
          *     required` amounts to turning the antivirus off for the tenant. A change is audited as
-         *     `tenant.updated` with the member names. Until `e2ePolicy` is implemented, the super
-         *     admin gets the interim `400 validation-failed` (code `not-supported`) for it; a delegated admin
+         *     `tenant.updated` with the member names. A delegated admin
          *     of the tenant gets `403 forbidden` as for `antivirusEnabled`, and an admin outside the
          *     tenant `404 not-found`.
          */
@@ -6116,7 +6125,7 @@ export interface components {
             storageQuotaBytes: components["schemas"]["ByteSize"];
             /** @description `storageUsedBytes` / `storageQuotaBytes` (may exceed 1). */
             storageUsedRatio: number;
-            /** @description Since 2.1. One-time secrets created during the period (count only, never content). */
+            /** @description Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows. */
             secretsCreated?: number;
             /**
              * @description Breakdown of `transferCount` and `bytesUploaded` over the period, oldest first, with a
@@ -6192,6 +6201,8 @@ export interface components {
                 name: string;
                 transferCount: number;
                 bytesUploaded: components["schemas"]["ByteSize"];
+                /** @description Since 2.1. One-time secrets created during the period, as `TenantStats.secretsCreated`. */
+                secretsCreated?: number;
                 storageUsedBytes: components["schemas"]["ByteSize"];
                 storageQuotaBytes: components["schemas"]["ByteSize"];
                 storageUsedRatio: number;
@@ -6522,6 +6533,14 @@ export interface components {
                 activeTransfers: number;
                 /** @description Transfers made available during the last 24 hours. */
                 transfersLast24h: number;
+                /** @description Since 2.1. Declared sizes of the stored one-time secret files, already counted in `storageUsedBytes`. */
+                secretFileBytes: components["schemas"]["ByteSize"];
+                /** @description Since 2.1. One-time secrets created during the last 24 hours, among the secret rows still present (an unfinished secret is deleted after one hour, an ended one 30 days after its end). */
+                secretsCreatedLast24h: number;
+                /** @description Since 2.1. One-time secrets read during the last 24 hours. */
+                secretsReadLast24h: number;
+                /** @description Since 2.1. One-time secrets locked after five wrong passphrase proofs during the last 24 hours. */
+                secretsLockedLast24h: number;
             }[];
         };
         /** @description Since 1.1. Real rules of the tenant, for the deposit form and the built-in help. */
@@ -8659,6 +8678,18 @@ export interface operations {
                      *     # HELP transteira_antivirus_detections_total Files found infected, per tenant.
                      *     # TYPE transteira_antivirus_detections_total counter
                      *     transteira_antivirus_detections_total{tenant="ten_01JAB00000000000000ENT1TYA"} 1
+                     *     # HELP transteira_secrets_created_total One-time secrets created, per tenant.
+                     *     # TYPE transteira_secrets_created_total counter
+                     *     transteira_secrets_created_total{tenant="ten_01JAB00000000000000ENT1TYA"} 58
+                     *     # HELP transteira_secrets_read_total One-time secrets read, per tenant.
+                     *     # TYPE transteira_secrets_read_total counter
+                     *     transteira_secrets_read_total{tenant="ten_01JAB00000000000000ENT1TYA"} 51
+                     *     # HELP transteira_secrets_locked_total One-time secrets locked after wrong passphrase proofs, per tenant.
+                     *     # TYPE transteira_secrets_locked_total counter
+                     *     transteira_secrets_locked_total{tenant="ten_01JAB00000000000000ENT1TYA"} 0
+                     *     # HELP transteira_secret_file_bytes Bytes of the stored one-time secret files (counted in the storage used), per tenant.
+                     *     # TYPE transteira_secret_file_bytes gauge
+                     *     transteira_secret_file_bytes{tenant="ten_01JAB00000000000000ENT1TYA"} 10485760
                      *     # HELP transteira_scan_queue_files Files waiting for or under analysis.
                      *     # TYPE transteira_scan_queue_files gauge
                      *     transteira_scan_queue_files 0
@@ -8736,7 +8767,11 @@ export interface operations {
                      *           "storageQuotaBytes": 1099511627776,
                      *           "storageUsedRatio": 0.25,
                      *           "activeTransfers": 37,
-                     *           "transfersLast24h": 9
+                     *           "transfersLast24h": 9,
+                     *           "secretFileBytes": 10485760,
+                     *           "secretsCreatedLast24h": 4,
+                     *           "secretsReadLast24h": 3,
+                     *           "secretsLockedLast24h": 0
                      *         }
                      *       ]
                      *     }
@@ -10343,7 +10378,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
-            /** @description `secret-proof-invalid`: a proof does not match. A wrong key proof is not counted and carries no `attemptsRemaining`; a right key proof with a wrong proof (wrong passphrase) is counted and carries `attemptsRemaining`, the attempts left before the secret is locked. */
+            /** @description `secret-proof-invalid`: a proof does not match. A wrong key proof is not counted and carries no `attemptsRemaining`; a right key proof with a wrong proof (wrong passphrase) is counted and carries `attemptsRemaining`, the attempts left before the secret is locked. Or `csrf-invalid`: cross-site request (see the description). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -15164,6 +15199,7 @@ export interface operations {
                      *       "storageUsedBytes": 274877906944,
                      *       "storageQuotaBytes": 1099511627776,
                      *       "storageUsedRatio": 0.25,
+                     *       "secretsCreated": 14,
                      *       "series": [
                      *         {
                      *           "date": "2026-10-13",
@@ -17036,6 +17072,7 @@ export interface operations {
                      *           "name": "Entity A",
                      *           "transferCount": 412,
                      *           "bytesUploaded": 1932735283200,
+                     *           "secretsCreated": 58,
                      *           "storageUsedBytes": 274877906944,
                      *           "storageQuotaBytes": 1099511627776,
                      *           "storageUsedRatio": 0.25

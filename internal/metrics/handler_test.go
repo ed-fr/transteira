@@ -367,8 +367,8 @@ func TestHandlerStatusContent(t *testing.T) {
 		`"disk":{"totalBytes":1000,"usedBytes":300,"usedRatio":0.3,"alertThreshold":0.85,"alertActive":false},` +
 		`"antivirus":{"engine":"clamd","queuedFiles":2,"alertActive":false,"selfTestPassed":true},` +
 		`"lifecycle":{"expire":"2026-10-27T08:59:30.5Z"},` +
-		`"tenants":[{"id":"ten_A","name":"Entity A","storageUsedBytes":250,"storageQuotaBytes":1000,"storageUsedRatio":0.25,"activeTransfers":3,"transfersLast24h":2},` +
-		`{"id":"ten_B","name":"Entity \"B\"","storageUsedBytes":0,"storageQuotaBytes":0,"storageUsedRatio":0,"activeTransfers":0,"transfersLast24h":0}]}`
+		`"tenants":[{"id":"ten_A","name":"Entity A","storageUsedBytes":250,"storageQuotaBytes":1000,"storageUsedRatio":0.25,"activeTransfers":3,"transfersLast24h":2,"secretFileBytes":40,"secretsCreatedLast24h":4,"secretsReadLast24h":3,"secretsLockedLast24h":1},` +
+		`{"id":"ten_B","name":"Entity \"B\"","storageUsedBytes":0,"storageQuotaBytes":0,"storageUsedRatio":0,"activeTransfers":0,"transfersLast24h":0,"secretFileBytes":0,"secretsCreatedLast24h":0,"secretsReadLast24h":0,"secretsLockedLast24h":0}]}`
 	if strings.TrimSpace(w.Body.String()) != want {
 		t.Fatalf("body:\n%s\nwant:\n%s", w.Body, want)
 	}

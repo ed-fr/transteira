@@ -4,6 +4,7 @@ import {
   MAX_SHOWN_TOPIC_LENGTH,
   PUBLIC_GUIDES,
   adminGuides,
+  featureOn,
   guideTopic,
   helpPageTitle,
   plainClick,
@@ -321,6 +322,21 @@ describe('sections hidden for the tenant', () => {
   it('shows every section without a tenant or with every feature on', () => {
     expect(visibleSections(depositor, undefined)).toBe(depositor.sections);
     expect(ids(features(true))).toEqual(depositor.sections.map((s) => s.id));
+  });
+
+  it('reads the secrets feature from its enabled flag', () => {
+    const secrets = {
+      enabled: true,
+      durations: ['1d' as const],
+      fileAllowed: false,
+      fileMaxBytes: 0,
+      emailAllowed: false,
+    };
+    expect(featureOn({ ...features(true), secrets }, 'secrets')).toBe(true);
+    expect(featureOn({ ...features(true), secrets: { ...secrets, enabled: false } }, 'secrets')).toBe(false);
+    expect(featureOn(features(true), 'secrets')).toBe(false);
+    expect(featureOn(features(true), 'folders')).toBe(true);
+    expect(featureOn(features(false), 'folders')).toBe(false);
   });
 
   it('drops a section whose feature is off, with its deeper sub-sections only', () => {

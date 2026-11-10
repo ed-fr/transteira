@@ -358,7 +358,9 @@ Retirez ensuite `TT_SETUP_TOKEN` de `deploy/.env` si vous l’aviez défini.
 Créez les entités dans l’administration (**Entités**, super administrateur uniquement) :
 nom, FQDN, langue par défaut, quota de stockage. Configurez ensuite, ou laissez leurs
 administrateurs délégués configurer, l’habillage, les plages d’adresses IP et les domaines de messagerie internes,
-les réglages SMTP et les modèles de mails.
+les réglages SMTP et les modèles de mails. Chaque nouvelle entité a le **module des
+secrets à usage unique activé par défaut** : vérifiez ses réglages (durées, fichier,
+envoi par mail) dans [Entités](../../operations/tenants.md#one-time-secrets).
 
 Pour chaque entité :
 
@@ -421,7 +423,7 @@ incorrecte ([Reverse proxy](../reverse-proxy.md#tt_trusted_proxies)).
 ## 12. Journal de sécurité, fail2ban et CrowdSec
 
 TransTeira écrit un journal de sécurité dédié (codes erronés, mauvais mots de passe
-de transfert, échecs de connexion admin, jetons d’API invalides, FQDN inconnus, dépôts
+de transfert, échecs de connexion admin, jetons d’API invalides, liens de secret invalides et mauvaises phrases secrètes, FQDN inconnus, dépôts
 refusés, limitation de débit) avec l’IP réelle du client, dans
 `/var/lib/docker/volumes/transteira_logs/_data/security.log` sur l’hôte.
 

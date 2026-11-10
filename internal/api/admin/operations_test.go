@@ -193,7 +193,7 @@ func (f *fakeStats) TenantStats(_ context.Context, p adminauth.Principal, tid te
 	st := stats.TenantStats{
 		Period: period,
 		UsageCounts: store.UsageCounts{
-			Transfers: 5, BytesUploaded: 500, Downloads: 6, BytesDownloaded: 600, VirusDetections: 1,
+			Transfers: 5, BytesUploaded: 500, Downloads: 6, BytesDownloaded: 600, VirusDetections: 1, SecretsCreated: 9,
 		},
 		Storage: stats.Storage{UsedBytes: 250, QuotaBytes: 1000, UsedRatio: 0.25},
 		Series: []stats.Point{
@@ -750,7 +750,7 @@ func TestStatsOperations(t *testing.T) {
 			AlertActive: true, AlertMailConfigured: true,
 		},
 		Tenants: []stats.TenantRow{{
-			TenantID: "ten_a", Name: "Entity A", Transfers: 4, BytesUploaded: 400,
+			TenantID: "ten_a", Name: "Entity A", Transfers: 4, BytesUploaded: 400, SecretsCreated: 2,
 			Storage: stats.Storage{UsedBytes: 250, QuotaBytes: 1000, UsedRatio: 0.25},
 		}},
 	}}
@@ -766,7 +766,7 @@ func TestStatsOperations(t *testing.T) {
 	code, body := decode(t, resp)
 	series := body["series"].([]any)
 	if code != http.StatusOK || body["period"] != "7d" || body["transferCount"] != float64(5) || body["downloadCount"] != float64(6) ||
-		body["bytesDownloaded"] != float64(600) || body["virusDetections"] != float64(1) || body["storageUsedRatio"] != 0.25 ||
+		body["bytesDownloaded"] != float64(600) || body["virusDetections"] != float64(1) || body["storageUsedRatio"] != 0.25 || body["secretsCreated"] != float64(9) ||
 		len(series) != 2 || series[1].(map[string]any)["date"] != "2026-10-22" || series[1].(map[string]any)["transfers"] != float64(3) {
 		t.Errorf("tenant stats = %d %v", code, body)
 	}
@@ -792,7 +792,7 @@ func TestStatsOperations(t *testing.T) {
 	disk := body["disk"].(map[string]any)
 	row := body["tenants"].([]any)[0].(map[string]any)
 	if code != http.StatusOK || body["period"] != "12m" || disk["totalBytes"] != float64(1000) || disk["usedBytes"] != float64(300) ||
-		disk["alertThreshold"] != 0.85 || disk["alertActive"] != true || disk["alertMailConfigured"] != true || row["tenantId"] != "ten_a" || row["transferCount"] != float64(4) || row["storageQuotaBytes"] != float64(1000) {
+		disk["alertThreshold"] != 0.85 || disk["alertActive"] != true || disk["alertMailConfigured"] != true || row["tenantId"] != "ten_a" || row["transferCount"] != float64(4) || row["secretsCreated"] != float64(2) || row["storageQuotaBytes"] != float64(1000) {
 		t.Errorf("global stats = %d %v", code, body)
 	}
 	gbad := gen.GetGlobalStatsParamsPeriod("1y")

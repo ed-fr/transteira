@@ -64,7 +64,7 @@ export interface StatsFormatters {
 
 /** A key figure card (StatCard props). */
 export interface StatCardView {
-  id: 'transfers' | 'bytesUploaded' | 'downloads' | 'bytesDownloaded' | 'virusDetections';
+  id: 'transfers' | 'bytesUploaded' | 'downloads' | 'bytesDownloaded' | 'secretsCreated' | 'virusDetections';
   label: string;
   value: string;
   variant: 'default' | 'warning';
@@ -72,10 +72,11 @@ export interface StatCardView {
 
 /**
  * Key figure cards of the period: transfers, volume uploaded, downloads, volume downloaded and
- * virus detections (warning variant when at least one).
+ * virus detections (warning variant when at least one). The one-time secrets card (since 2.1)
+ * comes before the virus card and is shown when the server reports it.
  */
 export function statsCards(stats: TenantStats, fmt: StatsFormatters, t: Translate): StatCardView[] {
-  return [
+  const cards: StatCardView[] = [
     {
       id: 'transfers',
       label: t('opsStats.cards.transfers'),
@@ -100,6 +101,16 @@ export function statsCards(stats: TenantStats, fmt: StatsFormatters, t: Translat
       value: fmt.bytes(stats.bytesDownloaded),
       variant: 'default',
     },
+    ...(stats.secretsCreated === undefined
+      ? []
+      : [
+          {
+            id: 'secretsCreated' as const,
+            label: t('opsStats.cards.secretsCreated'),
+            value: fmt.number(stats.secretsCreated),
+            variant: 'default' as const,
+          },
+        ]),
     {
       id: 'virusDetections',
       label: t('opsStats.cards.virusDetections'),
@@ -107,6 +118,7 @@ export function statsCards(stats: TenantStats, fmt: StatsFormatters, t: Translat
       variant: stats.virusDetections > 0 ? 'warning' : 'default',
     },
   ];
+  return cards;
 }
 
 /** Granularity of the series of a period: months for 12m, days otherwise. */

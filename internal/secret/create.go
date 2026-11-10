@@ -127,8 +127,9 @@ func (v *validator) add(pointer, code string, allowed ...string) {
 // A secret with a file starts pending (its storage name drawn here, see
 // [Service.UploadFile]), as does a secret delivered by e-mail. After a
 // creation with a file, Options.OnQuota is called with refused false. It
-// audits secret.created (and api_token.used for a token), and reports a
-// secret active at once to Options.Abuse (alert only).
+// audits secret.created (and api_token.used for a token), counts it in
+// Options.Usage, and reports a secret active at once to Options.Abuse
+// (alert only).
 func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender transfer.Sender, req CreateRequest) (Created, error) {
 	if sender.Kind == store.DepositorReply || sender.Kind == store.DepositorDropLink {
 		return Created{}, ErrForbidden
@@ -179,6 +180,7 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender transfer.
 		s.onQuota(t.ID, false)
 	}
 	s.recordCreated(ctx, t, sender, email, out.Secret)
+	s.usage.SecretCreated(t.ID, out.Secret.CreatedAt)
 	if out.Secret.State == store.SecretActive {
 		s.activated(ctx, t, sender, out.Secret)
 	}

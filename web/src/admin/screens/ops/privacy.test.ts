@@ -173,8 +173,33 @@ describe('summary', () => {
     ]);
   });
 
+  it('adds the one-time secrets rows when the server reports them', () => {
+    expect(hasData({ ...empty, secrets: 0 })).toBe(false);
+    expect(hasData({ ...empty, secrets: 1 })).toBe(true);
+    expect(summaryRows(empty, t, format).map((r) => r.id)).not.toContain('secrets');
+    expect(summaryRows({ ...empty, secrets: 4 }, t, format).at(-1)).toEqual({
+      id: 'secrets',
+      term: 'opsPrivacy.summary.secrets',
+      value: '#4',
+    });
+    const base: DataSubjectEraseReport = {
+      transfersDeleted: 0,
+      recipientEntriesRemoved: 0,
+      verifiedAddressDeleted: false,
+      invitationsDeleted: 0,
+      logEntriesPseudonymised: 0,
+    };
+    expect(reportRows(base, t, format).map((r) => r.id)).not.toContain('secretsDeleted');
+    expect(reportRows({ ...base, secretsDeleted: 2 }, t, format).at(-1)).toEqual({
+      id: 'secretsDeleted',
+      term: 'opsPrivacy.report.secretsDeleted',
+      value: '#2',
+    });
+  });
+
   it('lists what is erased and what is kept', () => {
-    expect(ERASED_KEYS.length).toBe(7);
+    expect(ERASED_KEYS.length).toBe(8);
+    expect(ERASED_KEYS).toContain('opsPrivacy.erase.erased.secrets');
     expect(ERASED_KEYS).toContain('opsPrivacy.erase.erased.proofs');
     expect(KEPT_KEYS).toContain('opsPrivacy.erase.kept.blocklist');
     expect(KEPT_KEYS).toContain('opsPrivacy.erase.kept.backups');

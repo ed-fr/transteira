@@ -29,6 +29,9 @@ TransTeira uses **envelope encryption**:
   DEK), in AES-256-GCM, chunk by chunk;
 - the stored secrets of the entities (SMTP passwords) are encrypted the same
   way;
+- since 2.1, the keys of the one-time secrets (the key of the sealed text and
+  that of the attached file) are ordinary DEK rows: a rotation re-wraps them
+  with no extra step;
 - the DEKs and these secrets are **wrapped** (encrypted) by keys derived from
   the master key, and stored in the database (table `wrapped_keys`, one row
   per key, tagged with the ID of the master key that wraps it);
@@ -482,6 +485,12 @@ decrypted **from the live system**. What this does and does not guarantee:
   **only after** a rotation **and** the destruction of the old master key,
   once every backup taken before that rotation has expired (threat model
   T-109).
+- **One-time secrets** (since 2.1): the key of the text is destroyed at the
+  reveal, that of the file at its first complete download or when its
+  10-minute grant expires, and both on expiry, deletion or lock. The backup
+  risk above applies to a secret that was live when a copy was taken, until
+  a rotation and the destruction of the old key
+  (see [Backup and restore](backup.md#crypto-erase-and-copies)).
 - **Recommendation**: rotate the master key at least once per backup
   retention period (for example every 30 days for a 30-day retention), and
   destroy each old key as soon as the last backup that needs it has

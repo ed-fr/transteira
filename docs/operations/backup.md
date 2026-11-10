@@ -17,7 +17,7 @@ section 23, threat model T-114).
   crypto-erase in backups).
 
 > A backup without the master key that was active when it was taken is
-> useless: every file and every stored secret stays encrypted. Keep the key
+> useless: every file and every stored secret (one-time secrets, SMTP passwords and other settings) stays encrypted. Keep the key
 > in a password vault, never in the same backup job as the volumes.
 
 ## SQLite: nightly copy by TransTeira
@@ -188,6 +188,17 @@ expired. A master key rotation followed by the destruction of the old key
 makes all older copies unreadable (decision P25, threat model T-109); see
 [Crypto-erase](master-key.md#crypto-erase).
 
+**One-time secrets (since 2.1).** A copy taken while a secret was live keeps
+its sealed text, its wrapped key, its verifiers and its passphrase salt and
+iteration count. With the master key, what remains is the ciphertext made in
+the browser: it is protected only by the key in the link fragment and by the
+passphrase, if any. Anyone who later holds that copy, the master key **and the
+link** (for example an old e-mail, for an e-mailed secret) can read a secret
+that has no passphrase (data model D3, threat model T-351 and T-355,
+decision P71). Keep the durations short, send a passphrase through another
+channel, and rely on a master key rotation followed by the destruction of the
+old key, which makes such copies unreadable, as for transfers (P25).
+
 ## Restore
 
 You need, from the **same point in time** as far as possible:
@@ -253,6 +264,25 @@ The nightly copy and the data volume are usually a few hours apart:
 
 Tell the users concerned to send their most recent transfers again.
 
+### Review the one-time secrets
+
+A restored database knows each one-time secret **as it was when the copy was
+taken**:
+
+- a secret read, deleted, locked or expired after the copy comes back in its
+  earlier state; if it was still active and has not reached its expiry, its
+  sealed text and key are back, so **anyone who holds the link can read it a
+  second time**;
+- the file of a secret deleted after the copy may be missing from the volume;
+- read receipts may be sent again (the sent mark is restored empty).
+
+Right after the restore, before reopening the service if you can, list the
+secrets in the `active` state of every tenant
+(`GET /admin/tenants/{tenantId}/secrets?state=active`, or the **One-time
+secrets** screen, see [One-time secrets](admin.md#one-time-secrets)), delete
+those created before the copy, or tell their creators (threat model T-115 is
+the equivalent for API tokens).
+
 ### Review the API tokens
 
 A restored database knows the API tokens **as they were when the copy was
@@ -284,6 +314,7 @@ application itself.
 ## Deleted tenants
 
 Deleting a tenant destroys its keys by cascade, so its files can no longer
-be decrypted, but its directory under `TT_DATA_DIR` is not removed: the
-cleanup task only logs it. Remove that directory by hand once the tenant is
-gone.
+be decrypted, and the cleanup task removes its directory under `TT_DATA_DIR`
+(files and `secrets/` subdirectory with the one-time secret files). The
+copies and VM backups taken before the deletion still hold the rows and the
+wrapped keys, see [Crypto-erase and copies](#crypto-erase-and-copies).

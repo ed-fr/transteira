@@ -10,14 +10,14 @@
 [English](README.md) | **Français**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](CHANGELOG.md)
 
 **TransTeira** est un service de transfert de fichiers volumineux, auto-hébergé et multi-tenant, dans
 l'esprit de WeTransfer ou SwissTransfer, conçu pour les organisations composées de plusieurs entités.
 
-> **Statut : stable.** La version 2.0.0 livre le périmètre V1 (le cœur), le périmètre V1.1
-> (l'exploitation), le périmètre V1.2 (la mise en service) et le périmètre V2 (l'entreprise) ;
-> voir [Versions](#versions).
+> **Statut : stable.** La version 2.1.0 livre le périmètre V1 (le cœur), le périmètre V1.1
+> (l'exploitation), le périmètre V1.2 (la mise en service), le périmètre V2 (l'entreprise) et le
+> périmètre V2.1 (partage de secrets à usage unique) ; voir [Versions](#versions).
 
 ## Points forts
 
@@ -99,6 +99,15 @@ l'esprit de WeTransfer ou SwissTransfer, conçu pour les organisations composée
   l'expéditeur, la clé n'atteint jamais le serveur (l'analyse antivirus est alors impossible, et la
   page de téléchargement l'indique) ; autorisé, imposé ou interdit par entité et par niveau de
   confidentialité.
+- **Secrets à usage unique (V2.1)** : un mot de passe, une clé ou un code partagé sous la forme
+  d'un texte scellé dans le navigateur ; la clé reste dans le fragment `#` du lien et n'atteint
+  jamais le serveur. Phrase de passe facultative (PBKDF2), lecture unique puis destruction (ou à
+  l'expiration, de 1 heure à 30 jours), petit fichier facultatif (10 Mio par défaut, jusqu'à
+  25 Mio, non analysé par l'antivirus), remise par lien ou par mail à un destinataire, accusé de
+  lecture facultatif, « Mes secrets » dans « Mes envois », réglages et liste dans l'administration
+  (en lecture seule pour les auditeurs) et création possible par l'API
+  ([format](docs/architecture/e2e-format.md)). **Activé par défaut dans toutes les entités, y
+  compris les existantes** ; il peut être désactivé ou restreint par entité.
 - **Client en ligne de commande (V2)** : `transteira-cli` pour déposer et télécharger depuis des
   scripts, avec reprise automatique ([guide](docs/api/cli.md)).
 - **Publications signées (V2)** : image multi-architecture signée avec cosign et publiée avec son
@@ -154,7 +163,11 @@ chiffré avec sa propre clé, elle-même chiffrée par la clé maître (envelope
 de la clé maître ne réécrit jamais les fichiers, et la suppression d'un transfert détruit ses clés
 (effacement cryptographique). Les copies présentes dans les sauvegardes existantes deviennent
 illisibles une fois la clé maître remplacée et l'ancienne clé détruite à l'issue de la durée de
-rétention des sauvegardes ([détails](docs/operations/master-key.md#crypto-erase)).
+rétention des sauvegardes ([détails](docs/operations/master-key.md#crypto-erase)). Le texte chiffré
+d'un secret à usage unique est aussi chiffré au repos avec sa propre clé, enveloppée par la clé
+maître : cette clé est détruite quand le secret est lu ou se termine. Une sauvegarde de la base
+faite pendant qu'un secret est encore vivant contient son texte scellé, que seule la clé du lien
+peut ouvrir.
 
 ### Vie d'un transfert
 
@@ -193,6 +206,8 @@ sequenceDiagram
 | **Transfert envoyé**, avec statut antivirus et empreintes | **Page de téléchargement** : chaque fichier ou une archive ZIP |
 | ![Habillage d'une entité dans l'administration : couleurs principale et d'accent avec leur ratio de contraste vérifié par rapport aux niveaux d'accessibilité](docs/user/screenshots/fr/admin-tenant-branding.png) | ![Statistiques d'une entité dans l'administration : chiffres clés de la période et stockage utilisé par rapport au quota](docs/user/screenshots/fr/admin-stats.png) |
 | **Habillage par entité**, avec contrôles de contraste | **Statistiques** et quota de stockage |
+| ![Formulaire « Partager un secret » : un texte à sceller dans le navigateur, une durée, une phrase de passe facultative et la remise par lien ou par mail](docs/user/screenshots/fr/secret-create.png) | ![Page de lecture d'un secret à usage unique : le secret n'apparaît qu'après avoir appuyé sur le bouton, et il est détruit une fois lu](docs/user/screenshots/fr/secret-reveal.png) |
+| **Partager un secret** : scellé dans le navigateur, lu une seule fois | **Page de lecture** : rien n'est consommé avant le bouton |
 
 Les captures d'écran sont générées par les tests de bout en bout (`make screenshots`), en anglais et
 en français (les [guides utilisateur](docs/user/README.md) les présentent toutes), afin qu'elles
@@ -263,7 +278,8 @@ pour Docker.
 ## Documentation
 
 - [Guides utilisateur](docs/user/README.md), en anglais et en français, un par profil : déposant,
-  destinataire, administrateur délégué, auditeur et super administrateur. Les mêmes guides sont intégrés à
+  destinataire, administrateur délégué, auditeur et super administrateur (les guides du déposant et
+  du destinataire couvrent le partage et la lecture des secrets à usage unique). Les mêmes guides sont intégrés à
   l'application comme aide intégrée (`/help` sur chaque hôte d'entité, `/admin/help` sur l'hôte
   d'administration), avec un lien d'aide dans le pied de page et des icônes d'aide contextuelle sur
   les écrans complexes.
@@ -371,13 +387,15 @@ cours est renvoyée par `/api/v1/version` et `/healthz` et affichée par `transt
 | V1, le cœur (1.0) | Fonctionnalités de base de transfert, de sécurité, d'administration et d'API. |
 | V1.1, l'exploitation (1.1) | Supervision, détection des abus, maîtrise du partage, « Mes envois », mode sombre, moteurs antivirus. |
 | V1.2, la mise en service (1.2) | Mise en service des entités, invitation des admins délégués, bibliothèque d'images, API de provisionnement, vérification des mises à jour. |
-| **V2, l'entreprise** (2.0, actuelle) | SSO OpenID Connect (Entra ID), rôle auditeur, preuve de dépôt et de remise, export et import de configuration d'entité, liens de dépôt permanents, image signée avec SBOM, client en ligne de commande, option lien seul sans mail, chiffrement de bout en bout en option, kit de conformité. |
+| V2, l'entreprise (2.0) | SSO OpenID Connect (Entra ID), rôle auditeur, preuve de dépôt et de remise, export et import de configuration d'entité, liens de dépôt permanents, image signée avec SBOM, client en ligne de commande, option lien seul sans mail, chiffrement de bout en bout en option, kit de conformité. |
+| **V2.1, secrets à usage unique** (2.1, actuelle) | Secrets scellés dans le navigateur et lus une seule fois, avec phrase de passe, fichier, remise par mail et accusé de lecture facultatifs. |
 
-La version 2.0 marque le périmètre entreprise. Elle reste compatible avec la 1.x : l'API est
-toujours `/api/v1`, avec des ajouts seulement, la configuration et les données sont migrées
-automatiquement, et la mise à jour depuis la 1.2 ne demande aucun changement
-([guide de mise à jour](docs/operations/upgrade.md)). Prochain périmètre prévu : V2.1, partage de
-secrets à usage unique. Une version est le commit étiqueté `vX.Y.Z` ; `make build` et `make docker` prennent
+La version 2.1 ajoute les secrets à usage unique. Elle reste compatible avec la 2.0 : l'API est
+toujours `/api/v1`, avec des ajouts seulement, les migrations 0033, 0034 et 0035 sont appliquées au
+démarrage et aucun changement de configuration n'est nécessaire. Le module est activé par défaut
+dans toutes les entités, y compris les existantes ; si vous avez copié les configurations du
+reverse proxy, mettez-les aussi à jour
+([guide de mise à jour](docs/operations/upgrade.md#from-20-to-21)). Une version est le commit étiqueté `vX.Y.Z` ; `make build` et `make docker` prennent
 la version depuis cette étiquette.
 
 ## Sécurité

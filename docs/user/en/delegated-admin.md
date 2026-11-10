@@ -1,6 +1,6 @@
 # Delegated administrator guide
 
-As a delegated administrator, you configure and operate the entities attached to your account: their branding, network rules, mail server, email templates and legal texts, and you follow their transfers, invitations, blocklist, API tokens, webhooks, audit log, statistics and personal data requests. Everything happens in the administration, at the address given by your organisation (for example `admin.transfer.example.com/admin/`). The **Help** link at the bottom of each screen opens the matching section of this guide.
+As a delegated administrator, you configure and operate the entities attached to your account: their branding, network rules, mail server, email templates and legal texts, and you follow their transfers, invitations, one-time secrets, blocklist, API tokens, webhooks, audit log, statistics and personal data requests. Everything happens in the administration, at the address given by your organisation (for example `admin.transfer.example.com/admin/`). The **Help** link at the bottom of each screen opens the matching section of this guide.
 
 <!-- topic: admin-roles -->
 ## Roles
@@ -9,7 +9,7 @@ TransTeira has three administrator roles, and the role shown under your username
 
 - **Super administrator**: manages every entity, creates the entities and the administrator accounts, and handles the system settings of the service.
 - **Delegated administrator**: manages only the entities attached to the account. Another entity is invisible to you: if you open its address, the administration answers as if it did not exist.
-- **Auditor**: consults the entities attached to the account in read-only mode (summary, audit log, security log, statistics, transfers and proofs, drop links) and changes nothing, except its own password and second factor. Auditor accounts are created by a super administrator, for example for a security officer or an audit; an auditor cannot open any configuration screen.
+- **Auditor**: consults the entities attached to the account in read-only mode (summary, audit log, security log, statistics, transfers and proofs, drop links, one-time secrets) and changes nothing, except its own password and second factor. Auditor accounts are created by a super administrator, for example for a security officer or an audit; an auditor cannot open any configuration screen.
 
 Within your entities, you can change almost everything. A few settings are reserved to the super administrator: the name of the entity, its public address (FQDN), its storage quota, the ceiling of the size per transfer, and the deletion of the entity. Ask your super administrator when one of them needs to change.
 
@@ -130,8 +130,8 @@ Creating and deleting entities is reserved to the super administrator: these act
 
 Once an entity is open, a navigation bar shows its name and two groups of screens.
 
-- **Configuration**: **General**, **Branding**, **Network**, **Recipient domains**, **Confidentiality levels**, **Mail (SMTP)**, **Email templates**, **Legal information**.
-- **Operations**: **Transfers**, **Invitations**, **Drop links**, **Blocklist**, **API tokens**, **Webhooks**, **Audit log**, **Security log**, **Statistics**, **Personal data**.
+- **Configuration**: **Setup**, **General**, **Branding**, **Network**, **Recipient domains**, **Abuse detection**, **Confidentiality levels**, **Secrets settings**, **Mail (SMTP)**, **Single sign-on**, **Email templates**, **Legal information**.
+- **Operations**: **Transfers**, **Invitations**, **Drop links**, **One-time secrets**, **Blocklist**, **Abuse reports**, **API tokens**, **Webhooks**, **Audit log**, **Security log**, **Statistics**, **Personal data**.
 
 The filters of the lists are kept in the page address, so you can bookmark a filtered view or share it with another administrator of the entity. Long lists show their first rows; click **Load more** to see the next ones. If you leave a form with unsaved changes, the administration asks for confirmation first.
 
@@ -193,9 +193,9 @@ The **Webhooks** section below sets the content of the alerts sent to the [webho
 
 The **Exporting the configuration** section at the bottom of the General screen downloads the settings of the entity as a JSON file. The super administrator uses it to create another entity by duplicating this one.
 
-The file contains the general settings (without the storage quota), the colours and the background preset, the network ranges and domains, the recipient domain rules, the confidentiality levels, the abuse thresholds, the customised email templates only, the legal texts, the blocklist, the SMTP server, port, security and sender address, and the webhooks by name, type and events only. Tick **Include the logo and the background image** to add the two image files.
+The file contains the general settings (without the storage quota), the colours and the background preset, the network ranges and domains, the recipient domain rules, the confidentiality levels, the abuse thresholds, the customised email templates only, the legal texts, the blocklist, the SMTP server, port, security and sender address, the one-time secrets settings (enabled, offered durations, default duration, attached file and its size limit, delivery by email and passphrase), and the webhooks by name, type and events only. Tick **Include the logo and the background image** to add the two image files.
 
-The file never contains the SMTP user name and password, the webhook addresses and secrets, the API tokens, the administrators, the single sign-on configuration, the transfers, the addresses, the invitations or the audit log.
+The file never contains the SMTP user name and password, the webhook addresses and secrets, the API tokens, the administrators, the single sign-on configuration, the transfers, the one-time secrets, the addresses, the invitations or the audit log.
 
 Click **Download the configuration** to download the file. Each export is recorded in the [audit log](topic:tenant-audit) (`tenant.exported`).
 
@@ -327,7 +327,8 @@ The list shows each template in each language, marked **Customized** or **Defaul
 
 - **Verification code**, **Transfer notification**, **Transfer confirmation**, **First download receipt**;
 - **Infected or withheld file**, **File not scanned**, **External invitation**;
-- **Quota alert (80%)**, **Quota reached**, **Antivirus unavailable**.
+- **Quota alert (80%)**, **Quota reached**, **Antivirus unavailable**;
+- **Secret notification** and **Secret read receipt** (2.1).
 
 ![List of the email templates with their state in each language](../screenshots/en/admin-tenant-templates.png)
 
@@ -518,6 +519,8 @@ The alerts never contain a file name, a link to a transfer or a password. They c
 
 One-time secrets let people pass on a password, a key or a code, encrypted in the author's browser: you **never see their content**, link or passphrase. Two screens in the entity menu deal with them.
 
+> **Warning** Since 2.1, one-time secrets are **enabled by default in every entity, including the entities that existed before the upgrade**, with file attachments (10 MiB) and delivery by email allowed. An attached file is encrypted in the browser and never scanned by the antivirus, and the emails are sent under the domain of your entity. Review the settings below after the upgrade and turn off what your entity does not need. You can change every setting, **Enable one-time secrets** included, and so can the super administrator.
+
 The **Secrets settings** screen (**One-time secrets**) sets the rules:
 
 - **Enable one-time secrets**: disabling the module refuses new secrets; existing ones stay readable until they end.
@@ -526,9 +529,15 @@ The **Secrets settings** screen (**One-time secrets**) sets the rules:
 - **Allow delivery by e-mail**: the server sends the link to a recipient; otherwise the author hands the link over.
 - **Require a passphrase for e-mail delivery**: the secret must then be protected by a passphrase, to be passed on through another channel.
 
+The default settings of an entity (a new one, or one that existed before 2.1) are: module enabled, durations of 1 hour, 1 day and 7 days, no default duration chosen (the shortest offered one is then used), attached file allowed up to 10 MiB, delivery by email allowed, passphrase for email delivery not required. The durations you can offer are 1 hour, 12 hours, 1 day, 3 days, 7 days and 30 days. A duration runs from the activation of the secret, not from its creation. Changing a setting never affects the secrets that already exist, and each change is recorded in the [audit log](topic:tenant-audit) (**Secrets settings updated**, with the names of the changed settings only).
+
+**Delivery by email.** A secret has exactly one recipient. The recipient domain rules and the blocklist of the entity apply to that recipient, when the secret is created and again when the link is sent. The email goes through the mail server of the entity and uses the **Secret notification** template. It never contains free text written by the author. When the author puts the key in the email, the mailbox holds everything needed to read the secret: this is why you can require a passphrase. The author can ask for a read receipt, sent when the secret is read, expires unread or is locked, never after an administrator deleted it. An invited external person can only send a secret by email to the internal person who invited them, and cannot create one at all when delivery by email is off.
+
+**Limits and storage.** An author (an address or an API token) can have 50 open secrets (**Pending** or **Active**) and create 200 secrets in a rolling 24 hours; text is limited to 10 000 characters. A **Pending** secret is one whose creation was not finished: it is purged after 1 hour. While it exists, an attached file counts in the storage quota of the entity and in **Storage used**: a secret whose file would exceed the quota is refused and raises the usual quota alerts. Secrets are also refused while the entity is in maintenance or still being set up. In the [abuse detection](topic:tenant-abuse), each secret counts as one transfer of its author for the daily number of transfers (never for the volume).
+
 ![Secrets settings screen with the switch, the durations, the attached file and delivery by e-mail](../screenshots/en/admin-secret-settings.png)
 
-The **One-time secrets** screen lists the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State**, **Expiry** and **Read**. Filter by **State** or by **Author address** (exact address). For a **Pending** or **Active** secret, **Delete** destroys it at once, for good. Creations, reads and deletions are recorded in the [audit log](topic:tenant-audit).
+The **One-time secrets** screen lists the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State**, **Expiry** and **Read**. Filter by **State** or by **Author address** (exact address). For a **Pending** or **Active** secret, **Delete** destroys it at once, for good: its link then answers that it was deleted by its sender or by an administrator, and no read receipt is sent. Deleting a secret that already ended does nothing. Creations, reads and deletions are recorded in the [audit log](topic:tenant-audit) (**One-time secrets** group of actions), with the administrator as actor for a deletion. An ended secret (**Read**, **Expired**, **Deleted** or **Locked**) stays in the list for 30 days without any content, then disappears. Authors can also list and delete their own secrets in **My secrets** of the My transfers page, which is the quick way to fix a mistake of recipient.
 
 ![List of one-time secrets with the filters, the state, the expiry and the Delete button](../screenshots/en/admin-secrets.png)
 
@@ -543,6 +552,8 @@ Filter by **Action** (grouped by theme), by **Actor** (exact email address or ad
 
 An address erased at the request of the person concerned appears as a pseudonym starting with `erased-`.
 
+The **One-time secrets** group gathers **Secret created**, **Secret link mailed** (only the domain of the recipient is recorded), **Secret read** (with the IP address), **Secret file downloaded**, **Secret expired unread**, **Secret deleted**, **Secret locked after wrong proofs** and **Secrets settings updated**. None of them holds the content, the key, a proof or the link. The object of these events is a secret (identifier starting with `sec_`), with no link to open.
+
 <!-- topic: tenant-security-log -->
 ### Security log
 
@@ -552,18 +563,18 @@ Filter by **Event type** (a type in the list, or **Other type** and the code of 
 
 ![Security log of an entity with the filters and the list of events](../screenshots/en/admin-security-log.png)
 
-The types you can meet are **Wrong verification code**, **Wrong transfer password**, **Invalid API token**, **Deposit refused** (reason `ip` for an address outside the ranges, `domain`, `blocklist` or `invitation`), **Rate limit exceeded**, **Invalid access link**, **Invalid drop link** and **Failed single sign-on**. A burst of events from one address (many wrong codes, many refused deposits) usually means a guessing attempt: you can add the sender to the [Blocklist](topic:tenant-blocklist) if it is a deposit, and the operator can ban the address with the intrusion prevention tool. Events that belong to no entity (unknown address, administrator sign-in, provisioning token) are only visible to the super administrator, in the global security log. The meaning of every event is documented in `docs/operations/security-log.md` in the TransTeira repository. Events are kept 12 months.
+The types you can meet are **Wrong verification code**, **Wrong transfer password**, **Invalid API token**, **Deposit refused** (reason `ip` for an address outside the ranges, `domain`, `blocklist` or `invitation`), **Rate limit exceeded**, **Invalid access link**, **Invalid drop link**, **Failed single sign-on**, **Unknown secret link** and **Wrong secret proof**. The rate limit events can also concern the links of secrets (scopes `secret_link` and `secret_link_ip`). A **Wrong secret proof** event carries a reason: `key` (the key part of the link is wrong, not counted against the secret) or `passphrase` (right key, wrong passphrase). Many `passphrase` events mean that someone holding a secret link is guessing its passphrase: after 5 wrong passphrase proofs the secret is locked and destroyed. A burst of events from one address (many wrong codes, many refused deposits) usually means a guessing attempt: you can add the sender to the [Blocklist](topic:tenant-blocklist) if it is a deposit, and the operator can ban the address with the intrusion prevention tool. Events that belong to no entity (unknown address, administrator sign-in, provisioning token) are only visible to the super administrator, in the global security log. The meaning of every event is documented in `docs/operations/security-log.md` in the TransTeira repository. Events are kept 12 months.
 
 <!-- topic: tenant-stats -->
 ### Statistics
 
 The Statistics screen shows the activity of the entity over a period.
 
-Choose the **Period**: **Last 7 days**, **Last 30 days** or **Last 12 months**. The **Key figures** give the **Transfers deposited**, **Volume deposited**, **Downloads**, **Volume downloaded** and **Virus detections**; the storage used is shown too, with charts per day or per month. Each chart has a **Show the data table** button for a readable version. The figures are indicative: the counters are updated about every 30 seconds.
+Choose the **Period**: **Last 7 days**, **Last 30 days** or **Last 12 months**. The **Key figures** give the **Transfers deposited**, **Volume deposited**, **Downloads**, **Volume downloaded**, **One-time secrets created** and **Virus detections**; the storage used is shown too, with charts per day or per month. Each chart has a **Show the data table** button for a readable version. The figures are indicative: the counters are updated about every 30 seconds. **One-time secrets created** counts the secrets created in the period, whatever became of them afterwards (unfinished ones included); it starts at the upgrade to 2.1.
 
 ![Statistics of an entity with the key figures, the storage and the charts](../screenshots/en/admin-stats.png)
 
-The storage quota is set by the super administrator. When the entity reaches 80 % of its quota, the delegated administrators receive an alert email; when it reaches 100 %, they receive another one and new deposits are refused until space is freed by expiry or deletion. Each alert is sent once per crossing of the threshold.
+The storage quota is set by the super administrator. When the entity reaches 80 % of its quota, the delegated administrators receive an alert email; when it reaches 100 %, they receive another one and new deposits, and secrets with an attached file, are refused until space is freed by expiry or deletion. The storage used includes the files of the one-time secrets while they exist. Each alert is sent once per crossing of the threshold.
 
 <!-- topic: tenant-abuse -->
 ### Abuse detection
@@ -577,6 +588,8 @@ The Abuse detection screen sets the thresholds that raise an alert on an interna
 - **Unusual behaviour** (alert only, for internal senders, including from outside): a volume above a **factor** times the daily average of the previous 30 days (a minimum number of active days is needed), a large transfer to a recipient outside the internal domains from a given size, a transfer outside **office hours** (time zone, start and end time, days of the week).
 - **Invitations**: maximum number of invitations per internal user per rolling hour (20 by default). Beyond it, the invitation is refused and an alert is raised.
 - **External quotas**: volume and number of deposits per day and per external address, blocking if blocking is on.
+
+The one-time secrets of an internal sender count in the daily number of transfers (the number only, never the volume), for the alert only: they never block. A secret still **Pending** is not counted.
 
 An alert is raised at most once per sender, per rule and per day. For a refusal (blocking), only the first refusal of the day for a sender and a rule is audited and alerted; later refusals the same day are only counted, with no new audit line, email or webhook. An alert-only alert raised earlier the same day does not hide a later refusal: email to the administrators of the entity and [webhooks](topic:tenant-webhooks) (`abuse.threshold_exceeded`, `abuse.unusual_activity`). Every alerted excess is written to the [audit log](topic:tenant-audit), with the sender as actor. Changes to the thresholds are audited too.
 
@@ -600,13 +613,13 @@ New reports are sent by email to the delegated administrators of the entity (to 
 
 The Personal data screen answers the requests of people who want to know or erase the data linked to their email address in the entity (data subject rights, GDPR).
 
-In **Search by email address**, type the **Email address** and click **Search**. The section **Data found in this entity** summarises what is linked to it: verified address record, transfers sent and received, invitations, proofs of deposit and delivery, audit log entries.
+In **Search by email address**, type the **Email address** and click **Search**. The section **Data found in this entity** summarises what is linked to it: verified address record, transfers sent and received, one-time secrets created or received, invitations, proofs of deposit and delivery, audit log entries.
 
 ![Personal data search with the summary of the data found for an address](../screenshots/en/admin-privacy.png)
 
 Click **Erase all data** to erase it. The screen details the effect:
 
-- erased: verification codes, deposit sessions and the verified address; transfers sent by the address or through an invitation it received (files made unreadable, then deleted); the address in received transfers (a transfer left without recipients is deleted); invitations received (deleted) and issued (revoked); proofs of deposit and delivery naming the address; in the audit log, the address is replaced by a pseudonym;
+- erased: verification codes, deposit sessions and the verified address; the one-time secrets created by or sent to the address, in every state (deleted with their content and keys, and their files removed); transfers sent by the address or through an invitation it received (files made unreadable, then deleted); the address in received transfers (a transfer left without recipients is deleted); invitations received (deleted) and issued (revoked); proofs of deposit and delivery naming the address; in the audit log, the address is replaced by a pseudonym;
 - kept on purpose: blocklist entries, the address in the allowed senders of an API token (edit the token to remove it), IP addresses in the audit log until their 12 months are over, emails already queued, and backups, whose copies of the files become unreadable.
 
 The erasure cannot be undone. It ends with an **Erasure report**. Only this entity is affected: if the person also uses another entity, repeat the procedure there.

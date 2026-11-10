@@ -102,9 +102,13 @@ administrators, not by the firewall.
   recipients behind one NAT, or a download manager opening parallel
   connections, reach these limits without any attack. The filter's
   `ignoreregex` matches only the exact line TransTeira writes for them
-  (truncated transfer ID, then the scope, nothing after), so a value forged
+  (truncated ID, `trf_` for a transfer or, since 2.1, `sec_` for a one-time
+  secret, then the scope, nothing after), so a value forged
   elsewhere on the line cannot use it to escape a ban. Every other
   `rate_limited` scope still counts.
+- Since 2.1 the `secret_invalid` (unknown one-time secret link) and `secret_proof_invalid` (wrong
+  key or passphrase proof, with a `reason`) events count as failures like the other ones: the
+  256-bit tokens cannot be guessed, so repeated failures mean probing.
 - Add trusted networks and monitoring probes to `ignoreip` (see above). Do
   **not** add the reverse proxy: TransTeira logs the real client IP, taken from
   `X-Forwarded-For` only when the request comes from a proxy declared in

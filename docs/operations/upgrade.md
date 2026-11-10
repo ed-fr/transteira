@@ -11,6 +11,46 @@ files of your deployment: add `-f deploy/docker-compose.postgres.yml` with
 PostgreSQL (and any file of your own), or set `COMPOSE_FILE` in
 `deploy/.env` and run `docker compose` from `deploy/`.
 
+## From 2.0 to 2.1
+
+Version 2.1 adds one-time secrets. Follow the usual procedure below. What to
+know:
+
+- **Database**: migrations 0033 to 0035 are applied automatically at start-up
+  (0033: the `secrets` table and seven settings columns on `tenants`; 0034:
+  the mail template keys `secret-notification` and `secret-receipt`, which on
+  SQLite rebuilds the `tenant_email_templates` table to widen its key check;
+  0035: the `secrets_created` column of `tenant_daily_stats`,
+  the daily counter of secrets created). With
+  PostgreSQL, the owner role grants the runtime role its rights on the new
+  table, which carries the row-level security policy `secrets_isolation`.
+  As always, take the database copy first.
+- **Configuration**: no new variable.
+- **Behaviour, to review before the maintenance mode is turned off**: the
+  module is **enabled in every entity, existing ones included** (decisions
+  P81, T-372), with the durations 1 hour, 1 day and 7 days, a file allowed up
+  to 10 MiB, e-mail delivery allowed and `emailRequiresPassphrase` off. Each
+  entity therefore gains a channel of end-to-end encrypted content that is
+  **never scanned by the antivirus**, and secret mails sent under its domain
+  (the link of an e-mailed secret carries the decryption key, see
+  [Secrets by e-mail](../install/smtp.md#secrets-by-e-mail)). Review the
+  settings of each entity, or disable the module where it is not wanted
+  (**Secret settings**, delegated admin or super admin, see
+  [Tenants](tenants.md#one-time-secrets)).
+- **Integrations**: copy again the reverse proxy configuration
+  ([`integrations/reverse-proxy/`](../../integrations/reverse-proxy/README.md))
+  and the fail2ban or CrowdSec files you use: 2.1 masks the token of the
+  secret links (`/s/` and `/api/v1/secret-links/`) in the proxy access logs,
+  bans repeated invalid secret links and wrong passphrases (events
+  `secret_invalid` and `secret_proof_invalid`, rate limit scopes
+  `secret_link_ip` and `secret_link`), and its ban rules ignore the
+  concurrent download refusals of a secret file (`sec_` IDs, scope
+  `download_streams`).
+- **Mail templates**: the two new mails (`secret-notification` and
+  `secret-receipt`) use the default templates until an entity customises them.
+- **Monitoring**: new metrics, `/status` fields, Grafana panels and Zabbix
+  items, see [Supervision](supervision.md).
+
 ## From 1.2 to 2.0
 
 Version 2.0 stays compatible with 1.2: follow the usual procedure below. What
@@ -181,6 +221,15 @@ entries, first-download notices) and admin changes. A transfer deleted
 during that window (expiry, deletion after the first download) comes back in
 the database without its files, which have been erased: delete it from the
 administration.
+
+**From 2.1 back to 2.0.** Restoring the copy taken before the upgrade drops
+every secret created since: their links stop working, and their creators
+must be told. The files of these secrets stay on disk under
+`<TT_DATA_DIR>/<tenant>/secrets/`: the cleanup task of 2.0 does not know
+this subdirectory and only logs "unknown entries left in a tenant
+directory". Their keys are gone with the restored database, so the files are
+unreadable, but delete these `secrets/` directories by hand after the
+rollback.
 
 The other way to roll back is to restore the VM snapshot taken before the
 upgrade, which brings back the volumes and the database together.

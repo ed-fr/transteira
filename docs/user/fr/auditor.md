@@ -1,6 +1,6 @@
 # Guide de l’auditeur
 
-En tant qu’auditeur, vous consultez, en lecture seule, les entités rattachées à votre compte : leur résumé, leur journal d’audit, leur journal de sécurité, leurs statistiques, leurs transferts et leurs preuves, ainsi que leurs liens de dépôt permanents. Ce rôle est destiné à un RSSI ou à un audit (par exemple ISO 27001). Vous ne pouvez rien modifier, hormis votre propre mot de passe et votre second facteur. Tout se passe dans l’administration, à l’adresse communiquée par votre organisation (par exemple `admin.transfer.example.com/admin/`). Le lien **Aide** en bas de chaque écran ouvre directement la section correspondante de ce guide.
+En tant qu’auditeur, vous consultez, en lecture seule, les entités rattachées à votre compte : leur résumé, leur journal d’audit, leur journal de sécurité, leurs statistiques, leurs transferts et leurs preuves, leurs secrets à usage unique (métadonnées seulement), ainsi que leurs liens de dépôt permanents. Ce rôle est destiné à un RSSI ou à un audit (par exemple ISO 27001). Vous ne pouvez rien modifier, hormis votre propre mot de passe et votre second facteur. Tout se passe dans l’administration, à l’adresse communiquée par votre organisation (par exemple `admin.transfer.example.com/admin/`). Le lien **Aide** en bas de chaque écran ouvre directement la section correspondante de ce guide.
 
 <!-- topic: auditor-roles -->
 ## Votre rôle : la lecture seule
@@ -18,7 +18,8 @@ Vous pouvez consulter :
 - le résumé de l’entité (son nom, son adresse, sa langue, sa limite de taille et son quota de stockage) et sa configuration d’authentification unique, sans aucun secret ;
 - le journal d’audit, le journal de sécurité et les statistiques de l’entité ;
 - la liste de ses transferts, le détail de chaque transfert (métadonnées uniquement) et leurs preuves de dépôt et de remise, en PDF ;
-- la liste de ses liens de dépôt permanents, jamais le secret d’un lien.
+- la liste de ses liens de dépôt permanents, jamais le secret d’un lien ;
+- la liste de ses secrets à usage unique (métadonnées seulement), jamais leur contenu, leur lien ni leur phrase de passe.
 
 Vous ne gérez que votre propre compte : votre mot de passe et votre double authentification. Toute autre action est refusée avec l’erreur **read-only-role**, et l’administration ne vous la propose pas.
 
@@ -130,18 +131,20 @@ Les preuves sont conservées 12 mois après leur émission, même si le transfer
 <!-- topic: auditor-tenant-audit -->
 ## Journal d’audit
 
-L’écran **Journal d’audit** présente les actions enregistrées pour l’entité au cours des 12 derniers mois : dépôts, téléchargements, invitations, actions des administrateurs, détections de virus, etc.
+L’écran **Journal d’audit** présente les actions enregistrées pour l’entité au cours des 12 derniers mois : dépôts, téléchargements, invitations, actions des administrateurs, détections de virus, secrets à usage unique, etc.
 
 Filtrez par **Action** (regroupées par thème) et par période avec **Du** et **Au**, puis cliquez sur **Appliquer**. Le filtre **Acteur** ne vous est pas proposé, comme pour les transferts. Les colonnes indiquent la **Date**, l’**Acteur**, l’**Action**, l’**Objet**, l’**Adresse IP** et les **Détails** (cliquez sur **Afficher les détails**). Lorsque l’objet est un transfert, un lien ouvre son détail. Les filtres sont conservés dans l’adresse de la page : vous pouvez enregistrer une vue en favori ou la partager avec une autre personne ayant accès à l’entité.
 
 ![Journal d’audit d’une entité avec les filtres et la liste des événements](../screenshots/fr/admin-audit.png)
+
+Le groupe d’actions **Secrets à usage unique** contient **Secret créé**, **Lien du secret envoyé par mail** (seul le domaine du destinataire), **Secret lu**, **Fichier du secret téléchargé**, **Secret expiré sans lecture**, **Secret supprimé**, **Secret verrouillé après des preuves erronées** et **Réglages des secrets modifiés**. Aucun ne contient un contenu, une clé, une preuve ou un lien.
 
 Une adresse effacée à la demande de la personne concernée apparaît sous la forme d’un pseudonyme commençant par `erased-`. Le journal est conservé 12 mois et ne contient que les événements des entités rattachées à votre compte.
 
 <!-- topic: auditor-tenant-security-log -->
 ## Journal de sécurité
 
-L’écran **Journal de sécurité** présente les événements de sécurité de l’entité au cours des 12 derniers mois : codes de vérification ou mots de passe de transfert erronés, dépôts refusés, limitations de débit, jetons et liens de dépôt invalides. Ce sont les événements sur lesquels travaillent les outils de prévention d’intrusion (fail2ban, CrowdSec), ce qui le distingue du journal d’audit. Le journal ne contient jamais d’adresse mail.
+L’écran **Journal de sécurité** présente les événements de sécurité de l’entité au cours des 12 derniers mois : codes de vérification ou mots de passe de transfert erronés, dépôts refusés, limitations de débit, jetons et liens de dépôt invalides, liens de secrets inconnus et preuves de secret incorrectes (**Lien de secret inconnu**, **Preuve de secret incorrecte** : des preuves erronées répétées signalent que quelqu’un qui détient un lien de secret essaie d’en deviner la phrase de passe). Ce sont les événements sur lesquels travaillent les outils de prévention d’intrusion (fail2ban, CrowdSec), ce qui le distingue du journal d’audit. Le journal ne contient jamais d’adresse mail.
 
 Filtrez par **Type d’événement** (choisissez un type dans la liste, ou **Autre type** et saisissez son code) et par période avec **Du** et **Au**. Les colonnes indiquent la **Date**, le **Type**, le **Motif**, l’**Adresse IP** et les **Occurrences** : les événements identiques (même type, même motif, même adresse) survenus en peu de temps sont regroupés sur une ligne, avec leur nombre et la date du dernier.
 
@@ -152,7 +155,7 @@ Les événements qui n’appartiennent à aucune entité (une adresse inconnue, 
 <!-- topic: auditor-tenant-stats -->
 ## Statistiques
 
-L’écran **Statistiques** présente l’activité de l’entité sur une période. Choisissez la **Période** : **7 derniers jours**, **30 derniers jours** ou **12 derniers mois**. Les **Chiffres clés** donnent les **Transferts déposés**, le **Volume déposé**, les **Téléchargements**, le **Volume téléchargé** et les **Virus détectés** ; le stockage occupé est aussi affiché, avec des graphiques par jour ou par mois. Chaque graphique dispose d’un bouton **Afficher le tableau des données** pour une version lisible. Les chiffres sont indicatifs : les compteurs sont mis à jour environ toutes les 30 secondes.
+L’écran **Statistiques** présente l’activité de l’entité sur une période. Choisissez la **Période** : **7 derniers jours**, **30 derniers jours** ou **12 derniers mois**. Les **Chiffres clés** donnent les **Transferts déposés**, le **Volume déposé**, les **Téléchargements**, le **Volume téléchargé**, les **Secrets à usage unique créés** et les **Virus détectés** ; le stockage occupé est aussi affiché, avec des graphiques par jour ou par mois. Chaque graphique dispose d’un bouton **Afficher le tableau des données** pour une version lisible. Les chiffres sont indicatifs : les compteurs sont mis à jour environ toutes les 30 secondes. Le stockage utilisé inclut les fichiers des secrets à usage unique tant qu’ils existent. **Secrets à usage unique créés** compte les secrets créés sur la période, quel que soit leur sort ensuite (inachevés compris) ; il démarre à la mise à jour vers la 2.1.
 
 ![Statistiques d’une entité avec les chiffres clés, le stockage et les graphiques](../screenshots/fr/admin-stats.png)
 
@@ -166,7 +169,7 @@ Vous ne pouvez ni créer, ni modifier, ni renouveler, ni révoquer un lien. Le s
 <!-- topic: auditor-tenant-secrets -->
 ## Secrets à usage unique
 
-L’écran **Secrets à usage unique** liste, en lecture seule, les secrets de l’entité, du plus récent au plus ancien : **Création**, **Auteur**, **Remise**, **Fichier**, **État** (**En attente**, **Actif**, **Lu**, **Expiré**, **Supprimé** ou **Verrouillé**), **Expiration** et **Lecture**. Filtrez par **État** ou par **Adresse de l’auteur**. Vous ne voyez jamais le contenu d’un secret, son lien ni sa phrase de passe, et vous ne pouvez supprimer aucun secret. Les réglages des secrets ne vous sont pas proposés.
+L’écran **Secrets à usage unique** liste, en lecture seule, les secrets de l’entité, du plus récent au plus ancien : **Création**, **Auteur**, **Remise**, **Fichier**, **État** (**En attente**, **Actif**, **Lu**, **Expiré**, **Supprimé** ou **Verrouillé**), **Expiration** et **Lecture**. Filtrez par **État**. Le filtre **Adresse de l’auteur** ne vous est pas proposé, comme pour les transferts et le journal d’audit. Un secret terminé reste listé 30 jours comme trace, sans aucun contenu, puis disparaît. Vous ne voyez jamais le contenu d’un secret, son lien ni sa phrase de passe, et vous ne pouvez supprimer aucun secret. Les réglages des secrets ne vous sont pas proposés.
 
 <!-- topic: auditor-account -->
 ## Mon compte
@@ -187,7 +190,8 @@ Le rôle d’auditeur est en lecture seule à dessein, pour qu’un audit ne mod
 - modifier la configuration d’une entité (habillage, réseau, messagerie, modèles, textes légaux, niveaux de confidentialité, seuils d’abus, authentification unique) ;
 - créer, modifier ou révoquer une invitation, une entrée de la liste de blocage, un jeton d’API, un webhook ou un lien de dépôt permanent ;
 - renvoyer, prolonger ou supprimer un transfert, clore un signalement d’abus, effacer des données personnelles ;
-- rechercher dans une liste par adresse mail (transferts et journal d’audit) ;
+- rechercher dans une liste par adresse mail (transferts, secrets à usage unique et journal d’audit) ;
+- supprimer un secret à usage unique, ou ouvrir ou modifier les réglages des secrets ;
 - consulter le contenu des fichiers, les liens de téléchargement, le secret d’un lien de dépôt, les événements de sécurité de l’instance sans entité ou les écrans système ;
 - créer ou modifier des comptes d’administrateurs, y compris votre propre rôle et vos entités.
 

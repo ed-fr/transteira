@@ -17,7 +17,7 @@ Français : [docs/compliance/fr/README.md](fr/README.md).
 > organisational measures are yours. Have the result reviewed by your data
 > protection officer (DPO) or a lawyer.
 
-The kit applies to **TransTeira 2.0**. Each new version may change what is
+The kit applies to **TransTeira 2.1**. Each new version may change what is
 stored or how: re-read the documents when you upgrade (see the
 [CHANGELOG](../../CHANGELOG.md) and the [upgrade guide](../operations/upgrade.md)).
 
@@ -25,7 +25,7 @@ stored or how: re-read the documents when you upgrade (see the
 
 | Document | Use |
 |---|---|
-| [GDPR processing record](gdpr-processing-record.md) | One pre-filled processing activity, "File transfer service": purposes, data subjects, data categories, recipients, retention, security measures. Fill the `<to be completed>` placeholders and attach it to your register. |
+| [GDPR processing record](gdpr-processing-record.md) | One pre-filled processing activity, "File transfer service", with its second purpose since 2.1, one-time secrets: purposes, data subjects, data categories, recipients, retention, security measures. Fill the `<to be completed>` placeholders and attach it to your register. |
 | [ISO/IEC 27001:2022 Annex A mapping](iso27001-annex-a.md) | The 93 controls of Annex A, with for each one who provides it (TransTeira, shared, operator), the mechanism and the reference. Use it for the Statement of Applicability (SoA) and for audits. |
 | [Threat model](../security/threat-model.md) (French) | STRIDE analysis: assets, trust boundaries, threats `T-xxx`, decisions `Pxx`. The two documents above cite it. |
 
@@ -53,6 +53,7 @@ stored or how: re-read the documents when you upgrade (see the
 - [Antivirus](../operations/antivirus.md), [single sign-on](../operations/sso.md),
   [proofs of deposit and delivery](../operations/proofs.md)
 - [Administration guide](../operations/admin.md), [tenants](../operations/tenants.md)
+- [Secret format](../architecture/e2e-format.md) (section 3.3), and the [depositor](../user/en/depositor.md) and [recipient](../user/en/recipient.md) guides for one-time secrets
 - [Delegated admin guide](../user/en/delegated-admin.md), including the
   "Personal data (GDPR)" screen
 - [Releasing](../operations/release.md) (maintainer guide: signed tags and images)

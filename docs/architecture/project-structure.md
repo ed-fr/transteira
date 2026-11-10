@@ -139,7 +139,14 @@ transteira/
 │   ├── (backup → lifecycle)         # Copie SQLite dans lifecycle ; PostgreSQL : conteneur pg_dump dédié (compose)
 │   ├── datasubject/                 # Droits des personnes (RGPD) : recherche et effacement des données d'une adresse
 │   │                                # dans une entité, pseudonymisation de l'audit (anciennement prévu sous le nom gdpr/)
-│   ├── stats/                       # Statistiques par entité et globales (agrégats quotidiens, espace disque)
+│   ├── secret/                      # [V2.1] Secrets à usage unique chiffrés dans le navigateur (data-model-v2.1.md,
+│   │                                # e2e-format.md §3.3) : création (session de dépôt ou jeton d'API), lien et révélation
+│   │                                # (preuve de clé d'abord, 5 essais de phrase secrète), fichier joint (autorisation
+│   │                                # à usage unique de 10 min), envoi par mail, accusés de lecture, « Mes secrets »,
+│   │                                # limiteurs du lien (secret_link_ip, secret_link), balayages du cycle de vie.
+│   │                                # Tests de fuite : leak_store_test.go (T-375, aucun matériau secret dans les journaux),
+│   │                                # concurrence des lectures dans internal/store (T-353) ; couverture 100 % (liste critique)
+│   ├── stats/                       # Statistiques par entité et globales (agrégats quotidiens, espace disque, secrets créés)
 │   ├── usage/                       # Compteurs d'activité par entité et par jour UTC, cumulés en mémoire et écrits
 │   │                                # toutes les 30 s (table tenant_daily_stats, sans donnée personnelle)
 │   ├── diskusage/                   # Taille et espace libre du système de fichiers des données (statfs / Windows)
@@ -154,10 +161,12 @@ transteira/
 │   │   ├── dialect.go               # Différences de moteur (placeholders, pragmas SQLite, set_config PostgreSQL)
 │   │   ├── migrate.go               # Migrateur (checksum, verrou, refus d'une base plus récente)
 │   │   ├── tenants.go, networkrules.go, blocklist.go, … # Dépôts ; chaque méthode à portée d'entité exige un tenant.ID
+│   │   ├── secrets.go, secretfiles.go # [V2.1] Dépôt des secrets (table secrets, clés dek, fichiers dans <entité>/secrets/)
 │   │   ├── depositor.go             # store.Depositor (adresse, type, invitation) : l'identité d'un déposant partagée
 │   │                                # par transfer (Sender) et upload (Principal), et sa règle de propriété (Owns)
 │   │   ├── migrations/
-│   │   │   ├── sqlite/              # 0001_init.sql, … (versionnées, appliquées au démarrage)
+│   │   │   ├── sqlite/              # 0001_init.sql, … 0033_secrets, 0034_secret_mail_templates, 0035_secret_stats
+│   │   │   │                        # (versionnées, appliquées au démarrage)
 │   │   │   └── postgres/            # Mêmes versions ; ENABLE + FORCE ROW LEVEL SECURITY
 │   │   └── storetest/               # Moteurs de test (SQLite + PostgreSQL) pour les suites communes
 │   │

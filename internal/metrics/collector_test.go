@@ -90,7 +90,10 @@ func fullState() InstanceState {
 		ScanQueueFiles: 2,
 		Tenants: []TenantState{
 			{ID: "ten_B", Name: `Entity "B"`},
-			{ID: "ten_A", Name: "Entity A", StorageUsedBytes: 250, StorageQuotaBytes: 1000, ActiveTransfers: 3, TransfersLast24h: 2},
+			{
+				ID: "ten_A", Name: "Entity A", StorageUsedBytes: 250, StorageQuotaBytes: 1000, ActiveTransfers: 3, TransfersLast24h: 2,
+				SecretFileBytes: 40, SecretsCreatedLast24h: 4, SecretsReadLast24h: 3, SecretsLockedLast24h: 1,
+			},
 		},
 	}
 }
@@ -125,7 +128,10 @@ func fullSources(st *fakeState) Sources {
 // tenant absent from the state.
 func fullCounters() *Counters {
 	c := NewCounters()
-	c.AddUsage("ten_A", Usage{Transfers: 1, UploadedBytes: 100, Downloads: 2, DownloadedBytes: 200})
+	c.AddUsage("ten_A", Usage{
+		Transfers: 1, UploadedBytes: 100, Downloads: 2, DownloadedBytes: 200,
+		SecretsCreated: 3, SecretsRead: 2, SecretsLocked: 1,
+	})
 	c.AddUsage("ten_C", Usage{Transfers: 1, UploadedBytes: 10, VirusDetections: 1})
 	for range 10 {
 		c.HTTPRequest(200)
@@ -181,6 +187,21 @@ transteira_downloaded_bytes_total{tenant="ten_C"} 0
 transteira_antivirus_detections_total{tenant="ten_A"} 0
 transteira_antivirus_detections_total{tenant="ten_B"} 0
 transteira_antivirus_detections_total{tenant="ten_C"} 1
+# HELP transteira_secrets_created_total One-time secrets created, per tenant.
+# TYPE transteira_secrets_created_total counter
+transteira_secrets_created_total{tenant="ten_A"} 3
+transteira_secrets_created_total{tenant="ten_B"} 0
+transteira_secrets_created_total{tenant="ten_C"} 0
+# HELP transteira_secrets_read_total One-time secrets read, per tenant.
+# TYPE transteira_secrets_read_total counter
+transteira_secrets_read_total{tenant="ten_A"} 2
+transteira_secrets_read_total{tenant="ten_B"} 0
+transteira_secrets_read_total{tenant="ten_C"} 0
+# HELP transteira_secrets_locked_total One-time secrets locked after wrong passphrase proofs, per tenant.
+# TYPE transteira_secrets_locked_total counter
+transteira_secrets_locked_total{tenant="ten_A"} 1
+transteira_secrets_locked_total{tenant="ten_B"} 0
+transteira_secrets_locked_total{tenant="ten_C"} 0
 # HELP transteira_storage_used_bytes Storage used, per tenant.
 # TYPE transteira_storage_used_bytes gauge
 transteira_storage_used_bytes{tenant="ten_A"} 250
@@ -193,6 +214,10 @@ transteira_storage_quota_bytes{tenant="ten_B"} 0
 # TYPE transteira_active_transfers gauge
 transteira_active_transfers{tenant="ten_A"} 3
 transteira_active_transfers{tenant="ten_B"} 0
+# HELP transteira_secret_file_bytes Bytes of the stored one-time secret files (counted in the storage used), per tenant.
+# TYPE transteira_secret_file_bytes gauge
+transteira_secret_file_bytes{tenant="ten_A"} 40
+transteira_secret_file_bytes{tenant="ten_B"} 0
 # HELP transteira_scan_queue_files Files waiting for or under analysis.
 # TYPE transteira_scan_queue_files gauge
 transteira_scan_queue_files 2

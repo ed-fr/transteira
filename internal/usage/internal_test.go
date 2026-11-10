@@ -371,6 +371,9 @@ func (s *sinkRecorder) AddUsage(tenantID string, u metricstate.Usage) {
 	cur.Downloads += u.Downloads
 	cur.DownloadedBytes += u.DownloadedBytes
 	cur.VirusDetections += u.VirusDetections
+	cur.SecretsCreated += u.SecretsCreated
+	cur.SecretsRead += u.SecretsRead
+	cur.SecretsLocked += u.SecretsLocked
 	s.got[tenantID] = cur
 }
 
@@ -382,11 +385,32 @@ func TestSink(t *testing.T) {
 	r.DownloadStarted("ten_a", time.Time{})
 	r.BytesServed("ten_a", 40, time.Time{})
 	r.VirusDetected("ten_a", time.Time{})
+	r.SecretCreated("ten_a", time.Time{})
+	r.SecretRead("ten_a")
+	r.SecretRead("ten_a")
+	r.SecretLocked("ten_a")
 	r.TransferFinalized("", 5, time.Time{})
+	r.SecretRead("")
 	var nilRec *Recorder
 	nilRec.VirusDetected("ten_a", time.Time{})
-	want := metricstate.Usage{Transfers: 1, UploadedBytes: 100, Downloads: 1, DownloadedBytes: 40, VirusDetections: 1}
+	nilRec.SecretRead("ten_a")
+	nilRec.SecretLocked("ten_a")
+	want := metricstate.Usage{
+		Transfers: 1, UploadedBytes: 100, Downloads: 1, DownloadedBytes: 40, VirusDetections: 1,
+		SecretsCreated: 1, SecretsRead: 2, SecretsLocked: 1,
+	}
 	if len(s.got) != 1 || s.got["ten_a"] != want {
 		t.Fatalf("sink got %+v, want %+v", s.got, want)
+	}
+	// Read and locked secrets have no daily counter; the creation has one.
+	if got := r.Pending(); got != 1 {
+		t.Errorf("Pending = %d, want 1", got)
+	}
+	// Without a sink, read and locked secrets count nothing.
+	bare := newRecorder(newFake(), Options{})
+	bare.SecretRead("ten_a")
+	bare.SecretLocked("ten_a")
+	if got := bare.Pending(); got != 0 {
+		t.Errorf("Pending without sink = %d, want 0", got)
 	}
 }

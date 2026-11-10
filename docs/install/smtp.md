@@ -179,6 +179,21 @@ For each tenant, check in Microsoft 365:
 Keep the client secret (or certificate) of the Graph application in a Docker
 secret of the relay, and in your password vault.
 
+## Secrets by e-mail
+
+Since 2.1, a user can have a one-time secret delivered by e-mail. The
+`secret-notification` mail carries the **full link, including the decryption
+key** (`#k=…`). Everything on the mail path can therefore read a secret that
+has no passphrase: the unauthenticated internal relay (nothing protects the
+traffic), the relay application of Microsoft Graph, the receiving provider,
+and link-rewriting gateways such as Defender Safe Links, which forward the
+whole URL with its fragment (threat model T-362, T-363, H21, P77).
+
+Per entity, limit this with the secret settings: turn `emailAllowed` off, or
+set `emailRequiresPassphrase`, so that the passphrase, sent through another
+channel, protects what the mail path carries (see
+[Tenants](../operations/tenants.md#one-time-secrets)).
+
 ## SPF, DKIM and DMARC
 
 Each sending domain (the domain of each tenant's sender address, and of the

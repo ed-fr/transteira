@@ -215,6 +215,18 @@ var downloadStreamsLines = []struct {
 		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.30"), Tenant: "transfer.entity-a.example.com",
 		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "download_streams"}},
 	}, false},
+	{"download_streams of a secret file", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.42"), Tenant: "transfer.entity-a.example.com",
+		Fields: []Field{{"transfer", "sec_01JABCD8E3"}, {KeyScope, "download_streams"}},
+	}, false},
+	{"download_streams of another object kind", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.43"), Tenant: "transfer.entity-a.example.com",
+		Fields: []Field{{"transfer", "inv_01JABCD8E3"}, {KeyScope, "download_streams"}},
+	}, true},
+	{"secret link lockout", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.44"), Tenant: "transfer.entity-a.example.com",
+		Fields: []Field{{KeyScope, "secret_link"}},
+	}, true},
 	{"drop_link", Event{
 		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.38"), Tenant: "transfer.entity-a.example.com",
 		Fields: []Field{{KeyScope, "drop_link"}},

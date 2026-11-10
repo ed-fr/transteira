@@ -1,6 +1,6 @@
 # Guide de l’administrateur délégué
 
-En tant qu’administrateur délégué, vous configurez et exploitez les entités rattachées à votre compte : habillage, règles réseau, serveur de messagerie, modèles de mails et mentions légales, ainsi que le suivi des transferts, des invitations, de la liste de blocage, des jetons d’API, des webhooks, du journal d’audit, des statistiques et des demandes relatives aux données personnelles. Tout se passe dans l’administration, à l’adresse communiquée par votre organisation (par exemple `admin.transfer.example.com/admin/`). Le lien **Aide** en bas de chaque écran ouvre directement la section correspondante de ce guide.
+En tant qu’administrateur délégué, vous configurez et exploitez les entités rattachées à votre compte : habillage, règles réseau, serveur de messagerie, modèles de mails et mentions légales, ainsi que le suivi des transferts, des invitations, des secrets à usage unique, de la liste de blocage, des jetons d’API, des webhooks, du journal d’audit, des statistiques et des demandes relatives aux données personnelles. Tout se passe dans l’administration, à l’adresse communiquée par votre organisation (par exemple `admin.transfer.example.com/admin/`). Le lien **Aide** en bas de chaque écran ouvre directement la section correspondante de ce guide.
 
 <!-- topic: admin-roles -->
 ## Rôles
@@ -9,7 +9,7 @@ TransTeira distingue trois rôles d’administrateur ; le rôle affiché sous vo
 
 - **Super administrateur** : gère toutes les entités, crée les entités et les comptes d’administrateurs, et s’occupe des réglages système du service.
 - **Administrateur délégué** : ne gère que les entités rattachées à son compte. Une autre entité vous est invisible : si vous ouvrez son adresse, l’administration répond comme si elle n’existait pas.
-- **Auditeur** : consulte en lecture seule les entités rattachées à son compte (résumé, journal d’audit, journal de sécurité, statistiques, transferts et preuves, liens de dépôt) et ne modifie rien, hormis son propre mot de passe et son second facteur. Les comptes d’auditeur sont créés par un super administrateur, par exemple pour un RSSI ou un audit ; un auditeur ne peut ouvrir aucun écran de configuration.
+- **Auditeur** : consulte en lecture seule les entités rattachées à son compte (résumé, journal d’audit, journal de sécurité, statistiques, transferts et preuves, liens de dépôt, secrets à usage unique) et ne modifie rien, hormis son propre mot de passe et son second facteur. Les comptes d’auditeur sont créés par un super administrateur, par exemple pour un RSSI ou un audit ; un auditeur ne peut ouvrir aucun écran de configuration.
 
 Dans vos entités, vous pouvez modifier presque tout. Quelques réglages sont réservés au super administrateur : le nom de l’entité, son adresse publique (FQDN), son quota de stockage, le plafond de la taille par envoi et la suppression de l’entité. Adressez-vous à votre super administrateur lorsque l’un d’eux doit changer.
 
@@ -130,8 +130,8 @@ La création et la suppression d’une entité sont réservées au super adminis
 
 Une fois une entité ouverte, une barre de navigation affiche son nom et deux groupes d’écrans.
 
-- **Configuration** : **Général**, **Habillage**, **Réseau**, **Domaines destinataires**, **Niveaux de confidentialité**, **Messagerie (SMTP)**, **Modèles de mails**, **Mentions légales**.
-- **Exploitation** : **Transferts**, **Invitations**, **Liens de dépôt**, **Liste de blocage**, **Jetons d’API**, **Webhooks**, **Journal d’audit**, **Journal de sécurité**, **Statistiques**, **Données personnelles**.
+- **Configuration** : **Mise en service**, **Général**, **Habillage**, **Réseau**, **Domaines destinataires**, **Détection des abus**, **Niveaux de confidentialité**, **Réglages des secrets**, **Messagerie (SMTP)**, **Authentification unique**, **Modèles de mails**, **Mentions légales**.
+- **Exploitation** : **Transferts**, **Invitations**, **Liens de dépôt**, **Secrets à usage unique**, **Liste de blocage**, **Signalements**, **Jetons d’API**, **Webhooks**, **Journal d’audit**, **Journal de sécurité**, **Statistiques**, **Données personnelles**.
 
 Les filtres des listes sont conservés dans l’adresse de la page : vous pouvez mettre une vue filtrée en favori ou la partager avec un autre administrateur de l’entité. Les longues listes affichent leurs premières lignes ; cliquez sur **Charger plus** pour voir la suite. Si vous quittez un formulaire avec des modifications non enregistrées, l’administration vous demande d’abord confirmation.
 
@@ -193,9 +193,9 @@ La section **Webhooks** ci-dessous règle le contenu des alertes envoyées aux [
 
 La section **Exporter la configuration** en bas de l’écran Général télécharge les réglages de l’entité dans un fichier JSON. Le super administrateur s’en sert pour créer une autre entité en dupliquant celle-ci.
 
-Le fichier contient les réglages généraux (sans le quota de stockage), les couleurs et le fond prédéfini, les plages réseau et les domaines, les règles de domaines destinataires, les niveaux de confidentialité, les seuils de détection des abus, les modèles d’e-mail personnalisés uniquement, les textes légaux, la liste de blocage, le serveur, le port, le chiffrement et l’adresse d’expéditeur du SMTP, et les webhooks par nom, type et événements seulement. Cochez **Inclure le logo et l’image de fond** pour ajouter les deux fichiers image.
+Le fichier contient les réglages généraux (sans le quota de stockage), les couleurs et le fond prédéfini, les plages réseau et les domaines, les règles de domaines destinataires, les niveaux de confidentialité, les seuils de détection des abus, les modèles d’e-mail personnalisés uniquement, les textes légaux, la liste de blocage, le serveur, le port, le chiffrement et l’adresse d’expéditeur du SMTP, les réglages des secrets à usage unique (activation, durées proposées, durée par défaut, fichier joint et sa taille maximale, envoi par mail et phrase de passe), et les webhooks par nom, type et événements seulement. Cochez **Inclure le logo et l’image de fond** pour ajouter les deux fichiers image.
 
-Le fichier ne contient jamais l’identifiant et le mot de passe SMTP, les adresses et secrets des webhooks, les jetons d’API, les administrateurs, la configuration de l’authentification unique, les transferts, les adresses, les invitations ni le journal d’audit.
+Le fichier ne contient jamais l’identifiant et le mot de passe SMTP, les adresses et secrets des webhooks, les jetons d’API, les administrateurs, la configuration de l’authentification unique, les transferts, les secrets à usage unique, les adresses, les invitations ni le journal d’audit.
 
 Cliquez sur **Télécharger la configuration** pour télécharger le fichier. Chaque export est consigné dans le [journal d’audit](topic:tenant-audit) (`tenant.exported`).
 
@@ -327,7 +327,8 @@ La liste présente chaque modèle dans chaque langue, marqué **Personnalisé** 
 
 - **Code de vérification**, **Notification de transfert**, **Confirmation d’envoi**, **Accusé de premier téléchargement** ;
 - **Fichier infecté ou retenu**, **Fichier non analysé**, **Invitation externe** ;
-- **Alerte de quota (80 %)**, **Quota atteint**, **Antivirus indisponible**.
+- **Alerte de quota (80 %)**, **Quota atteint**, **Antivirus indisponible** ;
+- **Notification de secret** et **Accusé de lecture de secret** (2.1).
 
 ![Liste des modèles de mails avec leur état dans chaque langue](../screenshots/fr/admin-tenant-templates.png)
 
@@ -518,6 +519,8 @@ Les alertes ne contiennent jamais de nom de fichier, de lien vers un transfert n
 
 Les secrets à usage unique permettent de transmettre un mot de passe, une clé ou un code, chiffrés dans le navigateur de l’auteur : vous ne voyez **jamais leur contenu**, ni leur lien, ni leur phrase de passe. Deux écrans leur sont consacrés dans le menu de l’entité.
 
+> **Attention** Depuis la 2.1, les secrets à usage unique sont **activés par défaut dans chaque entité, y compris celles qui existaient avant la mise à jour**, avec les fichiers joints (10 Mio) et l’envoi par mail autorisés. Un fichier joint est chiffré dans le navigateur et jamais analysé par l’antivirus, et les mails partent sous le domaine de votre entité. Passez en revue les réglages ci-dessous après la mise à jour et désactivez ce dont votre entité n’a pas besoin. Vous pouvez modifier chaque réglage, **Activer les secrets à usage unique** compris, tout comme le super administrateur.
+
 L’écran **Réglages des secrets** (**Secrets à usage unique**) définit les règles :
 
 - **Activer les secrets à usage unique** : désactiver le module refuse les nouveaux secrets ; ceux qui existent restent lisibles jusqu’à leur fin.
@@ -526,9 +529,15 @@ L’écran **Réglages des secrets** (**Secrets à usage unique**) définit les 
 - **Autoriser l’envoi par mail** : le serveur envoie le lien à un destinataire ; sinon, l’auteur transmet lui-même le lien.
 - **Exiger une phrase de passe pour l’envoi par mail** : le secret doit alors être protégé par une phrase de passe, à transmettre par un autre canal.
 
+Les réglages par défaut d’une entité (nouvelle, ou existante avant la 2.1) sont : module activé, durées de 1 heure, 1 jour et 7 jours, pas de durée par défaut choisie (la plus courte proposée est alors utilisée), fichier joint autorisé jusqu’à 10 Mio, envoi par mail autorisé, phrase de passe non exigée pour l’envoi par mail. Les durées que vous pouvez proposer sont 1 heure, 12 heures, 1 jour, 3 jours, 7 jours et 30 jours. Une durée court à partir de l’activation du secret, pas de sa création. Modifier un réglage n’affecte jamais les secrets déjà créés, et chaque modification est inscrite dans le [journal d’audit](topic:tenant-audit) (**Réglages des secrets modifiés**, avec seulement le nom des réglages changés).
+
+**Envoi par mail.** Un secret a exactement un destinataire. Les règles de domaines destinataires et la liste de blocage de l’entité s’appliquent à ce destinataire, à la création du secret puis de nouveau à l’envoi du lien. Le mail part par le serveur de messagerie de l’entité et utilise le modèle **Notification de secret**. Il ne contient jamais de texte libre écrit par l’auteur. Quand l’auteur place la clé dans le mail, la boîte aux lettres contient tout ce qu’il faut pour lire le secret : c’est pourquoi vous pouvez exiger une phrase de passe. L’auteur peut demander un accusé de lecture, envoyé quand le secret est lu, expire sans lecture ou est verrouillé, jamais après une suppression par un administrateur. Un externe invité ne peut envoyer un secret par mail qu’à l’interne qui l’a invité, et ne peut pas en créer du tout quand l’envoi par mail est désactivé.
+
+**Limites et stockage.** Un auteur (une adresse ou un jeton d’API) peut avoir 50 secrets ouverts (**En attente** ou **Actif**) et créer 200 secrets sur 24 heures glissantes ; le texte est limité à 10 000 caractères. Un secret **En attente** est un secret dont la création n’a pas été terminée : il est purgé au bout d’1 heure. Tant qu’il existe, un fichier joint compte dans le quota de stockage de l’entité et dans **Stockage utilisé** : un secret dont le fichier dépasserait le quota est refusé et déclenche les alertes de quota habituelles. Les secrets sont aussi refusés pendant la maintenance ou tant que l’entité est en cours de configuration. Dans la [détection des abus](topic:tenant-abuse), chaque secret compte pour un transfert de son auteur dans le nombre quotidien de transferts (jamais dans le volume).
+
 ![Écran des réglages des secrets avec l’activation, les durées, le fichier joint et l’envoi par mail](../screenshots/fr/admin-secret-settings.png)
 
-L’écran **Secrets à usage unique** liste les secrets de l’entité, du plus récent au plus ancien : **Création**, **Auteur**, **Remise**, **Fichier**, **État**, **Expiration** et **Lecture**. Filtrez par **État** ou par **Adresse de l’auteur** (adresse exacte). Pour un secret **En attente** ou **Actif**, **Supprimer** le détruit aussitôt, de façon définitive. Les créations, lectures et suppressions sont inscrites dans le [journal d’audit](topic:tenant-audit).
+L’écran **Secrets à usage unique** liste les secrets de l’entité, du plus récent au plus ancien : **Création**, **Auteur**, **Remise**, **Fichier**, **État**, **Expiration** et **Lecture**. Filtrez par **État** ou par **Adresse de l’auteur** (adresse exacte). Pour un secret **En attente** ou **Actif**, **Supprimer** le détruit aussitôt, de façon définitive : son lien répond alors qu’il a été supprimé par son expéditeur ou par un administrateur, et aucun accusé de lecture n’est envoyé. Supprimer un secret déjà terminé ne fait rien. Les créations, lectures et suppressions sont inscrites dans le [journal d’audit](topic:tenant-audit) (groupe d’actions **Secrets à usage unique**), avec l’administrateur comme acteur pour une suppression. Un secret terminé (**Lu**, **Expiré**, **Supprimé** ou **Verrouillé**) reste dans la liste 30 jours sans aucun contenu, puis disparaît. Les auteurs peuvent aussi lister et supprimer leurs propres secrets dans **Mes secrets** de la page Mes transferts, ce qui permet de corriger vite une erreur de destinataire.
 
 ![Liste des secrets à usage unique avec les filtres, l’état, l’expiration et le bouton Supprimer](../screenshots/fr/admin-secrets.png)
 
@@ -543,6 +552,8 @@ Filtrez par **Action** (regroupées par thème), par **Acteur** (adresse mail ex
 
 Une adresse effacée à la demande de la personne concernée apparaît sous la forme d’un pseudonyme commençant par `erased-`.
 
+Le groupe **Secrets à usage unique** rassemble **Secret créé**, **Lien du secret envoyé par mail** (seul le domaine du destinataire est enregistré), **Secret lu** (avec l’adresse IP), **Fichier du secret téléchargé**, **Secret expiré sans lecture**, **Secret supprimé**, **Secret verrouillé après des preuves erronées** et **Réglages des secrets modifiés**. Aucun ne contient le contenu, la clé, une preuve ou le lien. L’objet de ces événements est un secret (identifiant commençant par `sec_`), sans lien à ouvrir.
+
 <!-- topic: tenant-security-log -->
 ### Journal de sécurité
 
@@ -552,18 +563,18 @@ Filtrez par **Type d’événement** (un type de la liste, ou **Autre type** et 
 
 ![Journal de sécurité d’une entité avec les filtres et la liste des événements](../screenshots/fr/admin-security-log.png)
 
-Les types que vous pouvez rencontrer sont **Code de vérification erroné**, **Mot de passe de transfert erroné**, **Jeton d’API invalide**, **Dépôt refusé** (motif `ip` pour une adresse hors des plages, `domain`, `blocklist` ou `invitation`), **Limitation de débit dépassée**, **Lien d’accès invalide**, **Lien de dépôt invalide** et **Échec de l’authentification unique**. Une rafale d’événements venant d’une même adresse (nombreux codes erronés, nombreux dépôts refusés) signale en général une tentative d’essais successifs : vous pouvez ajouter l’expéditeur à la [Liste de blocage](topic:tenant-blocklist) s’il s’agit d’un dépôt, et l’exploitant peut bannir l’adresse avec l’outil de prévention d’intrusion. Les événements qui n’appartiennent à aucune entité (adresse inconnue, connexion d’administrateur, jeton de provisionnement) ne sont visibles que du super administrateur, dans le journal de sécurité global. La signification de chaque événement est documentée dans `docs/operations/security-log.md` dans le dépôt TransTeira. Les événements sont conservés 12 mois.
+Les types que vous pouvez rencontrer sont **Code de vérification erroné**, **Mot de passe de transfert erroné**, **Jeton d’API invalide**, **Dépôt refusé** (motif `ip` pour une adresse hors des plages, `domain`, `blocklist` ou `invitation`), **Limitation de débit dépassée**, **Lien d’accès invalide**, **Lien de dépôt invalide**, **Échec de l’authentification unique**, **Lien de secret inconnu** et **Preuve de secret incorrecte**. Les événements de limitation de débit peuvent aussi concerner les liens de secrets (portées `secret_link` et `secret_link_ip`). Un événement **Preuve de secret incorrecte** porte un motif : `key` (la partie clé du lien est fausse, non comptée contre le secret) ou `passphrase` (bonne clé, mauvaise phrase de passe). De nombreux événements `passphrase` signalent que quelqu’un qui détient un lien de secret essaie d’en deviner la phrase de passe : après 5 preuves de phrase de passe erronées, le secret est verrouillé et détruit. Une rafale d’événements venant d’une même adresse (nombreux codes erronés, nombreux dépôts refusés) signale en général une tentative d’essais successifs : vous pouvez ajouter l’expéditeur à la [Liste de blocage](topic:tenant-blocklist) s’il s’agit d’un dépôt, et l’exploitant peut bannir l’adresse avec l’outil de prévention d’intrusion. Les événements qui n’appartiennent à aucune entité (adresse inconnue, connexion d’administrateur, jeton de provisionnement) ne sont visibles que du super administrateur, dans le journal de sécurité global. La signification de chaque événement est documentée dans `docs/operations/security-log.md` dans le dépôt TransTeira. Les événements sont conservés 12 mois.
 
 <!-- topic: tenant-stats -->
 ### Statistiques
 
 L’écran Statistiques présente l’activité de l’entité sur une période.
 
-Choisissez la **Période** : **7 derniers jours**, **30 derniers jours** ou **12 derniers mois**. Les **Chiffres clés** donnent les **Transferts déposés**, le **Volume déposé**, les **Téléchargements**, le **Volume téléchargé** et les **Virus détectés** ; le stockage occupé est aussi affiché, avec des graphiques par jour ou par mois. Chaque graphique dispose d’un bouton **Afficher le tableau des données** pour une version lisible. Les chiffres sont indicatifs : les compteurs sont mis à jour environ toutes les 30 secondes.
+Choisissez la **Période** : **7 derniers jours**, **30 derniers jours** ou **12 derniers mois**. Les **Chiffres clés** donnent les **Transferts déposés**, le **Volume déposé**, les **Téléchargements**, le **Volume téléchargé**, les **Secrets à usage unique créés** et les **Virus détectés** ; le stockage occupé est aussi affiché, avec des graphiques par jour ou par mois. Chaque graphique dispose d’un bouton **Afficher le tableau des données** pour une version lisible. Les chiffres sont indicatifs : les compteurs sont mis à jour environ toutes les 30 secondes. **Secrets à usage unique créés** compte les secrets créés sur la période, quel que soit leur sort ensuite (inachevés compris) ; il démarre à la mise à jour vers la 2.1.
 
 ![Statistiques d’une entité avec les chiffres clés, le stockage et les graphiques](../screenshots/fr/admin-stats.png)
 
-Le quota de stockage est fixé par le super administrateur. Lorsque l’entité atteint 80 % de son quota, les administrateurs délégués reçoivent un mail d’alerte ; à 100 %, ils en reçoivent un autre et les nouveaux dépôts sont refusés jusqu’à ce que de l’espace soit libéré par expiration ou suppression. Chaque alerte n’est envoyée qu’une fois par franchissement du seuil.
+Le quota de stockage est fixé par le super administrateur. Lorsque l’entité atteint 80 % de son quota, les administrateurs délégués reçoivent un mail d’alerte ; à 100 %, ils en reçoivent un autre et les nouveaux dépôts, et les secrets avec fichier joint, sont refusés jusqu’à ce que de l’espace soit libéré par expiration ou suppression. Le stockage utilisé inclut les fichiers des secrets à usage unique tant qu’ils existent. Chaque alerte n’est envoyée qu’une fois par franchissement du seuil.
 
 <!-- topic: tenant-abuse -->
 ### Détection des abus
@@ -577,6 +588,8 @@ L’écran Détection des abus règle les seuils qui alertent sur une fuite de d
 - **Comportements inhabituels** (alerte seulement, pour les expéditeurs internes, y compris depuis l’extérieur) : volume supérieur à un **facteur** multiplié par la moyenne journalière des 30 jours précédents (il faut un nombre minimal de jours d’activité), gros envoi vers un destinataire hors des domaines internes à partir d’une taille donnée, envoi hors des **heures de bureau** (fuseau, heure de début et de fin, jours de la semaine).
 - **Invitations** : nombre maximal d’invitations par interne et par heure glissante (20 par défaut). Au-delà, l’invitation est refusée et une alerte est émise.
 - **Quotas des externes** : volume et nombre de dépôts par jour et par adresse externe, bloquants si le blocage est activé.
+
+Les secrets à usage unique d’un expéditeur interne comptent dans le nombre quotidien de transferts (le nombre seulement, jamais le volume), pour l’alerte uniquement : ils ne bloquent jamais. Un secret encore **En attente** n’est pas compté.
 
 Une alerte est émise au plus une fois par expéditeur, par règle et par jour. Pour un refus (blocage), seul le premier refus du jour pour un expéditeur et une règle est audité et alerté ; les suivants le même jour sont seulement comptés, sans nouvelle ligne d’audit, mail ni webhook. Une alerte « alerte seulement » émise plus tôt le même jour ne masque pas un refus ultérieur : mail aux administrateurs de l’entité et [webhooks](topic:tenant-webhooks) (`abuse.threshold_exceeded`, `abuse.unusual_activity`). Chaque dépassement alerté est inscrit dans le [journal d’audit](topic:tenant-audit), l’expéditeur étant l’acteur. Les modifications des seuils sont aussi auditées.
 
@@ -600,13 +613,13 @@ Les nouveaux signalements sont envoyés par mail aux administrateurs délégués
 
 L’écran Données personnelles répond aux demandes des personnes qui veulent connaître ou effacer les données liées à leur adresse mail dans l’entité (exercice des droits, RGPD).
 
-Dans **Recherche par adresse mail**, saisissez l’**Adresse mail** et cliquez sur **Rechercher**. La section **Données trouvées dans cette entité** résume ce qui y est lié : adresse vérifiée, transferts envoyés et reçus, invitations, preuves de dépôt et de remise, entrées du journal d’audit.
+Dans **Recherche par adresse mail**, saisissez l’**Adresse mail** et cliquez sur **Rechercher**. La section **Données trouvées dans cette entité** résume ce qui y est lié : adresse vérifiée, transferts envoyés et reçus, secrets à usage unique créés ou reçus, invitations, preuves de dépôt et de remise, entrées du journal d’audit.
 
 ![Recherche de données personnelles avec le résumé des données trouvées pour une adresse](../screenshots/fr/admin-privacy.png)
 
 Cliquez sur **Effacer toutes les données** pour les effacer. L’écran détaille l’effet :
 
-- effacé : les codes de vérification, les sessions de dépôt et l’adresse vérifiée ; les transferts envoyés par l’adresse ou grâce à une invitation qu’elle a reçue (fichiers rendus illisibles puis supprimés) ; l’adresse dans les transferts reçus (un transfert qui n’a plus de destinataire est supprimé) ; les invitations reçues (supprimées) et émises (révoquées) ; les preuves de dépôt et de remise qui nomment l’adresse ; dans le journal d’audit, l’adresse est remplacée par un pseudonyme ;
+- effacé : les codes de vérification, les sessions de dépôt et l’adresse vérifiée ; les secrets à usage unique créés par l’adresse ou qui lui sont envoyés, dans tous les états (supprimés avec leur contenu et leurs clés, fichiers retirés) ; les transferts envoyés par l’adresse ou grâce à une invitation qu’elle a reçue (fichiers rendus illisibles puis supprimés) ; l’adresse dans les transferts reçus (un transfert qui n’a plus de destinataire est supprimé) ; les invitations reçues (supprimées) et émises (révoquées) ; les preuves de dépôt et de remise qui nomment l’adresse ; dans le journal d’audit, l’adresse est remplacée par un pseudonyme ;
 - conservé volontairement : les entrées de la liste de blocage, l’adresse dans les expéditeurs autorisés d’un jeton d’API (modifiez le jeton pour la retirer), les adresses IP du journal d’audit jusqu’à la fin de leurs 12 mois, les mails déjà en file d’envoi, et les sauvegardes, dont les copies des fichiers deviennent illisibles.
 
 L’effacement est irréversible. Il se termine par un **Rapport d’effacement**. Seule cette entité est concernée : si la personne utilise aussi une autre entité, recommencez la procédure dans celle-ci.

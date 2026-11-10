@@ -3817,8 +3817,11 @@ type GlobalStats struct {
 
 	// Tenants One row per active tenant (tenants being deleted are excluded); counters defined as in `TenantStats`.
 	Tenants []struct {
-		BytesUploaded     ByteSize `json:"bytesUploaded"`
-		Name              string   `json:"name"`
+		BytesUploaded ByteSize `json:"bytesUploaded"`
+		Name          string   `json:"name"`
+
+		// SecretsCreated Since 2.1. One-time secrets created during the period, as `TenantStats.secretsCreated`.
+		SecretsCreated    *int     `json:"secretsCreated,omitempty"`
 		StorageQuotaBytes ByteSize `json:"storageQuotaBytes"`
 		StorageUsedBytes  ByteSize `json:"storageUsedBytes"`
 		StorageUsedRatio  float32  `json:"storageUsedRatio"`
@@ -3893,12 +3896,24 @@ type InstanceStatus struct {
 	// Tenants One row per active tenant.
 	Tenants []struct {
 		// ActiveTransfers Transfers currently available.
-		ActiveTransfers   int      `json:"activeTransfers"`
-		Id                string   `json:"id"`
-		Name              string   `json:"name"`
-		StorageQuotaBytes ByteSize `json:"storageQuotaBytes"`
-		StorageUsedBytes  ByteSize `json:"storageUsedBytes"`
-		StorageUsedRatio  float32  `json:"storageUsedRatio"`
+		ActiveTransfers int    `json:"activeTransfers"`
+		Id              string `json:"id"`
+		Name            string `json:"name"`
+
+		// SecretFileBytes Since 2.1. Declared sizes of the stored one-time secret files, already counted in `storageUsedBytes`.
+		SecretFileBytes ByteSize `json:"secretFileBytes"`
+
+		// SecretsCreatedLast24h Since 2.1. One-time secrets created during the last 24 hours, among the secret rows still present (an unfinished secret is deleted after one hour, an ended one 30 days after its end).
+		SecretsCreatedLast24h int `json:"secretsCreatedLast24h"`
+
+		// SecretsLockedLast24h Since 2.1. One-time secrets locked after five wrong passphrase proofs during the last 24 hours.
+		SecretsLockedLast24h int `json:"secretsLockedLast24h"`
+
+		// SecretsReadLast24h Since 2.1. One-time secrets read during the last 24 hours.
+		SecretsReadLast24h int      `json:"secretsReadLast24h"`
+		StorageQuotaBytes  ByteSize `json:"storageQuotaBytes"`
+		StorageUsedBytes   ByteSize `json:"storageUsedBytes"`
+		StorageUsedRatio   float32  `json:"storageUsedRatio"`
 
 		// TransfersLast24h Transfers made available during the last 24 hours.
 		TransfersLast24h int `json:"transfersLast24h"`
@@ -5786,7 +5801,7 @@ type TenantStats struct {
 	DownloadCount int               `json:"downloadCount"`
 	Period        TenantStatsPeriod `json:"period"`
 
-	// SecretsCreated Since 2.1. One-time secrets created during the period (count only, never content).
+	// SecretsCreated Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows.
 	SecretsCreated *int `json:"secretsCreated,omitempty"`
 
 	// Series Breakdown of `transferCount` and `bytesUploaded` over the period, oldest first, with a

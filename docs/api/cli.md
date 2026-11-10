@@ -12,6 +12,11 @@ network cut, even between two runs. It also understands end-to-end encrypted tra
 > `transteira-cli upload -h`). This guide describes the behaviour and the main options; if a
 > flag name differs from the help of the binary you run, the help is right.
 
+> **One-time secrets (since 2.1) are not handled by the client.** There is no `secret` command, and
+> `transteira-cli download` refuses the `/s/<token>#k=...` links of secrets (it only accepts
+> `/d/` download links). A script creates and reads secrets through the API: see
+> [section 13 of the integration guide](integration.md#13-one-time-secrets-by-script).
+
 The examples use fictitious hosts: `transfer.entity-a.example.com` for the tenant.
 
 ## Contents
@@ -53,7 +58,7 @@ chmod +x transteira-cli_*_linux_amd64
 
 ```powershell
 # Windows PowerShell: compare the two values by eye or in a script.
-(Get-FileHash .\transteira-cli_2.0.0_windows_amd64.exe -Algorithm SHA256).Hash
+(Get-FileHash .\transteira-cli_<version>_windows_amd64.exe -Algorithm SHA256).Hash
 Select-String 'windows_amd64' .\SHA256SUMS
 ```
 

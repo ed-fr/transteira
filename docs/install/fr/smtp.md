@@ -179,6 +179,21 @@ Pour chaque entité, vérifiez dans Microsoft 365 :
 Conservez le secret client (ou le certificat) de l’application Graph dans un secret
 Docker du relais, ainsi que dans votre coffre de mots de passe.
 
+## Secrets par mail
+
+Depuis la 2.1, un utilisateur peut faire livrer un secret à usage unique par mail. Le mail
+`secret-notification` contient le **lien complet, clé de déchiffrement comprise** (`#k=…`).
+Tout ce qui se trouve sur le chemin du mail peut donc lire un secret sans phrase secrète :
+le relais interne sans authentification (rien ne protège le trafic), l’application relais de
+Microsoft Graph, le fournisseur de réception, et les passerelles qui réécrivent les liens,
+comme Defender Safe Links, qui transmettent l’URL entière avec son fragment (modèle de menaces
+T-362, T-363, H21, P77).
+
+Par entité, limitez ce risque avec les réglages des secrets : désactivez `emailAllowed`, ou
+activez `emailRequiresPassphrase`, pour que la phrase secrète, transmise par un autre canal,
+protège ce que le chemin du mail transporte (voir
+[Entités](../../operations/tenants.md#one-time-secrets)).
+
 ## SPF, DKIM et DMARC
 
 Chaque domaine d’envoi (le domaine de l’adresse d’expéditeur de chaque entité, et celui de

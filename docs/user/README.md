@@ -14,41 +14,45 @@ de chaque écran et par l’icône « ? » à côté du titre des écrans comple
 
 - [Sending files](en/depositor.md): for people who send files (internal users and invited
   external people): identification by code, the transfer form and its options, upload progress
-  and resume, antivirus analysis, invitations and common problems.
+  and resume, antivirus analysis, invitations, one-time secrets and common problems.
 - [Receiving files](en/recipient.md): for recipients: download page, password, single files or
   ZIP archive, SHA-256 fingerprints, antivirus status, expiry.
 - [Delegated administrator guide](en/delegated-admin.md): for the administrators of one or more
   entities: sign-in and two-factor authentication, entity configuration (branding, network, SMTP,
-  email templates, legal texts) and operations (transfers, invitations, blocklist, API tokens,
-  audit log, security log, statistics, personal data).
+  email templates, legal texts, one-time secrets settings) and operations (transfers, invitations,
+  one-time secrets, blocklist, API tokens, audit log, security log, statistics, personal data).
 - [Super administrator guide](en/super-admin.md): for the operator of the instance: first launch,
   entities and administrator accounts, system screens, maintenance mode, disk alert, global audit
-  log, global security log and master key rotation.
+  log, global security log and master key rotation, with the one-time secrets defaults of the
+  entities.
 - [Auditor guide](en/auditor.md): for the read-only role (a security officer or an audit): activating
   the account, signing in with a password and a second factor or with single sign-on, and
-  consulting the summary, audit log, security log, statistics, transfers with their proofs and drop
-  links of the entities attached to the account.
+  consulting the summary, audit log, security log, statistics, transfers with their proofs, drop
+  links and one-time secrets (metadata only) of the entities attached to the account.
 
 ## Français
 
 - [Envoyer des fichiers](fr/depositor.md) : pour les personnes qui envoient des fichiers
   (utilisateurs internes et personnes externes invitées) : identification par code, formulaire du
-  transfert et ses options, progression et reprise de l’envoi, analyse antivirus, invitations et
+  transfert et ses options, progression et reprise de l’envoi, analyse antivirus, invitations, secrets à usage unique et
   problèmes courants.
 - [Recevoir des fichiers](fr/recipient.md) : pour les destinataires : page de téléchargement,
   mot de passe, fichiers un par un ou archive ZIP, empreintes SHA-256, état de l’analyse
   antivirus, expiration.
 - [Guide de l’administrateur délégué](fr/delegated-admin.md) : pour les administrateurs d’une ou
   plusieurs entités : connexion et double authentification, configuration de l’entité (habillage,
-  réseau, SMTP, modèles de mails, mentions légales) et opérations (transferts, invitations, liste
-  de blocage, jetons d’API, journal d’audit, statistiques, données personnelles).
+  réseau, SMTP, modèles de mails, mentions légales, réglages des secrets à usage unique) et
+  opérations (transferts, invitations, secrets à usage unique, liste de blocage, jetons d’API,
+  journal d’audit, journal de sécurité, statistiques, données personnelles).
 - [Guide du super administrateur](fr/super-admin.md) : pour l’exploitant de l’instance : premier
   lancement, entités et comptes administrateurs, écrans du système, mode maintenance, alerte
-  d’espace disque, journal d’audit global, journal de sécurité global et rotation de la clé maître.
+  d’espace disque, journal d’audit global, journal de sécurité global et rotation de la clé maître, avec les réglages par défaut des secrets
+  à usage unique des entités.
 - [Guide de l’auditeur](fr/auditor.md) : pour le rôle en lecture seule (RSSI ou audit) : activation
   du compte, connexion par mot de passe et second facteur ou par authentification unique, et
   consultation du résumé, du journal d’audit, du journal de sécurité, des statistiques, des
-  transferts et de leurs preuves, et des liens de dépôt des entités rattachées au compte.
+  transferts et de leurs preuves, des liens de dépôt et des secrets à usage unique (métadonnées
+  seulement) des entités rattachées au compte.
 
 ## Screenshots / Captures d’écran
 

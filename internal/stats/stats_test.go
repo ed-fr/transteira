@@ -103,7 +103,7 @@ func TestDisk(t *testing.T) {
 type faultRepo struct {
 	repo
 	tenantErr, activeErr, usedErr, usedAllErr, usageErr, usageAllErr error
-	queueErr, countsErr                                              error
+	queueErr, countsErr, secretsErr                                  error
 }
 
 func (f *faultRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
@@ -620,6 +620,13 @@ func (f *faultRepo) activeCounts(ctx context.Context, since time.Time) (map[tena
 	return f.repo.activeCounts(ctx, since)
 }
 
+func (f *faultRepo) secretCounts(ctx context.Context, since time.Time) (map[tenant.ID]store.TenantSecretCounts, error) {
+	if f.secretsErr != nil {
+		return nil, f.secretsErr
+	}
+	return f.repo.secretCounts(ctx, since)
+}
+
 func TestInstanceState(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ev := newEnv(t, e, time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC))
@@ -717,6 +724,7 @@ func TestInstanceStateFailures(t *testing.T) {
 		"active":  func(f *faultRepo) { f.activeErr = errBoom },
 		"usedAll": func(f *faultRepo) { f.usedAllErr = errBoom },
 		"counts":  func(f *faultRepo) { f.countsErr = errBoom },
+		"secrets": func(f *faultRepo) { f.secretsErr = errBoom },
 	} {
 		*ev.fault = faultRepo{repo: ev.fault.repo}
 		set(ev.fault)
@@ -749,12 +757,18 @@ func TestStoreRepoSupervision(t *testing.T) {
 		if m, err := r.activeCounts(ctx, time.Now()); err != nil || m == nil || len(m) != 0 {
 			t.Fatalf("activeCounts = %v, %v", m, err)
 		}
+		if m, err := r.secretCounts(ctx, time.Now()); err != nil || m == nil || len(m) != 0 {
+			t.Fatalf("secretCounts = %v, %v", m, err)
+		}
 		_ = ev.db.Close()
 		if _, err := r.scanQueueFiles(ctx); err == nil {
 			t.Fatal("scanQueueFiles on a closed database")
 		}
 		if _, err := r.activeCounts(ctx, time.Now()); err == nil {
 			t.Fatal("activeCounts on a closed database")
+		}
+		if _, err := r.secretCounts(ctx, time.Now()); err == nil {
+			t.Fatal("secretCounts on a closed database")
 		}
 	})
 }

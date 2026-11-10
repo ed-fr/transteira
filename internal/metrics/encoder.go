@@ -44,6 +44,10 @@ const (
 	nameDownloads            = "transteira_downloads_total"
 	nameDownloadedBytes      = "transteira_downloaded_bytes_total"
 	nameDetections           = "transteira_antivirus_detections_total"
+	nameSecretsCreated       = "transteira_secrets_created_total" //nolint:gosec // G101: a metric name, not a credential.
+	nameSecretsRead          = "transteira_secrets_read_total"    //nolint:gosec // G101: a metric name, not a credential.
+	nameSecretsLocked        = "transteira_secrets_locked_total"  //nolint:gosec // G101: a metric name, not a credential.
+	nameSecretFileBytes      = "transteira_secret_file_bytes"     //nolint:gosec // G101: a metric name, not a credential.
 	nameStorageUsed          = "transteira_storage_used_bytes"
 	nameStorageQuota         = "transteira_storage_quota_bytes"
 	nameActiveTransfers      = "transteira_active_transfers"
@@ -87,9 +91,13 @@ var catalog = []Desc{
 	{nameDownloads, Counter, "Downloads served, per tenant.", []string{labelTenant}},
 	{nameDownloadedBytes, Counter, "Bytes downloaded, per tenant.", []string{labelTenant}},
 	{nameDetections, Counter, "Files found infected, per tenant.", []string{labelTenant}},
+	{nameSecretsCreated, Counter, "One-time secrets created, per tenant.", []string{labelTenant}},
+	{nameSecretsRead, Counter, "One-time secrets read, per tenant.", []string{labelTenant}},
+	{nameSecretsLocked, Counter, "One-time secrets locked after wrong passphrase proofs, per tenant.", []string{labelTenant}},
 	{nameStorageUsed, Gauge, "Storage used, per tenant.", []string{labelTenant}},
 	{nameStorageQuota, Gauge, "Storage quota, per tenant.", []string{labelTenant}},
 	{nameActiveTransfers, Gauge, "Transfers currently available, per tenant.", []string{labelTenant}},
+	{nameSecretFileBytes, Gauge, "Bytes of the stored one-time secret files (counted in the storage used), per tenant.", []string{labelTenant}},
 	{nameScanQueue, Gauge, "Files waiting for or under analysis.", nil},
 	{nameAntivirusUp, Gauge, "Whether the antivirus engine answers (1) or not (0).", nil},
 	{nameAntivirusAlert, Gauge, "Whether the antivirus outage alert is raised (1) or not (0).", nil},

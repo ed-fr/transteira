@@ -14,8 +14,9 @@ The reference is the OpenAPI specification:
   admins (also on the tenant FQDNs, without authentication, when the operator sets
   `TT_API_DOCS_PUBLIC=true`).
 
+Since 2.1 a token can also create one-time secrets, see [section 13](#13-one-time-secrets-by-script).
 A ready-made command-line client, `transteira-cli`, deposits and downloads without a script:
-see [cli.md](cli.md). Error codes are described in [errors.md](errors.md). Managed service providers that create
+see [cli.md](cli.md) (it does not handle secrets). Error codes are described in [errors.md](errors.md). Managed service providers that create
 entities by script should read [provisioning.md](provisioning.md). The examples use fictitious hosts:
 `transfer.entity-a.example.com` for the tenant, `admin.transfer.example.com` for the
 administration.
@@ -35,6 +36,7 @@ administration.
 - [10. Exporting and duplicating a tenant configuration](#10-exporting-and-duplicating-a-tenant-configuration)
 - [11. Link-only transfers and drop links](#11-link-only-transfers-and-drop-links)
 - [12. End-to-end encrypted transfer by script](#12-end-to-end-encrypted-transfer-by-script)
+- [13. One-time secrets by script](#13-one-time-secrets-by-script)
 - Also: the [command-line client](cli.md), which does all of this for you
 
 ## Basics
@@ -927,11 +929,17 @@ curl -sS -X DELETE "$TT_ADMIN_URL/api/v1/admin/tenants/$TT_TENANT_ID/api-tokens/
 - `lastUsedAt` is the last successful authentication, updated at most once a minute per token.
   A token unused for months is probably forgotten: revoke it.
 - The audit log of the tenant records `api_token.created`, `api_token.updated` and
-  `api_token.revoked` (by the admin), and `api_token.used` once per transfer created with a
-  token, with the sender address (`senderEmail`) as actor and the token as object; the
-  transfer events (`transfer.created`, `transfer.finalized`...) name the token (`tok_...`) as
-  actor. Secrets never appear in it. Like every depositor address, the sender address of
+  `api_token.revoked` (by the admin), and `api_token.used` once per transfer or one-time secret
+  created with a token (for a secret, `details.object` is `secret`), with the sender address
+  (`senderEmail`) as actor and the token as object; the transfer events (`transfer.created`,
+  `transfer.finalized`...) and the `secret.*` events name the token (`tok_...`) as actor. The
+  token's own secret (its value) never appears in it. Like every depositor address, the sender address of
   `api_token.used` is pseudonymised by the erasure of the person's data.
+
+Revoking a token does not delete the one-time secrets it created. A secret still pending cannot
+be finished any more and is purged after one hour; an active secret stays readable until it is
+read or expires, and only an administrator can delete it
+([section 13](#13-one-time-secrets-by-script)).
 
 ### Rotating a token
 
@@ -1137,10 +1145,10 @@ Invoke-Admin POST /admin/tenants/import @{
 
 - **What the export holds:** the general settings (without the quota), colours and background
   preset, network rules, recipient rules, confidentiality levels, abuse thresholds, customised
-  mail templates only, legal texts, the blocklist, the SMTP server, port, security and sender
+  mail templates only, the one-time secrets settings (`secretSettings`), legal texts, the blocklist, the SMTP server, port, security and sender
   only, and the webhooks by name, kind and events only (disabled). With `includeBranding=true`,
   the logo and the background image. **Never exported:** the SMTP user name and password, the
-  webhook URLs and secrets, API tokens, admins, provisioning data, transfers, addresses,
+  webhook URLs and secrets, API tokens, admins, provisioning data, transfers, one-time secrets, addresses,
   invitations, audit and the single sign-on configuration.
 - **Personal data:** the file holds the blocklist addresses and the contacts of the legal texts.
   Store it as a confidential document, and delete it when the new entity exists.
@@ -1303,3 +1311,190 @@ invited external and reply depositors may encrypt; a permanent drop link deposit
 (`403 e2e-forbidden`, or `400 e2e-required` under a required policy, in which case that deposit
 is impossible). The checks run in this order: unknown level `400`, link-only `403`,
 end-to-end `403 e2e-forbidden` or `400 e2e-required`, level rules `422`, recipient domains `403`.
+
+## 13. One-time secrets by script
+
+Since 2.1 a person can share a password, a key or a code as a **one-time secret**: the text is
+sealed in the browser (or by your script), the server only holds ciphertext, and the secret is
+destroyed after the first reading or at its expiry. This section is for scripts that create or
+read secrets. The browser does it for people; the command-line client does **not** handle
+secrets (no `secret` command, and `transteira-cli download` refuses the `/s/` links), so a
+script uses the API as described here.
+
+The format (key derivation, sealing, the two proofs, the optional file) is specified in
+[`docs/architecture/e2e-format.md`](../architecture/e2e-format.md), section 3.3 (and section 4.1
+for the e-mail exception). Its test vectors, `internal/tte2/testdata/vectors.json` (`secrets` and
+`secretNegative`), are the reference for any other implementation.
+
+Two ready-to-use scripts, checked against these vectors by the test suite (`go test
+./docs/api/examples/`), are in [`docs/api/examples/`](examples/) (`make check` runs the PowerShell self-test in a pinned
+Docker image: the first run pulls about 300 MB):
+
+- `secret-create.mjs`: Node.js 18 or later, no npm package (modes `create`, `seal`, `read`);
+- `secret-create.ps1`: PowerShell 7.4 or later (modes `create`, `read`).
+
+Both handle **text only**. For the optional file, implement the `TTE2` stream of e2e-format.md
+section 2 with the key `K'` (below) and file index 0, and upload it as in step 4.
+
+### Prerequisites
+
+- Read `GET /api/v1/tenant` (no authentication): `features.secrets` gives `enabled`, `durations`,
+  `defaultDuration`, `fileAllowed`, `fileMaxBytes`, `emailAllowed` and
+  `emailRequiresPassphrase`. When `enabled` is false, creation answers `403 secrets-disabled`.
+- An API token needs a `senderEmail` in the body, under the same rules as for transfers: an
+  internal domain, allowed by the token's `allowedSenders` when set, not blocked, and a call
+  from the token's `allowedCidrs` (`403 ip-not-allowed`).
+- **The module is on by default**, including for the entities that existed before 2.1 and for
+  provisioned entities. An administrator can switch it off or change its settings per entity.
+
+### How a creation works
+
+1. **Make a new key `K`** for every secret: 32 random bytes from a cryptographic generator. Never
+   reuse a key, not even to retry a failed creation.
+2. **Optional passphrase**: normalise it to NFC, at most 1024 bytes, and send the descriptor
+   `{kdf: "pbkdf2-sha256", iterations: 600000, salt}` with a random 16-byte salt in base64url
+   (22 characters). Give the passphrase to the recipient by another channel.
+3. **Derive `K'`**: `HKDF-SHA-256(K, salt = P or empty, info = "transteira/tte2/v1/secret")`,
+   where `P` is the PBKDF2 output of the passphrase. Without a passphrase `K' = HKDF(K, empty
+   salt, info)`.
+4. **Seal the text** (1 to 10 000 Unicode code points) with AES-256-GCM under the text key
+   derived from `K'`, additional data `TTE2S`. `encryptedText` is
+   `base64url(0x01 || nonce || ciphertext || tag)`, without padding.
+5. **Compute the two verifiers** as 64 lowercase hex characters: `keyVerifier` is
+   `SHA-256(HKDF(K, ..., "transteira/tte2/v1/secret/key-proof"))` and `verifier` is
+   `SHA-256(HKDF(K', ..., "transteira/tte2/v1/secret/proof"))`. The server stores only these
+   hashes. Open your own sealed text before sending it.
+6. **Create**: `POST /api/v1/secrets` with `expiresIn`, `delivery`, `senderEmail`, `encryptedText`,
+   `keyVerifier`, `verifier`, the optional `passphrase` descriptor, `readReceipt` and, for a
+   file, `file`. The answer holds the `id` and the `token`, **shown once**.
+7. **Optional file**: `PUT /api/v1/secrets/{id}/file`, the raw `TTE2` body of exactly the declared
+   size (up to 25 MiB; the media type is not checked). If it fails, the secret stays pending and
+   the same bytes can be sent again.
+8. **E-mail delivery**: `POST /api/v1/secrets/{id}/send` with `{secretToken, fragmentKey}`. The
+   server mails the link, with the key, to the recipient and answers `active`. With
+   `delivery: link` the secret is already `active` (without file) and no send is allowed.
+9. **Link delivery**: build the link yourself, `https://<fqdn>/s/<token>#k=<K in base64url>`
+   (43 characters). The server never sees the fragment. The link is the secret: write it to a
+   private place only.
+
+With bash and curl, the sealing needs a helper, because `openssl enc` has no AES-GCM. The Node.js
+script provides one (`seal` prints the body and the key); the HTTP calls stay curl. The token is
+read from a header file, as in [section 3](#3-complete-script-bash-and-curl). The work folder is
+private (`umask 077`) and removed on exit, so that the key (`sealed.json`) and the token
+(`created.json`) do not linger on disk:
+
+```bash
+umask 077
+work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
+printf 'Authorization: Bearer %s\n' "$(tr -d '\r\n' < "$TT_TOKEN_FILE")" > "$work/auth-header.txt"
+printf '%s' "$TEXT" | node secret-create.mjs seal > "$work/sealed.json"   # printf, not echo
+jq '.body + {expiresIn: "1d", delivery: "link", senderEmail: env.TT_SENDER}' "$work/sealed.json" \
+  | curl -sS --fail-with-body -X POST "$TT_URL/api/v1/secrets" \
+      -H @"$work/auth-header.txt" -H 'Content-Type: application/json' --data-binary @- \
+  > "$work/created.json"
+echo "$TT_URL/s/$(jq -r .token "$work/created.json")#k=$(jq -r .fragmentKey "$work/sealed.json")"
+```
+
+For e-mail delivery, set `delivery: "email"` and `recipient`, then send (in the same script, before
+the work folder is removed):
+
+```bash
+curl -sS --fail-with-body -X POST "$TT_URL/api/v1/secrets/$(jq -r .id "$work/created.json")/send" \
+  -H @"$work/auth-header.txt" -H 'Content-Type: application/json' \
+  --data "$(jq -n --slurpfile c "$work/created.json" --slurpfile s "$work/sealed.json" \
+      '{secretToken: $c[0].token, fragmentKey: $s[0].fragmentKey}')"
+```
+
+The same operations with the complete PowerShell script (it needs PowerShell 7.4, which has
+`AesGcm`, `HKDF` and `Rfc2898DeriveBytes.Pbkdf2` natively):
+
+```powershell
+$env:TT_URL = 'https://transfer.entity-a.example.com'
+$env:TT_TOKEN_FILE = "$HOME/.transteira/token"     # the token is read from a file
+$env:TT_SENDER = 'reporting@entity-a.example.com'
+$env:TT_EXPIRES = '1d'
+# $env:TT_RECIPIENT = 'jane.doe@example.org'       # e-mail delivery; without it, the link is printed
+# $env:TT_PASSPHRASE_FILE = "$HOME/.transteira/passphrase"
+$text = New-TemporaryFile
+Set-Content -NoNewline -LiteralPath $text -Value 'the secret text'
+./secret-create.ps1 create -TextFile $text
+```
+
+Environment variables of both scripts: `TT_URL` (must start with `https://`), `TT_TOKEN_FILE`,
+`TT_SENDER`, `TT_EXPIRES` (default `1d`), `TT_RECIPIENT`, `TT_READ_RECEIPT=1`,
+`TT_PASSPHRASE_FILE` (one trailing line break is dropped, nothing else is trimmed) and
+`TT_SKIP_FILE=1` (read only). The text is used as is, with no trimming. Errors go to the standard
+error as `secret-create: <operation>: <status> <code> <detail>` with exit code 1, where
+`<operation>` is the OpenAPI `operationId` (`createSecret`, `sendSecret`, `getSecretLink`,
+`revealSecret`): the path is not printed, as it may hold the secret token.
+
+### What an API token can and cannot do
+
+- A token can create a secret, upload its file and send it, **only its own** secrets: a secret
+  created with a session answers `404` to a token, and the reverse.
+- A token **cannot list or delete** its secrets: `GET /me/secrets` and `DELETE /me/secrets/{id}`
+  need a "my transfers" session (the one opened with an access link, `POST /me/sessions`, with
+  its own CSRF token on the `DELETE`), not a deposit session, and the secrets of a token are
+  never listed there. Only an
+  administrator can list and delete them (`/admin/tenants/{tenantId}/secrets`).
+- The only feedback is the read receipt mailed to `senderEmail` when you set
+  `readReceipt: true` (read, expired or locked).
+- There is **no `Idempotency-Key`** on `POST /secrets`. If the `201` is lost, a pending secret
+  stays until it is purged, one hour later, and counts toward the 50 open secrets of the token.
+  A retry must use a **new** key `K` and makes a new secret.
+- Limits: 50 active or pending secrets per token and 200 creations per rolling 24 hours.
+- The CLI offers nothing for secrets; use the scripts above.
+
+### Reading a secret by script
+
+Reading needs no credentials, only the link. Split it at `#k=`: the token is the last path
+segment of `/s/<token>` and the key is the fragment.
+
+1. `GET /api/v1/secret-links/{token}`: the status (passphrase descriptor, file size, expiry).
+   It consumes nothing and can be repeated.
+2. `POST /api/v1/secret-links/{token}/reveal` with `{keyProof, proof}`, computed from `K` and `K'`
+   as the verifiers above, but sent as the proofs themselves (the server hashes them and compares
+   with the stored verifiers). **This is one-time**: after the answer the secret is gone, and a
+   lost response loses the secret. The key proof is checked first. A wrong key proof gives
+   `403 secret-proof-invalid` without `attemptsRemaining` and is not counted. A wrong passphrase
+   proof is counted and carries `attemptsRemaining`; the 5th counted failure locks the secret
+   (`410 secret-gone`, reason `locked`).
+3. The file, if any: `GET /api/v1/secret-links/{token}/file` with the header
+   `TransTeira-Secret-Grant` returned by the reveal. The grant is valid 10 minutes, and an
+   interrupted download can be retried with the same grant until it completes. A missing or
+   malformed grant gives `400 validation-failed`; a well-formed grant that is wrong, already used
+   or expired (or a secret without file) gives `404 not-found`.
+4. Decrypt the text with `K'`: the scripts do it all
+   (`node secret-create.mjs read < link.txt`, `./secret-create.ps1 read` with
+   `$env:TT_LINK_FILE = 'link.txt'`; `TT_SKIP_FILE=1` lets them reveal a secret that holds a
+   file, losing the file). The link is read from the file named by `TT_LINK_FILE` or from standard
+   input, **never from the command line**, where other users of the host could see it in the
+   process list.
+
+The reveal route has the same-origin policy as `unlockDownload`: a script (curl, PowerShell,
+Node.js) sends no `Origin` or `Sec-Fetch-Site` header and is not affected, but a request from
+another website in a browser answers `403 csrf-invalid`. No CSRF token is needed. Per client
+address (IPv4 address or IPv6 /64), these calls are limited to 30 per minute, and 10 failures
+(unknown token, wrong key proof) within 15 minutes lock the client for 15 minutes (`429
+rate-limited`, security log).
+
+### Secret errors and retries
+
+| Answer | Meaning | What to do |
+|---|---|---|
+| `403 secrets-disabled` | The module is off for this entity. | Stop. |
+| `403 secret-email-not-allowed` | E-mail delivery is off for this entity. | Use `delivery: link`. |
+| `403 secret-file-not-allowed` | Files are off for this entity. | Send text only. |
+| `403 secret-passphrase-required` | E-mail delivery requires a passphrase here. | Add one. |
+| `403 recipient-domain-refused` | The recipient's domain is refused; field `/recipient`. | Stop; use another address. |
+| `413 secret-file-too-large` | The file exceeds `features.secrets.fileMaxBytes` (`maxTransferBytes` in the problem). | Stop. |
+| `422 secret-duration-not-offered` | `expiresIn` is not offered; `allowed` lists the durations. | Pick one of them. |
+| `429 secret-limit-reached` | 50 open secrets, or 200 in 24 hours. `Retry-After` only for the 24-hour count. | Wait, or ask an admin to delete secrets. |
+| `400 secret-format-invalid` | The sealed text, a verifier or the file framing is wrong: a bug in your sealing. | Do not retry unchanged. |
+| `409 state-conflict` | File already uploaded, secret already sent, send on a link-delivery secret. | Stop. |
+| `503 mail-unavailable` | The mail could not be sent; the secret stays pending. | Retry `send`. |
+| `503 maintenance` | Maintenance mode. | Wait `Retry-After`, then retry. |
+| `410 secret-gone` | Read, expired, deleted or locked (`reason`). | Stop. |
+
+The other answers (`401`, `403 ip-not-allowed`, `403 deposit-not-allowed`, `5xx`) are those of
+[section 5](#5-errors-and-retries). Details of each code are in [errors.md](errors.md).

@@ -29,11 +29,13 @@ Set `TT_METRICS_TOKEN_FILE` (or `TT_METRICS_TOKEN`) on TransTeira, and optionall
 
 The template provides items for health, disk, antivirus, HTTP errors, mail, events and syslog.
 A discovery rule creates, for each tenant ID, items for storage used and quota, active
-transfers, transfers and downloads per second, and antivirus detections.
+transfers, transfers and downloads per second, antivirus detections and, since 2.1, the
+one-time secrets created, read and locked and the bytes of their stored files.
 
 Triggers: disk above `{$TRANSTEIRA.DISK.WARN}`, disk alert, antivirus down or in alert, events,
 syslog or mails dropped (counter increased), webhook deliveries failed, HTTP 5xx for ten
-minutes, no data for five minutes, and per tenant the quota above `{$TRANSTEIRA.QUOTA.WARN}`.
+minutes, no data for five minutes, and per tenant the quota above `{$TRANSTEIRA.QUOTA.WARN}`
+and a one-time secret locked after wrong passphrases (information).
 
 The raw item stores the whole `/metrics` answer as text, and Zabbix limits a text value to
 64 KB. A normal instance stays far below; with a very large number of tenants, use the

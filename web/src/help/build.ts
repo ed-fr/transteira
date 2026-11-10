@@ -79,6 +79,7 @@ export const HELP_FEATURES: readonly HelpFeature[] = [
   'recipientVerification',
   'maxDownloads',
   'folders',
+  'secrets',
 ];
 
 /** A build error, located in a guide. */

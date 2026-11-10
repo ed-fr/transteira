@@ -1,7 +1,7 @@
 # Registre RGPD des activités de traitement : service de transfert de fichiers
 
 Modèle de fiche du registre des activités de traitement (RGPD, article 30)
-d'une organisation qui exploite **TransTeira 2.0**. Elle est pré-remplie à
+d'une organisation qui exploite **TransTeira 2.1**. Elle est pré-remplie à
 partir de ce que fait le logiciel (modèle de données, tâche de nettoyage,
 écrans d'administration). Tout ce que seule l'organisation peut décider est
 marqué `<à compléter>`.
@@ -35,6 +35,7 @@ English: [docs/compliance/gdpr-processing-record.md](../gdpr-processing-record.m
 - Protéger le service et les données : contrôle d'accès, analyse antivirus,
   détection des abus, journaux d'audit et de sécurité.
 - Prouver un dépôt ou une remise en cas de litige (déclarations signées).
+- Partager des secrets à usage unique (depuis la 2.1) : un texte d'au plus 10 000 caractères et un fichier facultatif, chiffrés dans le navigateur, lisibles une seule fois, pour une durée limitée.
 - Administrer le service (comptes d'administrateurs et d'auditeurs).
 
 ## 3. Base légale (article 6)
@@ -46,6 +47,7 @@ Choisissez une base par finalité et supprimez les autres.
 | Transfert de fichiers entre utilisateurs et tiers invités | Intérêt légitime (art. 6.1.f) / exécution d'un contrat (art. 6.1.b) | `<à compléter>` |
 | Sécurité, journaux d'audit et de sécurité, détection des abus | Intérêt légitime (art. 6.1.f) / obligation légale (art. 6.1.c) | `<à compléter>` |
 | Preuves de dépôt et de remise | Intérêt légitime (art. 6.1.f) / contrat (art. 6.1.b) | `<à compléter>` |
+| Secrets à usage unique (2.1) | Intérêt légitime (art. 6.1.f) / exécution d'un contrat (art. 6.1.b) | `<à compléter>` |
 | Administration du service | Intérêt légitime (art. 6.1.f) | `<à compléter>` |
 
 TransTeira ne demande jamais de consentement et n'a aucun traitement fondé sur
@@ -61,6 +63,8 @@ le consentement.
 | Déposants par lien de dépôt permanent | Personnes externes qui déposent vers un service (lien de dépôt), après vérification de leur adresse. |
 | Administrateurs | Super admin et admins délégués. |
 | Auditeurs | Comptes en lecture seule (RSSI, auditeurs). |
+| Créateurs de secrets à usage unique (2.1) | Utilisateurs internes, personnes externes invitées et expéditeurs déclarés par un jeton d'API, qui créent un secret. |
+| Destinataires d'un secret envoyé par mail (2.1) | Personnes à qui un secret est envoyé par mail. |
 | Autres personnes citées en texte libre | Personnes mentionnées dans le message d'un transfert, un nom de fichier ou un signalement d'abus. |
 
 ## 5. Catégories de données personnelles
@@ -72,6 +76,8 @@ le consentement.
 | Noms, tailles et empreintes SHA-256 des fichiers | De chaque fichier déposé ; les noms sont un texte libre choisi par l'expéditeur. | Base de données ; les empreintes figurent aussi dans les mails de notification et les preuves. |
 | Messages des transferts | Texte libre facultatif de l'expéditeur. | Base de données. |
 | Contenu des fichiers | Peut contenir toute donnée, y compris sensible. Chiffré sur disque (AES-256-GCM, une clé par fichier). Pour un transfert chiffré de bout en bout, le navigateur chiffre et le serveur ne détient jamais la clé : **l'exploitant ne peut pas le lire** ; l'analyse antivirus est alors impossible et la page de téléchargement l'indique. | Volume de données (chiffré) ; clés, chiffrées par la clé maître, en base. |
+| Contenu des secrets à usage unique (2.1) | Le texte (au plus 10 000 caractères) et le fichier facultatif d'un secret. Connaissance nulle : le navigateur les scelle, la clé reste dans le fragment du lien et seules des empreintes de vérification SHA-256 sont stockées, donc **l'exploitant ne peut pas les lire**, sauf si l'envoi par mail porte la clé dans le lien d'un secret sans phrase secrète (voir la section 7). Jamais analysés par l'antivirus. | Base de données (texte scellé) ; volume de données (fichier scellé) ; clés, chiffrées par la clé maître, en base. |
+| Métadonnées des secrets à usage unique (2.1) | Adresse du créateur, adresse du destinataire (envoi par mail seulement), type de créateur, mode de livraison, dates, état, motif de fin, taille déclarée du fichier, choix d'un accusé de lecture. Les accusés de lecture sont des mails au créateur. | Base de données. |
 | Événements des transferts | Dates de dépôt, de premier téléchargement, téléchargements par destinataire et par fichier (liens par destinataire). | Base de données. |
 | État de vérification | Codes (stockés sous forme de MAC, jamais en clair), tentatives, sessions de dépôt, date de dernière utilisation d'une adresse vérifiée. | Base de données. |
 | Journal d'audit | Horodatage, entité, acteur (adresse ou administrateur), IP, action, objet. | Base de données. |
@@ -92,7 +98,7 @@ domaines destinataires).
 
 | Destinataire | Détail |
 |---|---|
-| En interne | Expéditeur et destinataires de chaque transfert ; admins délégués de l'entité (métadonnées, jamais le contenu des fichiers : décision P18) ; auditeurs (lecture seule) ; super admin. |
+| En interne | Expéditeur et destinataires de chaque transfert ; admins délégués de l'entité (métadonnées, jamais le contenu des fichiers : décision P18 ; pour les secrets à usage unique, les métadonnées dont l'adresse du destinataire, jamais le contenu) ; auditeurs (lecture seule, liste des secrets) ; super admin. Le créateur d'un secret reçoit ses accusés de lecture. |
 | Sous-traitants et prestataires | Voir la section 7. |
 | Tiers autorisés par la loi | `<à compléter>` (autorités, sur réquisition) |
 
@@ -108,7 +114,7 @@ d'instance n'est envoyé, mais GitHub voit l'adresse IP du serveur ;
 | Sous-traitant ou service | Rôle | Données concernées | Localisation | Contrat (art. 28) | Transfert hors UE et garanties |
 |---|---|---|---|---|---|
 | Hébergement de la VM et de ses sauvegardes | Fait fonctionner le service et les sauvegardes | Toutes les données (les fichiers sont chiffrés au repos) | `<à compléter>` | `<à compléter>` | `<à compléter>` |
-| Relais SMTP (par exemple Microsoft 365 ou un autre relais) | Envoie les mails du service | Adresses des destinataires et expéditeurs, contenu des mails (liens, empreintes, messages) | `<à compléter>` | `<à compléter>` | `<à compléter>` |
+| Relais SMTP (par exemple Microsoft 365 ou un autre relais) | Envoie les mails du service | Adresses des destinataires et expéditeurs, contenu des mails (liens, empreintes, messages). **Les mails de secret contiennent le lien de déchiffrement : la chaîne de messagerie peut lire un secret sans phrase secrète** (T-362, H21) | `<à compléter>` | `<à compléter>` | `<à compléter>` |
 | Fournisseur OpenID Connect (par exemple Microsoft Entra ID), si l'authentification unique est utilisée | Authentifie les administrateurs et auditeurs | Identité de l'administrateur (mail, `sub`) | `<à compléter>` | `<à compléter>` | `<à compléter>` |
 | Destinations de webhooks (Teams, Slack, générique), si utilisées | Reçoivent les alertes | Charge minimale par défaut (décision P31) | `<à compléter>` | `<à compléter>` | `<à compléter>` |
 | Moteur antivirus distant (ICAP, API HTTP), si utilisé | Analyse les fichiers | Contenu des fichiers en transit, en clair vers le moteur | `<à compléter>` | `<à compléter>` | `<à compléter>` |
@@ -132,6 +138,7 @@ Quand l'exploitant peut agir, la dernière colonne dit où.
 | Adresses vérifiées | Supprimées après **12 mois** sans utilisation ; l'adresse doit alors être revérifiée. | Non |
 | Invitations | Valables 12 mois à partir de la création ou de la dernière utilisation ; invitations inactives purgées ensuite. | Un admin peut révoquer une invitation à tout moment. |
 | Liens de dépôt permanents | Les liens expirés ou révoqués sont purgés 12 mois après, une fois leurs transferts supprimés. | Un admin peut désactiver, révoquer ou fixer une date d'expiration. |
+| Secrets à usage unique (2.1) | Un secret en attente (non terminé) est supprimé après **1 heure**, sans trace. Un secret actif dure jusqu'à la durée choisie par son créateur (1 heure à 30 jours, parmi celles que l'entité propose), jusqu'à sa lecture, sa suppression, ou son verrouillage après 5 phrases secrètes erronées. La clé de son fichier est détruite au premier téléchargement complet ou 10 minutes après la révélation. Une trace (adresses, dates, état, taille du fichier ; ni contenu, ni vérificateur, ni sel) est purgée **30 jours** après la fin. Entrées d'audit `secret.*` : 12 mois. | Les durées proposées par entité (réglages des secrets). Pas les délais de purge. |
 | Codes de vérification | Supprimés après usage ou expiration (les lignes servant à la limitation de débit sont gardées une heure). | Non |
 | Sessions de dépôt, compteurs d'échecs de mot de passe, liens d'accès « Mes envois » | Purgés après leur courte validité (quelques heures). | Durée d'une session de dépôt : `TT_DEPOSIT_SESSION_TTL`. |
 | Journal d'audit | **12 mois**, puis purge. Aucune modification ni suppression par l'application, sauf la pseudonymisation d'un effacement. | Non |
@@ -156,11 +163,11 @@ flux de connexion, en `Lax`).
 
 | Cookie | Rôle | Durée |
 |---|---|---|
-| `__Host-tt_deposit` | Session de dépôt après vérification de l'adresse | Validité de la session (4 heures par défaut) |
+| `__Host-tt_deposit` | Session de dépôt après vérification de l'adresse (sert aussi à créer un secret à usage unique) | Validité de la session (4 heures par défaut) |
 | `__Host-tt_known` | Reconnaissance d'une adresse déjà vérifiée | Jusqu'à 12 mois |
 | `__Host-tt_dl` | Autorisation après saisie du bon mot de passe de transfert | 1 heure |
 | `__Host-tt_rv` | Vérification d'un destinataire sur son lien | 1 heure |
-| `__Host-tt_me` | Session « Mes envois » | 1 heure |
+| `__Host-tt_me` | Session « Mes envois » (liste aussi « Mes secrets ») | 1 heure |
 | `__Host-tt_admin` | Session d'administration | Inactivité de 30 min, maximum 12 h par défaut |
 | `__Host-tt_oidc` | Flux d'authentification unique en cours | 10 minutes, usage unique |
 | `tt_theme` | Thème clair ou sombre choisi par l'utilisateur (écrit par le navigateur, jamais lu par le serveur) | 1 an |
@@ -178,7 +185,7 @@ TransTeira fournit :
   dans l'entité, puis les efface. Effets : adresse vérifiée, codes et sessions
   supprimés ; transferts envoyés par l'adresse rendus illisibles puis
   supprimés ; adresse retirée des transferts reçus (un transfert resté sans
-  destinataire est supprimé) ; invitations supprimées ou révoquées ; preuves
+  destinataire est supprimé) ; secrets à usage unique créés ou reçus par l'adresse supprimés avec leur contenu (comptés comme `secrets` par la recherche et `secretsDeleted` par l'effacement) ; invitations supprimées ou révoquées ; preuves
   nommant l'adresse supprimées ; adresse remplacée par un pseudonyme dans le
   journal d'audit (décision P19). L'effacement se termine par un rapport
   d'effacement, conservable comme élément de preuve.
@@ -214,6 +221,17 @@ environ le double de cette durée
 [sauvegarde](../../operations/backup.md), décision P25). Indiquez la
 conservation que vous appliquez : `<à compléter>`.
 
+**Secrets à usage unique (2.1).** Une copie prise pendant qu'un secret était
+actif conserve son texte scellé, sa clé chiffrée, ses vérificateurs et le sel
+de sa phrase secrète. Avec la clé maître, il reste le chiffré fait dans le
+navigateur, protégé seulement par la clé du fragment du lien et par la phrase
+secrète : qui détient cette copie, la clé maître et le lien (un ancien mail,
+pour un secret envoyé par mail) peut lire un secret sans phrase secrète. Des
+durées courtes, une phrase secrète transmise par un autre canal et une
+rotation de la clé maître suivie de la destruction de l'ancienne clé réduisent
+ce risque ([sauvegarde](../../operations/backup.md#crypto-erase-and-copies),
+modèle de données D3, T-355, décision P71).
+
 ## 12. Mesures de sécurité (article 32)
 
 Résumé ; la correspondance complète est dans le document
@@ -225,7 +243,9 @@ Résumé ; la correspondance complète est dans le document
 - **Chiffrement au repos** : AES-256-GCM par blocs, une clé par fichier
   chiffrée par la clé maître ; clé maître conservée hors du volume de données ;
   rotation sans réécriture des fichiers ; chiffrement de bout en bout optionnel
-  dans le navigateur.
+  dans le navigateur ; secrets à usage unique chiffrés dans le navigateur (le
+  serveur n'en voit jamais le contenu), lus une seule fois, verrouillés après 5
+  phrases secrètes erronées.
 - **Chiffrement en transit** : TLS au niveau du reverse proxy (exploitant).
 - **Contrôle d'accès** : administrateurs avec mot de passe argon2id et TOTP
   obligatoire pour le super admin ; OpenID Connect en option ; admins délégués
@@ -238,7 +258,8 @@ Résumé ; la correspondance complète est dans le document
 - **Analyse antivirus** de chaque fichier (ClamAV, moteur ICAP ou API HTTP).
 - **Minimisation et masquage** : ni contenu de fichier ni adresse dans le
   journal de sécurité ; secrets hachés ou scellés, jamais journalisés ;
-  déclarations sans IP.
+  déclarations sans IP ; jetons des liens de secret masqués dans les journaux
+  du proxy.
 - **Traçabilité** : journal d'audit, journal de sécurité (fail2ban et
   CrowdSec), export syslog, métriques.
 - **Résilience** : copie nocturne de la base, restauration documentée.

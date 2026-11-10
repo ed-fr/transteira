@@ -1,6 +1,6 @@
 # Auditor guide
 
-As an auditor, you consult the entities attached to your account, in read-only mode: their summary, audit log, security log, statistics, transfers and proofs, and their permanent drop links. This role is meant for a security officer or an audit (for example ISO 27001). You cannot change anything except your own password and second factor. Everything happens in the administration, at the address given by your organisation (for example `admin.transfer.example.com/admin/`). The **Help** link at the bottom of each screen opens the matching section of this guide.
+As an auditor, you consult the entities attached to your account, in read-only mode: their summary, audit log, security log, statistics, transfers and proofs, their one-time secrets (metadata only), and their permanent drop links. This role is meant for a security officer or an audit (for example ISO 27001). You cannot change anything except your own password and second factor. Everything happens in the administration, at the address given by your organisation (for example `admin.transfer.example.com/admin/`). The **Help** link at the bottom of each screen opens the matching section of this guide.
 
 <!-- topic: auditor-roles -->
 ## Your role: read-only
@@ -18,7 +18,8 @@ You can read:
 - the summary of the entity (its name, address, language, size limit and storage quota) and its single sign-on configuration, without any secret;
 - the audit log, the security log and the statistics of the entity;
 - the list of its transfers, the details of each transfer (metadata only) and their proofs of deposit and delivery, as PDF files;
-- the list of its permanent drop links, never the secret of a link.
+- the list of its permanent drop links, never the secret of a link;
+- the list of its one-time secrets (metadata only), never their content, link or passphrase.
 
 You manage only your own account: your password and your two-factor authentication. Any other action is refused with the error **read-only-role**, and the administration does not offer it to you.
 
@@ -130,18 +131,20 @@ Proofs are kept 12 months after they were issued, even if the transfer was delet
 <!-- topic: auditor-tenant-audit -->
 ## Audit log
 
-The **Audit log** screen shows the actions recorded for the entity over the last 12 months: deposits, downloads, invitations, administrator actions, antivirus detections and more.
+The **Audit log** screen shows the actions recorded for the entity over the last 12 months: deposits, downloads, invitations, administrator actions, antivirus detections, one-time secrets and more.
 
 Filter by **Action** (grouped by theme) and by period with **From** and **To**, then click **Apply**. The **Actor** filter is not offered to you, as for the transfers. The columns show the **Date**, **Actor**, **Action**, **Object**, **IP address** and **Details** (click **Show the details**). When the object is a transfer, a link opens its details. The filters are kept in the page address, so you can bookmark a view or share it with another person who has access to the entity.
 
 ![Audit log of an entity with the filters and the list of events](../screenshots/en/admin-audit.png)
+
+The **One-time secrets** group of actions holds **Secret created**, **Secret link mailed** (only the domain of the recipient), **Secret read**, **Secret file downloaded**, **Secret expired unread**, **Secret deleted**, **Secret locked after wrong proofs** and **Secrets settings updated**. None of them holds a content, a key, a proof or a link.
 
 An address erased at the request of the person concerned appears as a pseudonym starting with `erased-`. The log is kept 12 months and only holds the events of the entities attached to your account.
 
 <!-- topic: auditor-tenant-security-log -->
 ## Security log
 
-The **Security log** screen shows the security events of the entity over the last 12 months: wrong verification codes or transfer passwords, refused deposits, rate limits, invalid tokens and drop links. These are the events that the intrusion prevention tools (fail2ban, CrowdSec) work on, which is different from the audit log. The log never contains an email address.
+The **Security log** screen shows the security events of the entity over the last 12 months: wrong verification codes or transfer passwords, refused deposits, rate limits, invalid tokens and drop links, unknown secret links and wrong secret proofs (**Unknown secret link**, **Wrong secret proof**: repeated wrong proofs mean that someone holding a secret link is guessing its passphrase). These are the events that the intrusion prevention tools (fail2ban, CrowdSec) work on, which is different from the audit log. The log never contains an email address.
 
 Filter by **Event type** (choose a type in the list, or **Other type** and type its code) and by period with **From** and **To**. The columns show the **Date**, the **Type**, the **Reason**, the **IP address** and the **Occurrences**: identical events (same type, reason and address) seen within a short time are grouped in one row, with the number of occurrences and the date of the last one.
 
@@ -152,7 +155,7 @@ Events that belong to no entity (an unknown address, a failed administrator sign
 <!-- topic: auditor-tenant-stats -->
 ## Statistics
 
-The **Statistics** screen shows the activity of the entity over a period. Choose the **Period**: **Last 7 days**, **Last 30 days** or **Last 12 months**. The **Key figures** give the **Transfers deposited**, **Volume deposited**, **Downloads**, **Volume downloaded** and **Virus detections**; the storage used is shown too, with charts per day or per month. Each chart has a **Show the data table** button for a readable version. The figures are indicative: the counters are updated about every 30 seconds.
+The **Statistics** screen shows the activity of the entity over a period. Choose the **Period**: **Last 7 days**, **Last 30 days** or **Last 12 months**. The **Key figures** give the **Transfers deposited**, **Volume deposited**, **Downloads**, **Volume downloaded**, **One-time secrets created** and **Virus detections**; the storage used is shown too, with charts per day or per month. Each chart has a **Show the data table** button for a readable version. The figures are indicative: the counters are updated about every 30 seconds. The storage used includes the files of the one-time secrets while they exist. **One-time secrets created** counts the secrets created in the period, whatever became of them afterwards (unfinished ones included); it starts at the upgrade to 2.1.
 
 ![Statistics of an entity with the key figures, the storage and the charts](../screenshots/en/admin-stats.png)
 
@@ -166,7 +169,7 @@ You can neither create, change, rotate nor revoke a link. The secret of a link, 
 <!-- topic: auditor-tenant-secrets -->
 ## One-time secrets
 
-The **One-time secrets** screen lists, read-only, the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State** (**Pending**, **Active**, **Read**, **Expired**, **Deleted** or **Locked**), **Expiry** and **Read**. Filter by **State** or by **Author address**. You never see the content of a secret, its link or its passphrase, and you cannot delete any secret. The secrets settings are not offered to you.
+The **One-time secrets** screen lists, read-only, the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State** (**Pending**, **Active**, **Read**, **Expired**, **Deleted** or **Locked**), **Expiry** and **Read**. Filter by **State**. The **Author address** filter is not offered to you, as for the transfers and the audit log. An ended secret stays listed for 30 days as a tombstone, without any content, then disappears. You never see the content of a secret, its link or its passphrase, and you cannot delete any secret. The secrets settings are not offered to you.
 
 <!-- topic: auditor-account -->
 ## My account
@@ -187,7 +190,8 @@ The auditor role is read-only on purpose, so that an audit never alters what it 
 - changing the configuration of an entity (branding, network, mail, templates, legal texts, confidentiality levels, abuse thresholds, single sign-on);
 - creating, changing or revoking an invitation, a blocklist entry, an API token, a webhook or a permanent drop link;
 - resending, extending or deleting a transfer, closing an abuse report, erasing personal data;
-- searching a list by email address (transfers and audit log);
+- searching a list by email address (transfers, one-time secrets and audit log);
+- deleting a one-time secret, or opening or changing the secrets settings;
 - reading file contents, download links, the secret of a drop link, the instance security events without entity, or the system screens;
 - creating or changing administrator accounts, including your own role and entities.
 

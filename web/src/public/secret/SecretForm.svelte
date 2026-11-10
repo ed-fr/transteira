@@ -17,6 +17,7 @@
     TextArea,
     TextField,
   } from '../../shared/components';
+  import { helpHref } from '../../shared/components/helpers';
   import { formatBytes, t } from '../../shared/i18n/i18n.svelte';
   import Countdown from '../deposit/Countdown.svelte';
   import SessionBar from '../deposit/SessionBar.svelte';
@@ -117,12 +118,27 @@
     event.preventDefault();
     void secret.submit();
   }
+
+  // Contextual help of the tab: in-app navigation when the router is there, a plain link otherwise.
+  function openHelp(event: MouseEvent): void {
+    if (
+      onnavigate !== undefined &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey &&
+      event.button === 0
+    ) {
+      event.preventDefault();
+      onnavigate(helpHref('secret-share'));
+    }
+  }
 </script>
 
 <SessionBar {flow} {onnavigate} />
 
 <h1 tabindex="-1">{t('secretCreate.title')}</h1>
 <p>{t('secretCreate.intro')}</p>
+<p><a class="tt-help" href={helpHref('secret-share')} onclick={openHelp}>{t('secretCreate.help')}</a></p>
 
 {#if secret.step === 'retry'}
   <Alert severity="error" title={t('secretCreate.retry.title')} bind:element={problem}>

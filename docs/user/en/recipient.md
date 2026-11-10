@@ -1,6 +1,6 @@
 # Receiving files
 
-Someone has sent you files with TransTeira. You received an email with a download link, and a QR code that opens the same link on a phone or tablet. You do not need an account or any software: a web browser is enough. The files stay available until the date shown in the email and on the page, then they are deleted automatically.
+Someone has sent you files with TransTeira. You received an email with a download link, and a QR code that opens the same link on a phone or tablet. You do not need an account or any software: a web browser is enough. The files stay available until the date shown in the email and on the page, then they are deleted automatically. If you received a link that starts with `/s/` instead, it is a one-time secret: see [Read a secret](topic:secret-read).
 
 <!-- topic: download -->
 ## Downloading the files
@@ -189,29 +189,33 @@ Replying in a browser ends any upload session already open in that browser: fini
 <!-- topic: secret-read -->
 ## Read a secret
 
-A link starting with `/s/` gives you access to a one-time secret (password, key, code). Open the **whole** link: its end, after the `#` sign, holds the key that decrypts the secret. Without it, the page shows **Incomplete link**.
+A link starting with `/s/` gives you access to a one-time secret (password, key, code). It usually arrives in an email titled "A secret was shared with you via" followed by the name of your organisation, with an **Open the secret** button; the sender's address appears in the body of the message. The message states that the secret can be read only once, its expiry date, whether a passphrase is needed (which the sender gives you through another channel) and whether a file is attached. **Do not forward this email**: whoever opens the link first reads the secret. The sender may also have given you the link by another means.
+
+Open the **whole** link: its end, after the `#` sign, holds the key that decrypts the secret. Without it, the page shows **Incomplete link**. Once the page has opened, the key is removed from the address bar for your safety: if you reload the page before showing the secret, you get **Incomplete link**, and you must open the link again from the original message.
 
 ![Read a secret page before it is shown, with the Passphrase field and the Show the secret button](../screenshots/en/secret-reveal.png)
 
-Opening the page consumes nothing: the secret is read only when you click **Show the secret**, so get ready to copy it. If the sender protected it with a passphrase, they gave it to you through another channel: enter it in **Passphrase**. You have 5 attempts; after the fifth failure, the secret is destroyed.
+Opening the page consumes nothing: it shows **Available until** (the expiry date) and, if a file is attached, its size and a warning that it was not scanned. The secret is read only when you click **Show the secret**, so get ready to copy it. If the sender protected it with a passphrase, they gave it to you through another channel: enter it in **Passphrase**. You have 5 attempts; after the fifth failure, the secret is destroyed.
 
 ![Your secret page, with the text of the secret and the Copy the secret button](../screenshots/en/secret-revealed.png)
 
 The secret is then shown, and it is **destroyed on the server**: copy it right away with **Copy the secret**, before you leave or reload the page. **Hide the text** masks it on the screen (during a screen share, for example) while it can still be copied. A copied secret can stay in the clipboard history of your device: clear it once you have used the secret.
 
-If a file is attached, click **Download the file**: it can be downloaded **only once, within 10 minutes** of the secret being shown, and is then removed from the server. As the sender encrypted it, it is **not scanned by the antivirus**: open it only if you trust the sender. If needed, compare its SHA-256 fingerprint (see [Check that a file is intact](topic:download-integrity)).
+If a file is attached, click **Download the file**: it can be downloaded **only once, within 10 minutes** of the secret being shown, and is then removed from the server. As the sender encrypted it, it is **not scanned by the antivirus**: open it only if you trust the sender. Your browser checks the file by itself while decrypting it, and saves nothing if it is damaged. The page also shows the SHA-256 fingerprint of the file, with a button to copy it: you can compare it with one the sender gave you separately (see [Checking that a file is intact (SHA-256)](topic:download-integrity)). If the page says **The file is no longer available**, it was already downloaded or the 10 minutes have passed. If it says **The file is damaged**, nothing was saved: warn the sender. After a network error, you can try again within the 10 minutes.
 
 The error pages you may meet:
 
 - **Secret no longer available**: the secret **has already been read** (if it was not you, tell the sender), it **has expired**, it was **deleted** by its sender or an administrator, or it was **destroyed after too many wrong passphrases**. Ask the sender to share it again.
 - **Incomplete link** or **Incorrect link**: copy or reopen the whole link from the original message. Nothing has been consumed.
 - **Unknown link**: the link is wrong or incomplete.
+- **Secret cannot be opened**: the data received from the server is damaged. Warn the sender.
+- **Browser not supported**: your browser cannot decrypt the secret. Use an up-to-date browser over a secure connection (HTTPS). Nothing has been consumed.
 
-<!-- topic: download-problems -->
 ## Dark theme
 
 The download page follows the light or dark setting of your device. The **Dark theme** button in the footer switches the theme; your choice is remembered for a year by a strictly technical cookie (`tt_theme`), set only when you pick a theme different from your device's. Choosing your device's theme again deletes the cookie.
 
+<!-- topic: download-problems -->
 ## Link not working
 
 This section explains the messages you may see instead of the files, and what to do.

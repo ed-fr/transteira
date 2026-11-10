@@ -3,10 +3,21 @@
 // table of contents, the sections hidden for the tenant and the page title.
 import { HELP_TOPIC } from '../shared/components/helpers';
 import type { HelpTenantRules } from './rules';
-import type { GuideId, HelpGuide, HelpGuideSet, HelpSection } from './types';
+import type { GuideId, HelpFeature, HelpGuide, HelpGuideSet, HelpSection } from './types';
 
 /** Options of the tenant read by the help (GET /tenant), undefined outside a tenant. */
 export type HelpFeatures = HelpTenantRules['features'];
+
+/**
+ * Reports whether a tenant feature is on. The one-time secrets module is an object whose
+ * "enabled" flag decides; the other features are booleans.
+ */
+export function featureOn(features: NonNullable<HelpFeatures>, feature: HelpFeature): boolean {
+  if (feature === 'secrets') {
+    return features.secrets?.enabled === true;
+  }
+  return features[feature] === true;
+}
 
 /** Guides of the public application. */
 export const PUBLIC_GUIDES: readonly GuideId[] = ['depositor', 'recipient'];
@@ -59,7 +70,7 @@ export function visibleSections(guide: HelpGuide, features: HelpFeatures): HelpS
       continue;
     }
     hiddenLevel = undefined;
-    if (section.when !== undefined && !features[section.when]) {
+    if (section.when !== undefined && !featureOn(features, section.when)) {
       hiddenLevel = section.level;
       continue;
     }

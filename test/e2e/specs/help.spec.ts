@@ -20,6 +20,8 @@ import { recipientPath, tokenDeposit } from '../support/deposit';
 import { HOSTS, ORIGINS, REPO_ROOT, STORAGE_DELEGATE, STORAGE_SUPER } from '../support/env';
 import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures';
 import { BROWSER_LOCALE, LANGS, msg, type Lang } from '../support/i18n';
+import { identify } from '../support/publicflow';
+import { openSecretTab } from '../support/secret';
 import { loadState, superAdminApi } from '../support/state';
 
 type GuideId = 'depositor' | 'recipient' | 'delegated-admin' | 'super-admin' | 'auditor';
@@ -180,6 +182,14 @@ async function downloadPage(token: string, label: string): Promise<string> {
 }
 
 test.describe('public contextual help', () => {
+  test('the "Share a secret" tab links to the secret-share section, focused', async ({ page, state }) => {
+    await identify(page, state.tenants.a.origin, internalEmail('help-secret'));
+    await openSecretTab(page);
+    await page.getByRole('link', { name: msg('en', 'secretCreate.help'), exact: true }).click();
+    await expectHelpSection(page, 'en', 'depositor', 'secret-share', '');
+    await expectCleanStorage(page);
+  });
+
   test('footer link of the deposit home opens the deposit section, focused', async ({ page, state }) => {
     await page.goto(`${state.tenants.a.origin}/`);
     await expect(

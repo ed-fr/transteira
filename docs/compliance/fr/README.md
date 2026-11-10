@@ -19,7 +19,7 @@ English: [docs/compliance/README.md](../README.md).
 > relire le résultat par votre délégué à la protection des données (DPO) ou un
 > juriste.
 
-Le kit s'applique à **TransTeira 2.0**. Chaque nouvelle version peut changer ce
+Le kit s'applique à **TransTeira 2.1**. Chaque nouvelle version peut changer ce
 qui est stocké ou la façon de le faire : relisez les documents à chaque mise à
 jour (voir le [CHANGELOG](../../../CHANGELOG.md) et le
 [guide de mise à jour](../../operations/upgrade.md), en anglais).
@@ -28,7 +28,7 @@ jour (voir le [CHANGELOG](../../../CHANGELOG.md) et le
 
 | Document | Usage |
 |---|---|
-| [Registre RGPD](gdpr-processing-record.md) | Une activité de traitement pré-remplie, « Service de transfert de fichiers » : finalités, personnes concernées, catégories de données, destinataires, conservation, mesures de sécurité. Complétez les `<à compléter>` et joignez-la à votre registre. |
+| [Registre RGPD](gdpr-processing-record.md) | Une activité de traitement pré-remplie, « Service de transfert de fichiers », avec sa seconde finalité depuis la 2.1, les secrets à usage unique : finalités, personnes concernées, catégories de données, destinataires, conservation, mesures de sécurité. Complétez les `<à compléter>` et joignez-la à votre registre. |
 | [Correspondance ISO/IEC 27001:2022 annexe A](iso27001-annex-a.md) | Les 93 mesures de l'annexe A, avec pour chacune qui la fournit (TransTeira, partagée, exploitant), le mécanisme et la référence. À utiliser pour la déclaration d'applicabilité (DdA) et pour les audits. |
 | [Modèle de menaces](../../security/threat-model.md) | Analyse STRIDE : actifs, frontières de confiance, menaces `T-xxx`, décisions `Pxx`. Les deux documents ci-dessus le citent. |
 
@@ -60,6 +60,7 @@ Les documents ci-dessous sont en anglais, sauf mention contraire.
 - [Antivirus](../../operations/antivirus.md), [authentification unique](../../operations/fr/sso.md)
   (français), [preuves de dépôt et de remise](../../operations/fr/proofs.md) (français)
 - [Guide d'administration](../../operations/admin.md), [entités](../../operations/tenants.md)
+- [Format des secrets](../../architecture/e2e-format.md) (section 3.3), et les guides du [déposant](../../user/fr/depositor.md) et du [destinataire](../../user/fr/recipient.md) pour les secrets à usage unique
 - [Guide de l'admin délégué](../../user/fr/delegated-admin.md) (français), dont
   l'écran « Données personnelles (RGPD) »
 - [Publication d'une version](../../operations/release.md) (guide du mainteneur :

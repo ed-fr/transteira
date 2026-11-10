@@ -570,7 +570,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	secrets, err = secret.New(secret.Deps{
 		Secrets: db.Secrets(vault), Creators: transfers, Scrubber: vault, Files: files, SecurityLog: secLog,
 		Directory: secret.StoreDirectory{DB: db}, Notifier: notifier, Mailer: opsMails,
-	}, secret.Options{Audit: auditLog, OnQuota: quotas.Check, Abuse: detector, Streams: downloads, Logger: logger})
+	}, secret.Options{Audit: auditLog, Usage: usageCounts, OnQuota: quotas.Check, Abuse: detector, Streams: downloads, Logger: logger})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}

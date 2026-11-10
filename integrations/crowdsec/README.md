@@ -67,7 +67,8 @@ The `rate_limited` lines of the download stream limits
 from `ed-fr/transteira-bf`: recipients behind one NAT, or a download manager
 opening parallel connections, reach these limits without any attack. The
 exclusion matches the whole `fields` part of the exact line TransTeira
-writes for them (truncated transfer ID, then the scope, nothing after), so a
+writes for them (truncated transfer ID, which is a `trf_` transfer or, since 2.1, a
+`sec_` one-time secret, then the scope, nothing after), so a
 value forged elsewhere on the line cannot use it to escape a ban. The same
 goes for `scope="drop_link"` (the hourly deposit cap of a permanent drop
 link): it is a limit of the link, not of the client, and counting it would

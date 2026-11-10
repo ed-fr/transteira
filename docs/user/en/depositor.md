@@ -1,6 +1,6 @@
 # Sending files
 
-This service lets you send large files to one or more people: each recipient receives an email with a download link. The files are stored encrypted on the server and deleted automatically when the transfer expires. There is no account to create. Internal users of the organisation send files directly; an external person needs an invitation.
+This service lets you send large files to one or more people: each recipient receives an email with a download link. The files are stored encrypted on the server and deleted automatically when the transfer expires. There is no account to create. Internal users of the organisation send files directly; an external person needs an invitation. The same page also lets you pass on a password, a key or a code as a [one-time secret](topic:secret-share).
 
 ## Who can send files
 
@@ -37,6 +37,8 @@ Sending files takes four steps, described in detail below:
 1. Wait for the [antivirus analysis](topic:deposit-antivirus): the recipients are then notified by email.
 
 What your recipients see is described in [Downloading the files](topic:download).
+
+To pass on a password, a key or a code, use the **Share a secret** tab of the same page instead: see [Share a secret](topic:secret-share).
 
 > **Note** A new entity stays closed until its administrator has finished configuring it. Until then the page shows **Service being set up** and no deposit is possible: come back a little later, or contact your administrator.
 
@@ -226,30 +228,42 @@ Good to know:
 
 To pass on a password, a key or a code, prefer a one-time secret to a file transfer. The secret is encrypted in your browser: the server never sees it in clear. It can be read only once, then it is destroyed; it is also destroyed when it expires, even if nobody has read it.
 
-Once you are identified on the sending page (see [Identify yourself with a code](topic:deposit-identify)), choose the **Share a secret** tab. It only appears if your organisation has turned secrets on.
+Once you are identified on the sending page (see [Identifying yourself with a code](topic:deposit-identify)), choose the **Share a secret** tab. It only appears if your organisation has turned secrets on. The module is on by default for every entity, including those that existed before it was introduced, and your administrator can turn it off. The tab is not offered when you deposit through a [drop link](topic:drop-link) or a reply to a transfer.
 
 ![Share a secret form with the Secret field, the validity, how the link is delivered and the passphrase, with the file choice](../screenshots/en/secret-create.png)
 
 1. Enter the **Secret**: 10,000 characters at most. It can stay empty if you attach a file.
 1. Choose the duration in **Valid for** (from 1 hour to 30 days, depending on the durations your organisation offers).
 1. Say how the recipient gets the link: **I copy the link myself**, or **Send the link by email** to a single address (if your organisation allows it).
-1. Add a **Passphrase** if you wish. The recipient will need it to read the secret, and it is never sent to the server. Give it **through another channel** than the link (phone, text message, in person): when the link is sent by email, a passphrase may be required.
+1. Add a **Passphrase** if you wish. The recipient will need it to read the secret, and it is never sent to the server. Give it **through another channel** than the link (phone, text message, in person): when the link is sent by email, a passphrase may be required. Prefer a long passphrase of several words.
 1. Attach a **File** if needed: a small file only (the maximum size is shown under the field). It is encrypted in your browser, so the antivirus does not scan it; the recipient is told so.
 1. Check **Notify me by email when the secret is read** to get a read receipt. You are also told if the secret expires unread, or is locked after too many wrong passphrases.
 1. Click **Create the secret**.
+
+If the file upload or the sending of the email fails after the secret was created, the form shows **The secret is not finished**. Click **Try again** (nothing is encrypted again) or **Start over**. An unfinished secret is kept for one hour only, then it is purged: if it has expired, the form tells you to create it again.
+
+**Email delivery and the passphrase.** The email holds the full link, key included, and stays in a mailbox. Opening the page alone consumes nothing, but some mail security tools open the links of the messages they scan, and the mailbox can be read by someone other than the recipient. A passphrase, given through another channel, keeps the secret unreadable in these cases. If a secret shows as **Read** while the recipient did not open it, something else probably opened it: the read receipt helps you notice it. Share the secret again, with a passphrase.
 
 With **I copy the link myself**, the **Secret created** screen shows the full link, key included. **This link is shown only once**: click **Copy the link** before leaving this screen: the link is forgotten as soon as you switch to the other tab, create another secret, end the session or leave the page. The copied link can stay in the clipboard history of your device: clear it once you have passed it on. Anyone who has the link can read the secret once, so pass it on through a trusted channel. With delivery by email, the link goes straight to the recipient and is not shown.
 
 ![Secret created screen with the full link shown once and the Copy the link button](../screenshots/en/secret-link-shown.png)
 
+**Read receipt.** The receipt and the notices (expired unread, locked) are sent by email in the default language of your organisation, as best effort: a failure to send does not affect the secret. No receipt is sent when the secret is deleted, by you or by an administrator.
+
+**Keep secrets short-lived.** Once the secret is read, the server destroys its content and its keys. A backup of the server made while the secret was still waiting, however, keeps the encrypted text, and cannot be erased afterwards. What protects the secret then is its key (the end of the link) and the passphrase. So choose the **shortest duration** that suits you, and use a passphrase, especially for delivery by email.
+
+**Invited external people.** If you were invited, you can also share a secret, by email only and only to the person who invited you: the form shows **The link will be sent by email to…** followed by their address, and there is nothing to choose. The tab is absent if your organisation does not allow secrets by email. See [Sending files with an invitation](topic:invitation).
+
+**From a script.** An API token can create secrets through the API (see `docs/api/` in the TransTeira repository). The command-line client `transteira-cli` does not handle secrets.
+
 ### My secrets
 
-In [My transfers](topic:my-transfers), the **My secrets** section lists your secrets, most recent first, with their state (**Pending**, **Available**, **Read**, **Expired**, **Deleted** or **Locked**). Their content is never shown there, and the link cannot be recovered. As long as a secret has not been read, click **Delete**: it is destroyed at once, even if the recipient already has the link.
+In [My transfers](topic:my-transfers), once you have created at least one secret and if your organisation offers secrets, the **My secrets** section lists your secrets, most recent first. For each one it shows the creation date, the delivery (a link to hand over, or the email address), the size of the attached file if any, the state (**Pending**, **Available**, **Read**, **Expired**, **Deleted** or **Locked**), the expiry date and the date of reading. **Pending** is a secret that is not finished (see above). Its content is never shown there, and the link cannot be recovered. As long as a secret has not been read, click **Delete**: it is destroyed at once, even if the recipient already has the link. It stays in the list with the state **Deleted**. You reach it with the same access link as your transfers.
 
 <!-- topic: my-transfers -->
 ## My transfers
 
-Without creating an account, you can manage the transfers you sent: see where they stand, delete them or keep them available longer.
+Without creating an account, you can manage the transfers you sent: see where they stand, delete them or keep them available longer. Your one-time secrets are listed in the same place: see [My secrets](topic:secret-share).
 
 ### Getting your access link
 
@@ -331,6 +345,8 @@ Click **Continue**. You then [identify yourself with a code](topic:deposit-ident
 
 The form then shows **The files will be sent to** followed by the address of the person who invited you: there is no recipient to enter. The rest of the form works as described in [Filling in the transfer](topic:deposit-options).
 
+The page may also offer the **Share a secret** tab: with an invitation, you can pass a secret by email to the person who invited you, and to nobody else. See [Share a secret](topic:secret-share).
+
 If the link does not work:
 
 - **Invitation not found**: the link is incomplete. Copy it entirely from the email, or click it directly.
@@ -353,6 +369,8 @@ If the page says the link was not found, it is incomplete, disabled, revoked or 
 
 To send files automatically (a nightly export, a tool that deposits files), the transfer form is not needed: ask the administrator of your entity for an **API token**. A token lets a script deposit files without a person verifying an address, within the limits the administrator set for it (allowed network addresses and senders).
 
+A token can also create one-time secrets through the API, but the command-line client below does not handle them: see [Share a secret](topic:secret-share).
+
 Your administrator can also give you the command-line client `transteira-cli`, which deposits and downloads from a terminal or a script, with the token, and resumes an interrupted upload by itself. Its binaries are published with each release on GitHub, with a signature to check before running them. The full guide is `docs/api/cli.md` in the TransTeira repository. Never paste a token in a message or a shared document: it gives the same access as a script of your entity.
 
 <!-- topic: deposit-problems -->
@@ -367,13 +385,17 @@ Here are the messages you may meet, and what to do.
 - **The storage space of this service is full. Try again later.**: try again later, or contact your administrator.
 - **Some files are not accepted by this service.**: your organisation has blocked these files; contact your administrator if you think it is a mistake.
 - **Your session has expired. Identify yourself again, then select the same files to resume.**: the upload then continues where it stopped.
+- **You have reached the limit of secrets. Please try again later.**: a person may keep 50 secrets open and create 200 per 24 hours. Delete the secrets you no longer need in [My secrets](topic:secret-share), or wait.
+- **This service does not allow sending to the domain of this address.** (secret by email): your organisation restricts the recipient domains, for secrets as for transfers. Choose **I copy the link myself** or another address.
+- **A passphrase is required for a secret sent by email.**: add a passphrase, and give it through another channel.
+- **The file is too large for a secret.**: a secret holds only a small file, whose maximum size is shown under the field. For a larger file, send a transfer. The files of secrets count in the storage space of your organisation, so a secret can also be refused when it is full.
 
 <!-- topic: maintenance -->
 ## Service under maintenance
 
 The service is sometimes stopped briefly for an update.
 
-The page **Service under maintenance** is shown: new transfers and invitations are suspended, but downloads remain available. An upload in progress is paused and resumes after the maintenance. Come back later.
+The page **Service under maintenance** is shown: new transfers, invitations and secrets are suspended, but downloads remain available. An upload in progress is paused and resumes after the maintenance. Come back later.
 
 ![Page Service under maintenance with a message from the administrator](../screenshots/en/maintenance.png)
 

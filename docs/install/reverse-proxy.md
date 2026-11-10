@@ -50,7 +50,7 @@ detail them; in short:
    archives.
 10. **No capability token in the access log**: the paths `/d/{token}`,
     `/i/{token}`, `/s/{token}`, `/drop/{token}`, `/api/v1/downloads/{token}/…`,
-    `/api/v1/invitations/{token}`, `/api/v1/drop-links/{token}` and `/api/v1/secret-links/{token}` are masked or left out.
+    `/api/v1/invitations/{token}`, `/api/v1/drop-links/{token}` and `/api/v1/secret-links/{token}` are masked or left out. The download of a secret file also sends its one-time grant in the `TransTeira-Secret-Grant` request header: the proxy must not log request headers (Caddy drops them; Nginx, Apache and Traefik do not log them by default).
 
 ## The `proxy` network
 

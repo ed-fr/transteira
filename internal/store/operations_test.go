@@ -647,6 +647,8 @@ func TestTenantUsage(t *testing.T) {
 		}{
 			{a.ID, today, store.UsageCounts{Transfers: 1, BytesUploaded: 100}},
 			{a.ID, today, store.UsageCounts{Downloads: 2, BytesDownloaded: 50, VirusDetections: 1}},
+			{a.ID, today, store.UsageCounts{SecretsCreated: 2}},
+			{a.ID, today, store.UsageCounts{SecretsCreated: 1}},
 			{a.ID, yesterday, store.UsageCounts{Transfers: 3, BytesUploaded: 7}},
 			{a.ID, old, store.UsageCounts{Transfers: 9}},
 			{b.ID, today, store.UsageCounts{Transfers: 5}},
@@ -660,7 +662,9 @@ func TestTenantUsage(t *testing.T) {
 		got, err := repo.Range(ctx, a.ID, yesterday)
 		want := []store.DailyUsage{
 			{Day: yesterday, UsageCounts: store.UsageCounts{Transfers: 3, BytesUploaded: 7}},
-			{Day: today, UsageCounts: store.UsageCounts{Transfers: 1, BytesUploaded: 100, Downloads: 2, BytesDownloaded: 50, VirusDetections: 1}},
+			{Day: today, UsageCounts: store.UsageCounts{
+				Transfers: 1, BytesUploaded: 100, Downloads: 2, BytesDownloaded: 50, VirusDetections: 1, SecretsCreated: 3,
+			}},
 		}
 		if err != nil || !reflect.DeepEqual(got, want) {
 			t.Errorf("Range(A) = %+v, %v", got, err)
@@ -670,7 +674,7 @@ func TestTenantUsage(t *testing.T) {
 		}
 		all, err := repo.RangeAll(ctx, yesterday)
 		wantAll := map[tenant.ID]store.UsageCounts{
-			a.ID: {Transfers: 4, BytesUploaded: 107, Downloads: 2, BytesDownloaded: 50, VirusDetections: 1},
+			a.ID: {Transfers: 4, BytesUploaded: 107, Downloads: 2, BytesDownloaded: 50, VirusDetections: 1, SecretsCreated: 3},
 			b.ID: {Transfers: 5},
 		}
 		if err != nil || !reflect.DeepEqual(all, wantAll) {
@@ -686,8 +690,11 @@ func TestTenantUsage(t *testing.T) {
 		for name, run := range map[string]func() error{
 			"day":      func() error { return repo.Add(ctx, a.ID, fixedNow, store.UsageCounts{Transfers: 1}) },
 			"negative": func() error { return repo.Add(ctx, a.ID, today, store.UsageCounts{Downloads: -1}) },
-			"tenant":   func() error { return repo.Add(ctx, "bad", today, store.UsageCounts{Transfers: 1}) },
-			"range":    func() error { _, err := repo.Range(ctx, "bad", today); return err },
+			"negative secrets": func() error {
+				return repo.Add(ctx, a.ID, today, store.UsageCounts{SecretsCreated: -1})
+			},
+			"tenant": func() error { return repo.Add(ctx, "bad", today, store.UsageCounts{Transfers: 1}) },
+			"range":  func() error { _, err := repo.Range(ctx, "bad", today); return err },
 		} {
 			wantErr(t, "bad "+name, run(), store.ErrInvalid)
 		}

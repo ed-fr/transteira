@@ -21,6 +21,13 @@ type TenantState struct {
 	// TransfersLast24h counts the transfers made available during the last
 	// 24 hours.
 	TransfersLast24h int64
+	// SecretFileBytes sums the declared sizes of the stored one-time secret
+	// files, counted in StorageUsedBytes (since 2.1).
+	SecretFileBytes int64
+	// SecretsCreatedLast24h, SecretsReadLast24h and SecretsLockedLast24h
+	// count the one-time secrets created, read and locked during the last
+	// 24 hours, among the secret rows still present (since 2.1).
+	SecretsCreatedLast24h, SecretsReadLast24h, SecretsLockedLast24h int64
 }
 
 // InstanceState is what the collector reads from the database and the
@@ -46,11 +53,18 @@ type StateReader interface {
 }
 
 // Usage is an increment of the per-tenant counters, mirroring the daily
-// usage aggregate (store.UsageCounts) recorded at the same place.
+// usage aggregate (store.UsageCounts) recorded at the same place. The
+// one-time secrets read and locked have no daily aggregate: they are only
+// counted in memory.
 type Usage struct {
 	Transfers       int64
 	UploadedBytes   int64
 	Downloads       int64
 	DownloadedBytes int64
 	VirusDetections int64
+	// SecretsCreated, SecretsRead and SecretsLocked count the one-time
+	// secrets created, read and locked after wrong proofs (since 2.1).
+	SecretsCreated int64
+	SecretsRead    int64
+	SecretsLocked  int64
 }

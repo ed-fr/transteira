@@ -14,7 +14,13 @@
 //   - downloads: the download starts of a file (a GET without Range, or
 //     with a range starting at 0) or of the archive, never HEAD requests;
 //   - bytes downloaded: the clear bytes served;
-//   - virus detections: the files found infected.
+//   - virus detections: the files found infected;
+//   - one-time secrets created (since 2.1): the secrets created during the
+//     period (the secret.created audit event, pending ones included),
+//     whatever happened to them afterwards. Secrets created before the
+//     migration 0035 are not counted.
+//
+// The storage used includes the stored files of the one-time secrets.
 //
 // The days are UTC days. The 7d and 30d periods are broken down by day (7
 // and 30 points, today included), the 12m period by calendar month (12
@@ -101,7 +107,8 @@ type Point struct {
 // Storage is the current storage of a tenant.
 type Storage struct {
 	// UsedBytes is the storage used: the declared sizes of the transfers
-	// uploading, scanning or available.
+	// uploading, scanning or available and of the stored one-time secret
+	// files.
 	UsedBytes int64
 	// QuotaBytes is the storage quota.
 	QuotaBytes int64
@@ -148,6 +155,8 @@ type TenantRow struct {
 	// Transfers and BytesUploaded are the totals over the period.
 	Transfers     int64
 	BytesUploaded int64
+	// SecretsCreated counts the one-time secrets created over the period.
+	SecretsCreated int64
 	// Storage is the current storage.
 	Storage
 }
@@ -172,6 +181,7 @@ type repo interface {
 	usageAll(ctx context.Context, fromDay time.Time) (map[tenant.ID]store.UsageCounts, error)
 	scanQueueFiles(ctx context.Context) (int64, error)
 	activeCounts(ctx context.Context, since time.Time) (map[tenant.ID]store.TenantTransferCounts, error)
+	secretCounts(ctx context.Context, since time.Time) (map[tenant.ID]store.TenantSecretCounts, error)
 }
 
 // Compile-time check: the service is the state reader of the collector.
@@ -338,7 +348,7 @@ func (s *Service) GlobalStats(ctx context.Context, p adminauth.Principal, period
 		u := usage[t.ID]
 		out.Tenants = append(out.Tenants, TenantRow{
 			TenantID: t.ID, Name: t.Name, Transfers: u.Transfers, BytesUploaded: u.BytesUploaded,
-			Storage: storage(used[t.ID], t.StorageQuotaBytes),
+			SecretsCreated: u.SecretsCreated, Storage: storage(used[t.ID], t.StorageQuotaBytes),
 		})
 	}
 	return out, nil
@@ -348,7 +358,8 @@ func (s *Service) GlobalStats(ctx context.Context, p adminauth.Principal, period
 // collector (metricstate.StateReader): the disk, the disk alert, the files
 // waiting for the antivirus and one row per active tenant, sorted by ID,
 // with its storage, its available transfers and those made available during
-// the last 24 hours.
+// the last 24 hours, and its one-time secret figures (stored file bytes,
+// secrets created, read and locked during the last 24 hours).
 //
 // It takes no principal: it is reserved to the collector of the metrics and
 // the status, which expose it behind the monitoring token and never to an
@@ -381,16 +392,23 @@ func (s *Service) InstanceState(ctx context.Context) (metricstate.InstanceState,
 	if err != nil {
 		return metricstate.InstanceState{}, fmt.Errorf("stats: read storage used: %w", err)
 	}
-	counts, err := s.repo.activeCounts(ctx, s.now().Add(-24*time.Hour))
+	since := s.now().Add(-24 * time.Hour)
+	counts, err := s.repo.activeCounts(ctx, since)
 	if err != nil {
 		return metricstate.InstanceState{}, fmt.Errorf("stats: count transfers: %w", err)
 	}
+	secrets, err := s.repo.secretCounts(ctx, since)
+	if err != nil {
+		return metricstate.InstanceState{}, fmt.Errorf("stats: count secrets: %w", err)
+	}
 	out.Tenants = make([]metricstate.TenantState, 0, len(tenants))
 	for _, t := range tenants {
-		c := counts[t.ID]
+		c, sc := counts[t.ID], secrets[t.ID]
 		out.Tenants = append(out.Tenants, metricstate.TenantState{
 			ID: string(t.ID), Name: t.Name, StorageUsedBytes: used[t.ID], StorageQuotaBytes: t.StorageQuotaBytes,
 			ActiveTransfers: c.Active, TransfersLast24h: c.MadeAvailableSince,
+			SecretFileBytes: sc.FileBytes, SecretsCreatedLast24h: sc.CreatedSince, SecretsReadLast24h: sc.ReadSince,
+			SecretsLockedLast24h: sc.LockedSince,
 		})
 	}
 	slices.SortFunc(out.Tenants, func(a, b metricstate.TenantState) int { return strings.Compare(a.ID, b.ID) })
@@ -424,6 +442,7 @@ func add(a, b store.UsageCounts) store.UsageCounts {
 		Downloads:       a.Downloads + b.Downloads,
 		BytesDownloaded: a.BytesDownloaded + b.BytesDownloaded,
 		VirusDetections: a.VirusDetections + b.VirusDetections,
+		SecretsCreated:  a.SecretsCreated + b.SecretsCreated,
 	}
 }
 

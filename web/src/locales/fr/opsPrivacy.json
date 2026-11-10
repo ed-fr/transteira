@@ -21,6 +21,7 @@
     "auditEvents": "Entrées du journal d’audit",
     "proofs": "Preuves de dépôt et de remise",
     "dropLinks": "Liens de dépôt permanents citant l’adresse",
+    "secrets": "Secrets à usage unique créés ou reçus",
     "securityNote": "Le journal de sécurité n’enregistre jamais d’adresse mail : il n’y a rien à y effacer."
   },
   "erase": {
@@ -35,6 +36,7 @@
       "invitations": "les invitations qu’elle a reçues sont supprimées ; celles qu’elle a émises sont révoquées ;",
       "proofs": "les preuves de dépôt et de remise dont la déclaration signée nomme l’adresse ;",
       "dropLinks": "l’adresse est retirée des destinataires des liens de dépôt permanents, et un lien resté sans destinataire est désactivé ;",
+      "secrets": "les secrets à usage unique créés par l’adresse ou qui lui sont envoyés : supprimés avec leur contenu ;",
       "audit": "le journal d’audit : l’adresse est remplacée par un pseudonyme (erased-…)."
     },
     "keptIntro": "Ce qui est conservé volontairement :",
@@ -62,6 +64,7 @@
     "proofsDeleted": "Preuves supprimées",
     "dropLinksUpdated": "Liens de dépôt mis à jour",
     "dropLinksDisabled": "Liens de dépôt désactivés (plus de destinataire)",
+    "secretsDeleted": "Secrets à usage unique supprimés",
     "auditHint": "L’effacement est enregistré dans le journal d’audit sans l’adresse ; son pseudonyme figure dans l’objet de l’entrée.",
     "auditLink": "Voir dans le journal d’audit",
     "newSearch": "Nouvelle recherche"

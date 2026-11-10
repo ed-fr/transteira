@@ -1,7 +1,7 @@
 # GDPR record of processing activities: file transfer service
 
 Template for the record of processing activities (GDPR, article 30) of an
-organisation that operates **TransTeira 2.0**. It is pre-filled from what the
+organisation that operates **TransTeira 2.1**. It is pre-filled from what the
 software does (data model, cleanup task, administration screens). Everything
 that only the organisation can decide is marked `<to be completed>`.
 
@@ -33,6 +33,7 @@ Français : [docs/compliance/fr/gdpr-processing-record.md](fr/gdpr-processing-re
 - Protect the service and the data: access control, antivirus analysis,
   abuse detection, audit and security logs.
 - Prove a deposit or a delivery in case of dispute (signed statements).
+- Share one-time secrets (since 2.1): a text of at most 10 000 characters and an optional file, encrypted in the browser, readable once, with a limited lifetime.
 - Administer the service (administrator and auditor accounts).
 
 ## 3. Legal basis (article 6)
@@ -44,6 +45,7 @@ Choose one basis per purpose and delete the others.
 | File transfer between users and invited third parties | Legitimate interest (art. 6.1.f) / performance of a contract (art. 6.1.b) | `<to be completed>` |
 | Security, audit and security logs, abuse detection | Legitimate interest (art. 6.1.f) / legal obligation (art. 6.1.c) | `<to be completed>` |
 | Proofs of deposit and delivery | Legitimate interest (art. 6.1.f) / contract (art. 6.1.b) | `<to be completed>` |
+| One-time secrets (2.1) | Legitimate interest (art. 6.1.f) / performance of a contract (art. 6.1.b) | `<to be completed>` |
 | Administration of the service | Legitimate interest (art. 6.1.f) | `<to be completed>` |
 
 TransTeira never asks for consent and uses no consent-based processing.
@@ -58,6 +60,8 @@ TransTeira never asks for consent and uses no consent-based processing.
 | Depositors through a permanent drop link | External people who deposit to a service (drop link), after verifying their address. |
 | Administrators | Super admin and delegated admins. |
 | Auditors | Read-only accounts (RSSI, auditors). |
+| Creators of one-time secrets (2.1) | Internal users, invited external people and the senders declared by an API token, who create a secret. |
+| Recipients of an e-mailed secret (2.1) | People to whom a secret is sent by e-mail. |
 | Other people named in free text | People mentioned in a transfer message, in a file name or in an abuse report. |
 
 ## 5. Categories of personal data
@@ -69,6 +73,8 @@ TransTeira never asks for consent and uses no consent-based processing.
 | File names, sizes and SHA-256 fingerprints | Of each deposited file; the names are free text chosen by the sender. | Database; fingerprints are also in notification emails and proofs. |
 | Transfer messages | Optional free text of the sender. | Database. |
 | File content | May contain any data, including sensitive data. Encrypted on disk (AES-256-GCM, one key per file). For an end-to-end encrypted transfer, the browser encrypts and the server never holds the key, so **the operator cannot read it**; antivirus analysis is then impossible and the download page says so. | Data volume (encrypted); keys, wrapped by the master key, in the database. |
+| One-time secret content (2.1) | The text (at most 10 000 characters) and the optional file of a secret. Zero knowledge: the browser seals them, the key stays in the link fragment and only SHA-256 verifiers are stored, so **the operator cannot read them**, except when the e-mail delivery carries the key in the link of a secret without a passphrase (see section 7). Never scanned by the antivirus. | Database (sealed text); data volume (sealed file); keys, wrapped by the master key, in the database. |
+| One-time secret metadata (2.1) | Creator address, recipient address (e-mail delivery only), creator kind, delivery, dates, state, end reason, declared file size, choice of a read receipt. Read receipts are mails to the creator. | Database. |
 | Transfer events | Dates of deposit, first download, downloads per recipient and per file (per-recipient links). | Database. |
 | Verification state | Codes (stored as a MAC, never in clear), attempts, deposit sessions, date of the last use of a verified address. | Database. |
 | Audit log | Time, tenant, actor (address or administrator), IP, action, object. | Database. |
@@ -88,7 +94,7 @@ controller decides, in its acceptable-use rules, what may be sent
 
 | Recipient | Detail |
 |---|---|
-| Internal | Sender and recipients of each transfer; delegated admins of the entity (metadata, never file content: decision P18); auditors (read-only); super admin. |
+| Internal | Sender and recipients of each transfer; delegated admins of the entity (metadata, never file content: decision P18; for one-time secrets, the metadata including the recipient address, never the content); auditors (read-only, the list of secrets); super admin. The creator of a secret receives its read receipts. |
 | Processors and service providers | See section 7. |
 | Third parties by law | `<to be completed>` (authorities, on legal request) |
 
@@ -104,7 +110,7 @@ threat T-245).
 | Processor or service | Role | Data concerned | Location | Contract (art. 28) | Transfer outside the EU and safeguards |
 |---|---|---|---|---|---|
 | Hosting of the VM and its backups | Runs the service and the backups | All data (files are encrypted at rest) | `<to be completed>` | `<to be completed>` | `<to be completed>` |
-| SMTP relay (for example Microsoft 365 or another relay) | Sends the emails of the service | Recipient and sender addresses, email content (links, fingerprints, messages) | `<to be completed>` | `<to be completed>` | `<to be completed>` |
+| SMTP relay (for example Microsoft 365 or another relay) | Sends the emails of the service | Recipient and sender addresses, email content (links, fingerprints, messages). **Secret mails contain the decryption link: the mail chain can read a secret that has no passphrase** (T-362, H21) | `<to be completed>` | `<to be completed>` | `<to be completed>` |
 | OpenID Connect provider (for example Microsoft Entra ID), if single sign-on is used | Authenticates administrators and auditors | Administrator identity (email, `sub`) | `<to be completed>` | `<to be completed>` | `<to be completed>` |
 | Webhook destinations (Teams, Slack, generic), if used | Receive alerts | Minimal alert payload by default (decision P31) | `<to be completed>` | `<to be completed>` | `<to be completed>` |
 | Remote antivirus engine (ICAP, HTTP API), if used | Analyses the files | File content in transit, in clear to the engine | `<to be completed>` | `<to be completed>` | `<to be completed>` |
@@ -128,6 +134,7 @@ last column says where.
 | Verified addresses | Deleted after **12 months** without use; the address must then be verified again. | No |
 | Invitations | Valid 12 months from creation or last use; inactive invitations purged afterwards. | An admin can revoke an invitation at any time. |
 | Permanent drop links | Expired or revoked links are purged 12 months afterwards, once their transfers are deleted. | An admin can disable, revoke or give an expiry date. |
+| One-time secrets (2.1) | Pending (unfinished) secrets are deleted after **1 hour**, with no tombstone. An active secret lasts until the duration chosen by its creator (1 hour to 30 days, from the list offered by the entity), until it is read, deleted, or locked after 5 wrong passphrases. The key of its file is destroyed at the first complete download or 10 minutes after the reveal. A tombstone (addresses, dates, state, file size; no content, no verifier, no salt) is purged **30 days** after the end. Audit entries `secret.*`: 12 months. | The durations offered per entity (secret settings). Not the purge delays. |
 | Verification codes | Deleted after use or expiry (rate-limit rows are kept one hour). | No |
 | Deposit sessions, password failure counters, "My transfers" access links | Purged after their short validity (hours). | Deposit session length: `TT_DEPOSIT_SESSION_TTL`. |
 | Audit log | **12 months**, then purged. No edit or delete through the application, except the pseudonymisation of an erasure. | No |
@@ -151,11 +158,11 @@ and no third-party cookie, so no consent banner is needed. Cookies prefixed
 
 | Cookie | Purpose | Duration |
 |---|---|---|
-| `__Host-tt_deposit` | Deposit session after address verification | Session validity (4 hours by default) |
+| `__Host-tt_deposit` | Deposit session after address verification (also used to create a one-time secret) | Session validity (4 hours by default) |
 | `__Host-tt_known` | Recognition of an already verified address | Up to 12 months |
 | `__Host-tt_dl` | Grant after a correct transfer password | 1 hour |
 | `__Host-tt_rv` | Verification of a recipient on their link | 1 hour |
-| `__Host-tt_me` | "My transfers" session | 1 hour |
+| `__Host-tt_me` | "My transfers" session (also lists "My secrets") | 1 hour |
 | `__Host-tt_admin` | Administration session | Idle 30 min, maximum 12 h by default |
 | `__Host-tt_oidc` | Single sign-on flow in progress | 10 minutes, one use |
 | `tt_theme` | Light or dark theme chosen by the user (written by the browser, never read by the server) | 1 year |
@@ -172,7 +179,7 @@ portability are handled by the controller. TransTeira provides:
   and erases it. Effects: verified address, codes and sessions deleted;
   transfers sent by the address made unreadable and deleted; address removed
   from received transfers (a transfer left without recipient is deleted);
-  invitations deleted or revoked; proofs naming the address deleted; the
+  one-time secrets created or received by the address deleted with their content (counted as `secrets` by the search and `secretsDeleted` by the erasure); invitations deleted or revoked; proofs naming the address deleted; the
   address replaced by a pseudonym in the audit log (decision P19). The
   erasure ends with an erasure report that can be kept as evidence.
 - **What is kept on purpose**: blocklist entries, addresses in the allowed
@@ -203,6 +210,16 @@ at most ([master key](../operations/master-key.md#crypto-erase),
 [backup](../operations/backup.md), decision P25). State the retention you
 apply: `<to be completed>`.
 
+**One-time secrets (2.1).** A copy taken while a secret was live keeps its
+sealed text, its wrapped key, its verifiers and its passphrase salt. With the
+master key, what remains is the ciphertext made in the browser, protected
+only by the key in the link fragment and by the passphrase: whoever holds
+that copy, the master key and the link (an old e-mail, for an e-mailed
+secret) can read a secret without a passphrase. Short durations, a
+passphrase sent through another channel, and a master key rotation followed
+by the destruction of the old key reduce this ([backup](../operations/backup.md#crypto-erase-and-copies),
+data model D3, T-355, decision P71).
+
 ## 12. Security measures (article 32)
 
 Summary; the full mapping is in the [ISO/IEC 27001 Annex A document](iso27001-annex-a.md).
@@ -211,7 +228,9 @@ Summary; the full mapping is in the [ISO/IEC 27001 Annex A document](iso27001-an
   access layer and, with PostgreSQL, row-level security (T-74 to T-79).
 - **Encryption at rest**: AES-256-GCM by chunks, one key per file wrapped by
   the master key; master key kept outside the data volume; rotation without
-  rewriting files; optional end-to-end encryption in the browser.
+  rewriting files; optional end-to-end encryption in the browser; one-time
+  secrets encrypted in the browser (the server never sees the content), read
+  once, locked after 5 wrong passphrases.
 - **Encryption in transit**: TLS at the reverse proxy (operator).
 - **Access control**: administrators with argon2id password and mandatory
   TOTP for the super admin; optional OpenID Connect; delegated admins limited to
@@ -223,7 +242,8 @@ Summary; the full mapping is in the [ISO/IEC 27001 Annex A document](iso27001-an
   trusted proxies, IP ranges per entity.
 - **Antivirus** analysis of every file (ClamAV, ICAP or HTTP engine).
 - **Minimisation and masking**: no file content or addresses in the security
-  log; secrets hashed or sealed, never logged; statements without IP.
+  log; secrets hashed or sealed, never logged; tokens of the one-time secret
+  links redacted in the proxy logs; statements without IP.
 - **Traceability**: audit log, security log (fail2ban and CrowdSec), syslog
   export, metrics.
 - **Resilience**: nightly database copy, documented restore.

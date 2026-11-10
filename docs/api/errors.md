@@ -30,10 +30,10 @@ Some codes carry extension members:
 
 | Member | Used by | Meaning |
 |---|---|---|
-| `errors` | `validation-failed` | List of `{field, code, allowed?, line?, column?, message?}` objects, one per invalid field. `field` is the JSON pointer (RFC 6901) of the field in the request body, such as `/recipients/0` or `/files/2/name`, or the name of a header (`Idempotency-Key`) or query parameter (`confirm`). For a mail template (`code: invalid-template`), `field` names the part (`/subject`, `/bodyHtml` or `/bodyText`), `line` and `column` (1-based, the column in characters) locate the problem when it has a position, and `message` explains it in English. |
+| `errors` | `validation-failed`, and since 2.1 `secret-format-invalid` (for example field `/encryptedText`, code `invalid-format`), `secret-duration-not-offered` (`/expiresIn`, code `not-allowed`, with `allowed`) and `recipient-domain-refused` | List of `{field, code, allowed?, line?, column?, message?}` objects, one per invalid field. `field` is the JSON pointer (RFC 6901) of the field in the request body, such as `/recipients/0` or `/files/2/name`, or the name of a header (`Idempotency-Key`) or query parameter (`confirm`). For a mail template (`code: invalid-template`), `field` names the part (`/subject`, `/bodyHtml` or `/bodyText`), `line` and `column` (1-based, the column in characters) locate the problem when it has a position, and `message` explains it in English. |
 | `attemptsRemaining` | `verification-code-invalid`, `transfer-password-invalid`, `secret-proof-invalid` | Number of attempts left before lockout or invalidation. |
 | `retryAfterSeconds` | `rate-limited`, `secret-limit-reached` (24-hour creation count only), `transfer-locked`, `maintenance`, `state-conflict` (admin deletion of a transfer being uploaded, GDPR erasure blocked by an upload in progress) | Seconds to wait before retrying; the `Retry-After` header carries the same value. |
-| `maxTransferBytes` | `transfer-too-large`, `secret-file-too-large` | Per-transfer size limit of the entity, in bytes. |
+| `maxTransferBytes` | `transfer-too-large`, `secret-file-too-large` | Size limit in bytes: the per-transfer limit of the entity, or for `secret-file-too-large` the secret file limit (`features.secrets.fileMaxBytes`). |
 | `files` | `upload-incomplete`, `checksum-mismatch` | Identifiers of the files concerned. |
 | `reason` | `secret-gone` | Since 2.1. Why the secret ended: `read`, `expired`, `deleted` or `locked`. |
 
@@ -51,7 +51,8 @@ use to ban the client IP.
 - **HTTP status:** 400 Bad Request
 - **Meaning:** the request is malformed (invalid JSON, wrong type) or a field is invalid.
   The `errors` member lists each invalid field with a reason code and, when relevant, the
-  accepted values (for example `expiryDays` with `allowed: [1, 7, 30]`). Since 1.1, on
+  accepted values (for example `expiryDays` with `allowed: [1, 7, 30]`). Since 2.1, a missing or malformed `TransTeira-Secret-Grant` header on
+  `GET /secret-links/{secretToken}/file` is also `400` (field `TransTeira-Secret-Grant`), not `404`. Since 1.1, on
   transfer creation: `maxDownloads` outside 1 to 1000 and `recipientVerification: true` (not
   offered until per-recipient links are available) are reported as `not-allowed`, a malformed
   `confidentialityLevel` as `invalid-format` and an unknown one as `not-allowed`. A file name
@@ -127,7 +128,7 @@ use to ban the client IP.
 - **Typical endpoints:** `POST /admin/auth/login`, `POST /admin/auth/totp`,
   `POST /admin/me/totp` (from an authenticated session), `POST /admin/me/totp/confirm`,
   `PUT /admin/me/password`, `DELETE /admin/me/totp`, `POST /admin/system/master-key/rotations`,
-  any endpoint called with an API token.
+  any endpoint called with an API token (since 2.1 also `POST /secrets` and its file and send operations).
 - **What to do:** check the credentials. Repeated failures lead to `rate-limited` and may get
   the client IP banned.
 
@@ -156,7 +157,7 @@ use to ban the client IP.
   `Origin` header is present and differs from `https://<entity host>` (`https://<admin host>`
   on the admin host), or when its `Sec-Fetch-Site` header is present and is not `same-origin`.
   These two header checks alone (no token yet) also protect `POST /admin/setup`,
-  `POST /admin/auth/login`, `POST /admin/activation` and `POST /downloads/{linkToken}/unlock`.
+  `POST /admin/auth/login`, `POST /admin/activation`, `POST /downloads/{linkToken}/unlock` and, since 2.1, `POST /secret-links/{secretToken}/reveal` (a refusal there comes before any proof is read, so nothing is counted). Requests without these headers (scripts) are not affected, and no CSRF token is needed. With a deposit session, the secret creator operations (`POST /secrets`, `PUT /secrets/{secretId}/file`, `POST /secrets/{secretId}/send`, `DELETE /me/secrets/{secretId}`) also need the `X-CSRF-Token` header.
 - **What to do:** send the `csrfToken` returned in the session payload in the `X-CSRF-Token`
   header; reload the page to obtain a fresh one, then retry. On the admin host, the token is
   derived from the session with a key of the current master key: after a master key rotation
@@ -177,7 +178,7 @@ use to ban the client IP.
   `POST /transfers/{transferId}/finalize`).
 - **Typical endpoints:** `POST /deposit-sessions`,
   `POST /verification-challenges/{challengeId}/confirm`, `POST /transfers`, `POST /invitations`,
-  `POST /transfers/{transferId}/finalize` (API token).
+  `POST /transfers/{transferId}/finalize` (API token), and since 2.1 `POST /secrets` (deposit sessions of a drop link or a reply are refused too; with a token, the `senderEmail` rules above).
 - **What to do:** deposit from the internal network with an internal address, or ask an internal
   user for an invitation. With an API token, use a sender address of an internal domain allowed
   by the token, or ask an admin to update the token's `allowedSenders`.
@@ -191,7 +192,8 @@ use to ban the client IP.
   body.
 - **Typical endpoints:** any endpoint called with an API token: `POST /transfers`,
   `GET` and `DELETE /transfers/{transferId}`, `POST /transfers/{transferId}/finalize`, and
-  `HEAD`, `PATCH` and `DELETE /uploads/{uploadId}`.
+  `HEAD`, `PATCH` and `DELETE /uploads/{uploadId}`, and since 2.1 `POST /secrets`,
+  `PUT /secrets/{secretId}/file` and `POST /secrets/{secretId}/send`.
 - **What to do:** call from an allowed address, or ask an admin to update the token's allowed
   ranges.
 
@@ -250,6 +252,11 @@ use to ban the client IP.
   answers it too. The public branding images answer `not-found` for a logo
   the entity has not configured (the background falls back to the default image), and a legal
   document the entity has written in neither the negotiated nor its default language.
+  Since 2.1, for one-time secrets: the token of a pending secret answers like an unknown one; a
+  grant (`TransTeira-Secret-Grant`) that is well-formed but wrong, already used or expired, or a
+  secret without a file, answers `not-found` with no security event (a missing or malformed
+  grant is `400 validation-failed`); a `secretToken` in `send` that is not the token of this
+  secret; and a secret created with a token answers it to a session, and the reverse.
 - **Typical endpoints:** any endpoint with an identifier in its path, `/admin/*` on an entity
   host, `POST /admin/activation`.
 - **What to do:** check the identifier or link. Do not retry unchanged.
@@ -325,7 +332,9 @@ use to ban the client IP.
   running, rotation between other keys unfinished, restart required); it never names a key.
   `GET /admin/system/master-key` reports the same state.
 - **Typical endpoints:** `POST /transfers`, `DELETE /transfers/{transferId}`,
-  `POST /transfers/{transferId}/finalize`,
+  `POST /transfers/{transferId}/finalize`, and since 2.1 `PUT /secrets/{secretId}/file` and
+  `POST /secrets/{secretId}/send` (secret not pending, file already uploaded, secret already
+  sent, send on a link-delivery secret, or a concurrent file upload),
   `DELETE /admin/tenants/{tenantId}/transfers/{transferId}`,
   `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`,
   `POST /downloads/{linkToken}/abuse-reports`,
@@ -378,7 +387,7 @@ use to ban the client IP.
   5 MiB or a background image above 10 MiB), or an image whose dimensions exceed the limits of
   its kind or whose decoding and re-encoding would need more than 320 MiB (both checked before
   decoding; see `docs/operations/tenants.md` for the resulting limits per format).
-- **Typical endpoints:** `PUT /admin/tenants/{tenantId}/branding/{asset}`.
+- **Typical endpoints:** `PUT /admin/tenants/{tenantId}/branding/{asset}`, and since 2.1 `PUT /secrets/{secretId}/file` (a body above 25 MiB + 1 byte).
 - **What to do:** send a smaller body.
 
 ### range-not-satisfiable
@@ -404,7 +413,7 @@ use to ban the client IP.
 - **HTTP status:** 507 Insufficient Storage
 - **Meaning:** the storage quota of the entity is reached. New deposits are blocked until space
   is freed by expiration or deletion; the administrators are notified.
-- **Typical endpoints:** `POST /transfers`.
+- **Typical endpoints:** `POST /transfers`, and since 2.1 `POST /secrets` (the declared file counts in the quota).
 - **What to do:** try again later, or contact the administrators of the service.
 
 ### rate-limited
@@ -433,14 +442,15 @@ use to ban the client IP.
   20 at once, then one every 3 seconds), the SMTP tests of an entity (5 per administrator
   and entity within 10 minutes), and the notification resends of a transfer (5 per hour per
   transfer, whoever the administrator), and abuse reports (3 per day per recipient link,
-  5 per hour per client IP).
+  5 per hour per client IP). Since 2.1, the secret links: 30 status or reveal requests per minute per client, and 10 failures (unknown token, wrong key proof) within 15 minutes lock that client for 15 minutes (scopes `secret_link_ip` and `secret_link`), and the number of simultaneous secret file streams is capped.
 - **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`, `POST /invitations`,
   `POST /transfers`, `GET /downloads/{linkToken}/files/{fileId}`,
   `GET /downloads/{linkToken}/archive`, `POST /admin/auth/login`, `POST /admin/auth/totp`,
   `POST /admin/setup`, `POST /admin/activation`, `POST /admin/me/totp/confirm`,
   `PUT /admin/me/password`, `POST /admin/tenants/{tenantId}/smtp/test`,
   `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`,
-  `POST /admin/system/master-key/rotations`.
+  `POST /admin/system/master-key/rotations`, `GET /secret-links/{secretToken}` and
+  `POST /secret-links/{secretToken}/reveal`.
 - **What to do:** wait for `Retry-After` (`retryAfterSeconds`) seconds before retrying. Scripts
   must not retry in a tight loop.
 
@@ -460,7 +470,8 @@ use to ban the client IP.
   same message as `maintenanceMessage` and its language as `maintenanceMessageLanguage`, to mark
   the message up (for example the HTML `lang` attribute).
 - **Typical endpoints:** `POST /deposit-sessions`, `POST /transfers`,
-  `PATCH /uploads/{uploadId}`, `POST /transfers/{transferId}/finalize`, `POST /invitations`.
+  `PATCH /uploads/{uploadId}`, `POST /transfers/{transferId}/finalize`, `POST /invitations`, and since 2.1 `POST /secrets`,
+  `PUT /secrets/{secretId}/file` and `POST /secrets/{secretId}/send`.
 - **What to do:** retry after `Retry-After`; show `detail` (as text, never as HTML) to the user.
 
 ### mail-unavailable
@@ -475,7 +486,8 @@ use to ban the client IP.
   (see `system-smtp-unavailable`). In the administration, only the resend of
   a transfer notification answers it, when no SMTP server is configured for the entity.
 - **Typical endpoints:** `POST /deposit-sessions`, `POST /invitations`,
-  `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`.
+  `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`, and since 2.1
+  `POST /secrets/{secretId}/send` (the secret stays `pending`: send again).
 - **What to do:** retry later. If the error persists, contact the administrators of the service:
   the SMTP settings of the entity are probably missing.
 
@@ -524,7 +536,7 @@ use to ban the client IP.
 - **HTTP status:** 403 Forbidden
 - **Since:** 1.1.
 - **Meaning:** at least one recipient is refused by the recipient domain rules of the entity (a denied domain, or a domain outside a non-empty allow list). Each refused recipient is named in `errors` (`/recipients/<index>`, code `domain-denied`).
-- **Typical endpoints:** `POST /transfers`.
+- **Typical endpoints:** `POST /transfers`, and since 2.1 `POST /secrets` (field `/recipient`; the event is audited as `transfer.recipient_refused` with `details.object` `secret`).
 - **What to do:** remove or replace the refused recipients.
 
 ### confidentiality-rule-violated
@@ -587,8 +599,8 @@ use to ban the client IP.
 
 - **HTTP status:** 503 Service Unavailable
 - **Since:** 1.2.
-- **Meaning:** the entity is still being configured by its administrators (`setupState: setup` in `GET /tenant`): every public operation of the entity is refused (deposits, verification codes, invitations, transfers and uploads, including with an API token, which is refused before it is checked, downloads, replies and "my transfers"; no transfer exists while in setup), except the entity information (`GET /tenant`), its images (`GET /tenant/assets/{asset}`) and its legal texts (`GET /tenant/legal/{document}`). Unlike `maintenance`, the answer carries no `Retry-After`: the end of the setup depends on the administrators; maintenance is checked first. The tus operations (`OPTIONS`, `HEAD`, `PATCH`, `DELETE` on `/uploads`) get a bodyless `503`.
-- **Typical endpoints:** `POST /deposit-sessions`, `POST /transfers`, `POST /transfers/{transferId}/finalize`, `PATCH /uploads/{uploadId}`, `POST /invitations`, `POST /downloads/{linkToken}/reply`.
+- **Meaning:** the entity is still being configured by its administrators (`setupState: setup` in `GET /tenant`): every public operation of the entity is refused (deposits, verification codes, invitations, transfers and uploads, including with an API token, which is refused before it is checked, downloads, replies, "my transfers", one-time secrets and secret links; no transfer exists while in setup), except the entity information (`GET /tenant`), its images (`GET /tenant/assets/{asset}`) and its legal texts (`GET /tenant/legal/{document}`). Unlike `maintenance`, the answer carries no `Retry-After`: the end of the setup depends on the administrators; maintenance is checked first. The tus operations (`OPTIONS`, `HEAD`, `PATCH`, `DELETE` on `/uploads`) get a bodyless `503`.
+- **Typical endpoints:** `POST /deposit-sessions`, `POST /transfers`, `POST /transfers/{transferId}/finalize`, `PATCH /uploads/{uploadId}`, `POST /invitations`, `POST /downloads/{linkToken}/reply`, `POST /secrets`, `GET /secret-links/{secretToken}`.
 - **What to do:** try again once the entity is open; administrators complete the setup with `POST /admin/tenants/{tenantId}/setup/complete`.
 
 ### setup-incomplete
@@ -659,7 +671,7 @@ use to ban the client IP.
 
 - **HTTP status:** 403 Forbidden
 - **Since:** 2.0.
-- **Meaning:** an admin with the read-only `auditor` role called an operation outside its read-only list: any write (`POST`, `PUT`, `PATCH`, `DELETE`), a configuration read of one of its tenants (SMTP, API tokens, webhooks, blocklist, network rules, templates, legal texts, data subjects, abuse reports, invitations, export…), or an instance or account operation. Reads of a tenant the auditor is not attached to stay `404 not-found`. An auditor may not search by e-mail address either: the `email` filter of the transfer list and an `actor` filter holding `@` on the audit log are refused.
+- **Meaning:** an admin with the read-only `auditor` role called an operation outside its read-only list: any write (`POST`, `PUT`, `PATCH`, `DELETE`), a configuration read of one of its tenants (SMTP, API tokens, webhooks, blocklist, network rules, templates, legal texts, data subjects, abuse reports, invitations, export…), or an instance or account operation. Reads of a tenant the auditor is not attached to stay `404 not-found`. Since 2.1 this includes the `sender` filter of the secret list (`listTenantSecrets`) and the one-time secrets settings (`GET` and `PUT /admin/tenants/{tenantId}/secret-settings`). An auditor may not search by e-mail address either: the `email` filter of the transfer list and an `actor` filter holding `@` on the audit log are refused.
 - **Typical endpoints:** every write operation of `/admin/tenants/{tenantId}/...`, the configuration reads of a tenant, `/admin/admins` and `/admin/system/...`.
 - **What to do:** use an account with a delegated admin or super admin role.
 
@@ -861,7 +873,7 @@ use to ban the client IP.
 - **Since:** 2.1.
 - **Meaning:** the creator (an address, or an API token) reached 50 active or pending secrets, or 200 creations in a rolling 24 hours. `Retry-After` (and `retryAfterSeconds`) carries the delay for the 24-hour count only; it is absent when the 50 open secrets are reached, since they free up when read, expired or deleted, at no predictable time.
 - **Typical endpoints:** `POST /secrets`.
-- **What to do:** wait for secrets to be read or to expire, delete the ones no longer needed (`DELETE /me/secrets/{secretId}`), or retry after the delay.
+- **What to do:** wait for secrets to be read or to expire, delete the ones no longer needed (`DELETE /me/secrets/{secretId}`, with a "my transfers" session and its own CSRF token, not a deposit session), or retry after the delay.
 
 ### secret-format-invalid
 

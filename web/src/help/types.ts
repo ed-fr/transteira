@@ -45,7 +45,12 @@ export type RulesSet = 'summary' | 'limits' | 'levels';
 
 /** Tenant feature a section depends on ("<!-- when: <feature> -->", public guides only). */
 export type HelpFeature =
-  'remoteInternalDeposit' | 'transferReply' | 'recipientVerification' | 'maxDownloads' | 'folders';
+  | 'remoteInternalDeposit'
+  | 'transferReply'
+  | 'recipientVerification'
+  | 'maxDownloads'
+  | 'folders'
+  | 'secrets';
 
 /** A section: a heading and the blocks up to the next heading. */
 export interface HelpSection {

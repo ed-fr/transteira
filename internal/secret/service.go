@@ -109,6 +109,15 @@ type SecurityLog interface {
 	Log(ev securitylog.Event) error
 }
 
+// UsageRecorder counts the secrets for the statistics and the supervision
+// (counts only, never an identifier). *usage.Recorder implements it; its
+// methods must not block.
+type UsageRecorder interface {
+	SecretCreated(tid tenant.ID, at time.Time)
+	SecretRead(tid tenant.ID)
+	SecretLocked(tid tenant.ID)
+}
+
 // AuditRecorder records tenant audit events. *audit.Writer implements it.
 type AuditRecorder interface {
 	RecordScoped(ctx context.Context, tid tenant.ID, ev audit.Event) error
@@ -175,6 +184,9 @@ type Options struct {
 	// Streams bounds the concurrent file downloads; nil bounds nothing
 	// (tests only: the application always sets it).
 	Streams StreamSlots
+	// Usage counts the secrets created, read and locked; nil counts
+	// nothing.
+	Usage UsageRecorder
 	// Abuse is told of every secret that becomes active (link: at the
 	// creation without file or after the upload; e-mail: after the send),
 	// alert only; nil tells nobody.
@@ -202,6 +214,7 @@ type Service struct {
 	notifier Notifier
 	mailer   Mailer
 	audit    AuditRecorder
+	usage    UsageRecorder
 	abuse    AbuseAlerter
 	streams  StreamSlots
 	requests Limiter
@@ -220,13 +233,16 @@ func New(deps Deps, opts Options) (*Service, error) {
 	s := &Service{
 		repo: deps.Secrets, creators: deps.Creators, scrubber: deps.Scrubber, files: deps.Files,
 		seclog: deps.SecurityLog, dir: deps.Directory, notifier: deps.Notifier, mailer: deps.Mailer, audit: opts.Audit, requests: opts.Requests, failures: opts.Failures,
-		onQuota: opts.OnQuota, abuse: opts.Abuse, streams: opts.Streams, now: opts.Now, logger: opts.Logger,
+		onQuota: opts.OnQuota, usage: opts.Usage, abuse: opts.Abuse, streams: opts.Streams, now: opts.Now, logger: opts.Logger,
 	}
 	if s.onQuota == nil {
 		s.onQuota = func(tenant.ID, bool) {}
 	}
 	if s.now == nil {
 		s.now = time.Now
+	}
+	if s.usage == nil {
+		s.usage = noUsage{}
 	}
 	if s.logger == nil {
 		s.logger = slog.New(slog.DiscardHandler)
@@ -241,6 +257,13 @@ func New(deps Deps, opts Options) (*Service, error) {
 	}
 	return s, nil
 }
+
+// noUsage is the UsageRecorder of a Service without Options.Usage.
+type noUsage struct{}
+
+func (noUsage) SecretCreated(tenant.ID, time.Time) {}
+func (noUsage) SecretRead(tenant.ID)               {}
+func (noUsage) SecretLocked(tenant.ID)             {}
 
 // clientKey returns the rate limit key of ip: the IPv4 address, or the /64
 // prefix of an IPv6 address; a single key for an invalid address.

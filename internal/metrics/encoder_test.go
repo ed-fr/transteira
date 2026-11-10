@@ -159,8 +159,8 @@ func parseExposition(t *testing.T, text string) map[string][]parsedSample {
 func TestCatalog(t *testing.T) {
 	t.Parallel()
 	got := Catalog()
-	if len(got) != 27 {
-		t.Fatalf("catalog has %d families, want 27", len(got))
+	if len(got) != 31 {
+		t.Fatalf("catalog has %d families, want 31", len(got))
 	}
 	seen := map[string]bool{}
 	for _, d := range got {

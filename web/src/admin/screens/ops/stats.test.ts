@@ -100,6 +100,24 @@ describe('statsCards', () => {
     ]);
   });
 
+  it('adds the one-time secrets card before the virus card when reported', () => {
+    const cards = statsCards(stats({ secretsCreated: 5 }), fmt, t);
+    expect(cards.map((c) => c.id)).toEqual([
+      'transfers',
+      'bytesUploaded',
+      'downloads',
+      'bytesDownloaded',
+      'secretsCreated',
+      'virusDetections',
+    ]);
+    expect(cards.at(-2)).toEqual({
+      id: 'secretsCreated',
+      label: 'opsStats.cards.secretsCreated',
+      value: '#5',
+      variant: 'default',
+    });
+  });
+
   it('warns when viruses were detected', () => {
     const card = statsCards(stats({ virusDetections: 2 }), fmt, t).at(-1);
     expect(card).toMatchObject({ value: '#2', variant: 'warning' });

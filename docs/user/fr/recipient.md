@@ -1,6 +1,6 @@
 # Recevoir des fichiers
 
-Quelqu’un vous a envoyé des fichiers avec TransTeira. Vous avez reçu un mail contenant un lien de téléchargement, ainsi qu’un QR code qui ouvre le même lien sur un téléphone ou une tablette. Vous n’avez besoin ni de compte ni de logiciel : un navigateur web suffit. Les fichiers restent disponibles jusqu’à la date indiquée dans le mail et sur la page, puis ils sont supprimés automatiquement.
+Quelqu’un vous a envoyé des fichiers avec TransTeira. Vous avez reçu un mail contenant un lien de téléchargement, ainsi qu’un QR code qui ouvre le même lien sur un téléphone ou une tablette. Vous n’avez besoin ni de compte ni de logiciel : un navigateur web suffit. Les fichiers restent disponibles jusqu’à la date indiquée dans le mail et sur la page, puis ils sont supprimés automatiquement. Si vous avez reçu à la place un lien qui commence par `/s/`, il s’agit d’un secret à usage unique : voir [Lire un secret](topic:secret-read).
 
 <!-- topic: download -->
 ## Télécharger les fichiers
@@ -189,29 +189,33 @@ Répondre depuis un navigateur met fin à tout envoi de fichiers déjà ouvert d
 <!-- topic: secret-read -->
 ## Lire un secret
 
-Un lien commençant par `/s/` vous donne accès à un secret à usage unique (mot de passe, clé, code). Ouvrez le lien **en entier** : sa fin, après le signe `#`, contient la clé qui déchiffre le secret. Sans elle, la page affiche **Lien incomplet**.
+Un lien commençant par `/s/` vous donne accès à un secret à usage unique (mot de passe, clé, code). Il arrive en général dans un mail intitulé « Un secret a été partagé avec vous via » suivi du nom de votre organisation, avec un bouton **Ouvrir le secret** ; l’adresse de l’expéditeur figure dans le corps du message. Le message indique que le secret ne peut être lu qu’une fois, sa date d’expiration, si une phrase de passe est nécessaire (que l’expéditeur vous donne par un autre canal) et si un fichier est joint. **Ne transférez pas ce mail** : la première personne qui ouvre le lien lit le secret. L’expéditeur peut aussi vous avoir donné le lien autrement.
+
+Ouvrez le lien **en entier** : sa fin, après le signe `#`, contient la clé qui déchiffre le secret. Sans elle, la page affiche **Lien incomplet**. Une fois la page ouverte, la clé est retirée de la barre d’adresse par sécurité : si vous rechargez la page avant d’afficher le secret, vous obtenez **Lien incomplet**, et vous devez rouvrir le lien depuis le message d’origine.
 
 ![Page Lire un secret avant l’affichage, avec le champ Phrase de passe et le bouton Afficher le secret](../screenshots/fr/secret-reveal.png)
 
-Ouvrir la page ne consomme rien : le secret n’est lu que lorsque vous cliquez sur **Afficher le secret**. Préparez-vous donc à le copier. Si l’expéditeur l’a protégé par une phrase de passe, il vous l’a transmise par un autre canal : saisissez-la dans **Phrase de passe**. Vous avez 5 essais ; après le cinquième échec, le secret est détruit.
+Ouvrir la page ne consomme rien : elle indique **Disponible jusqu’au** (la date d’expiration) et, si un fichier est joint, sa taille et un avertissement précisant qu’il n’a pas été analysé. Le secret n’est lu que lorsque vous cliquez sur **Afficher le secret**. Préparez-vous donc à le copier. Si l’expéditeur l’a protégé par une phrase de passe, il vous l’a transmise par un autre canal : saisissez-la dans **Phrase de passe**. Vous avez 5 essais ; après le cinquième échec, le secret est détruit.
 
 ![Page Votre secret, avec le texte du secret et le bouton Copier le secret](../screenshots/fr/secret-revealed.png)
 
 Le secret s’affiche alors, et il est **détruit sur le serveur** : copiez-le tout de suite avec **Copier le secret**, avant de quitter ou de recharger la page. **Masquer le texte** le cache à l’écran (pendant un partage d’écran, par exemple) sans empêcher de le copier. Un secret copié peut rester dans l’historique du presse-papiers de votre appareil : effacez-le une fois le secret utilisé.
 
-Si un fichier est joint, cliquez sur **Télécharger le fichier** : il ne peut l’être qu’**une seule fois, dans les 10 minutes** qui suivent l’affichage, puis il est supprimé du serveur. Comme il est chiffré par l’expéditeur, il n’est **pas analysé par l’antivirus** : ne l’ouvrez que si vous avez confiance en lui. Comparez au besoin son empreinte SHA-256 (voir [Vérifier qu’un fichier est intact](topic:download-integrity)).
+Si un fichier est joint, cliquez sur **Télécharger le fichier** : il ne peut l’être qu’**une seule fois, dans les 10 minutes** qui suivent l’affichage, puis il est supprimé du serveur. Comme il est chiffré par l’expéditeur, il n’est **pas analysé par l’antivirus** : ne l’ouvrez que si vous avez confiance en lui. Votre navigateur vérifie le fichier de lui-même pendant le déchiffrement, et n’enregistre rien s’il est endommagé. La page affiche aussi l’empreinte SHA-256 du fichier, avec un bouton pour la copier : vous pouvez la comparer à une empreinte que l’expéditeur vous a donnée séparément (voir [Vérifier qu’un fichier est intact (SHA-256)](topic:download-integrity)). Si la page indique **Le fichier n’est plus disponible**, il a déjà été téléchargé ou les 10 minutes sont écoulées. Si elle indique **Le fichier est endommagé**, rien n’a été enregistré : prévenez l’expéditeur. Après une erreur réseau, vous pouvez réessayer dans les 10 minutes.
 
 Les pages d’erreur possibles :
 
 - **Secret indisponible** : le secret a **déjà été lu** (si ce n’est pas vous, prévenez l’expéditeur), il a **expiré**, il a été **supprimé** par son expéditeur ou un administrateur, ou il a été **détruit après trop de phrases de passe erronées**. Demandez à l’expéditeur de le partager de nouveau.
 - **Lien incomplet** ou **Lien incorrect** : recopiez ou rouvrez le lien en entier depuis le message d’origine. Rien n’a été consommé.
 - **Lien inconnu** : le lien est faux ou incomplet.
+- **Secret illisible** : les données reçues du serveur sont endommagées. Prévenez l’expéditeur.
+- **Navigateur non pris en charge** : votre navigateur ne peut pas déchiffrer le secret. Utilisez un navigateur à jour, sur une connexion sécurisée (HTTPS). Rien n’a été consommé.
 
-<!-- topic: download-problems -->
 ## Thème sombre
 
 La page de téléchargement suit le réglage clair ou sombre de votre appareil. Le bouton **Thème sombre** du bas de page change le thème ; votre choix est mémorisé pendant un an par un cookie strictement technique (`tt_theme`), posé uniquement si vous choisissez un thème différent de celui de votre appareil. Rechoisir le thème de votre appareil supprime le cookie.
 
+<!-- topic: download-problems -->
 ## Le lien ne fonctionne pas
 
 Cette section explique les messages que vous pouvez voir à la place des fichiers, et ce qu’il faut faire.

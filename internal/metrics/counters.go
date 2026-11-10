@@ -63,6 +63,9 @@ func (c *Counters) AddUsage(tenantID string, u Usage) {
 	cur.Downloads += max(u.Downloads, 0)
 	cur.DownloadedBytes += max(u.DownloadedBytes, 0)
 	cur.VirusDetections += max(u.VirusDetections, 0)
+	cur.SecretsCreated += max(u.SecretsCreated, 0)
+	cur.SecretsRead += max(u.SecretsRead, 0)
+	cur.SecretsLocked += max(u.SecretsLocked, 0)
 	c.tenants[tenantID] = cur
 }
 

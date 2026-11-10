@@ -717,3 +717,57 @@ func TestDeleteMine(t *testing.T) {
 		}
 	}
 }
+
+// fakeUsage counts the usage calls per tenant.
+type fakeUsage struct {
+	created, read, locked map[tenant.ID]int
+	at                    []time.Time
+}
+
+func newFakeUsage() *fakeUsage {
+	return &fakeUsage{created: map[tenant.ID]int{}, read: map[tenant.ID]int{}, locked: map[tenant.ID]int{}}
+}
+
+func (u *fakeUsage) SecretCreated(tid tenant.ID, at time.Time) {
+	u.created[tid]++
+	u.at = append(u.at, at)
+}
+func (u *fakeUsage) SecretRead(tid tenant.ID)   { u.read[tid]++ }
+func (u *fakeUsage) SecretLocked(tid tenant.ID) { u.locked[tid]++ }
+
+// TestUsage checks that Options.Usage counts the secrets created, read and
+// locked, and nothing for a refused creation or a wrong proof.
+func TestUsage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s, _ := seal(t, "x", "")
+	e := newEnv(t)
+	u := newFakeUsage()
+	e.svc.usage = u
+	e.repo.created = store.CreatedSecret{Token: "tts_tok", Secret: store.Secret{
+		ID: "sec_1", State: store.SecretActive, CreatedAt: testNow, ActivatedAt: testNow, ExpiresAt: testNow.Add(time.Hour),
+	}}
+	if _, err := e.svc.Create(ctx, testTenant, internalSender(), s.request()); err != nil {
+		t.Fatal(err)
+	}
+	e.repo.createErr = errBoom
+	if _, err := e.svc.Create(ctx, testTenant, internalSender(), s.request()); !errors.Is(err, errBoom) {
+		t.Fatalf("refused creation: %v", err)
+	}
+	e.repo.revealed = store.RevealedSecret{Secret: store.Secret{ID: "sec_1", State: store.SecretRead}, SealedText: s.text}
+	if _, err := e.svc.Reveal(ctx, testTenant, internalIP, "tts_tok", s.keyProof, s.proof); err != nil {
+		t.Fatal(err)
+	}
+	e.repo.revealErr = &store.SecretProofError{ID: "sec_2", Remaining: 2}
+	_, _ = e.svc.Reveal(ctx, testTenant, internalIP, "tts_tok", s.keyProof, s.proof)
+	e.repo.revealErr = &store.SecretProofError{ID: "sec_2"}
+	_, _ = e.svc.Reveal(ctx, testTenant, internalIP, "tts_tok", s.keyProof, s.proof)
+	tid := testTenant.ID
+	if u.created[tid] != 1 || u.read[tid] != 1 || u.locked[tid] != 1 || len(u.at) != 1 || !u.at[0].Equal(testNow) {
+		t.Errorf("usage created %v read %v locked %v at %v", u.created, u.read, u.locked, u.at)
+	}
+	// Without Options.Usage nothing is counted, and nothing fails.
+	if _, ok := newEnv(t).svc.usage.(noUsage); !ok {
+		t.Error("default usage is not noUsage")
+	}
+}

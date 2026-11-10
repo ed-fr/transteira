@@ -1037,13 +1037,145 @@
       }
     },
     {
+      "id": 34,
+      "type": "row",
+      "title": "One-time secrets",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "One-time secrets created, read and locked (per hour)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 16,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "increase(transteira_secrets_created_total{tenant=~\"$tenant\"}[1h])",
+          "legendFormat": "{{tenant}} created",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "increase(transteira_secrets_read_total{tenant=~\"$tenant\"}[1h])",
+          "legendFormat": "{{tenant}} read",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "increase(transteira_secrets_locked_total{tenant=~\"$tenant\"}[1h])",
+          "legendFormat": "{{tenant}} locked",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 36,
+      "type": "timeseries",
+      "title": "One-time secret files stored",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 42,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "transteira_secret_file_bytes{tenant=~\"$tenant\"}",
+          "legendFormat": "{{tenant}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
       "id": 22,
       "type": "row",
       "title": "Antivirus",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 50,
         "w": 24,
         "h": 1
       },
@@ -1059,7 +1191,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 42,
+        "y": 51,
         "w": 12,
         "h": 8
       },
@@ -1109,7 +1241,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 42,
+        "y": 51,
         "w": 12,
         "h": 8
       },
@@ -1156,7 +1288,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 50,
+        "y": 59,
         "w": 24,
         "h": 1
       },
@@ -1172,7 +1304,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 51,
+        "y": 60,
         "w": 12,
         "h": 8
       },
@@ -1226,7 +1358,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 51,
+        "y": 60,
         "w": 12,
         "h": 8
       },
@@ -1282,7 +1414,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 59,
+        "y": 68,
         "w": 24,
         "h": 1
       },
@@ -1298,7 +1430,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 60,
+        "y": 69,
         "w": 8,
         "h": 8
       },
@@ -1348,7 +1480,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 60,
+        "y": 69,
         "w": 8,
         "h": 8
       },
@@ -1399,7 +1531,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 60,
+        "y": 69,
         "w": 8,
         "h": 8
       },
@@ -1446,7 +1578,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 68,
+        "y": 77,
         "w": 24,
         "h": 1
       },
@@ -1462,7 +1594,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 69,
+        "y": 78,
         "w": 24,
         "h": 8
       },

@@ -337,6 +337,130 @@ func TestSecretsConcurrentReveal(t *testing.T) {
 	})
 }
 
+// TestSecretsConcurrentRightReveals runs N reveals with the right key
+// proof and the right proof in parallel (threat model T-353), on both
+// engines: exactly one returns the content, every other one is gone with
+// the reason read, the failed proofs are untouched and the data key is
+// destroyed.
+func TestSecretsConcurrentRightReveals(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		f := newSecretFixture(t, e)
+		p := newProofs()
+		files := newFiles(t)
+		stream := tte2Stream(t, 1000)
+		for _, file := range []bool{false, true} {
+			in := f.input(p)
+			if file {
+				in = withFile(in, int64(len(stream)))
+			}
+			cs := f.create(ctx, t, f.a, in)
+			if file {
+				if _, err := f.repo.UploadFile(ctx, f.a, cs.Secret.ID, alice, files, bytes.NewReader(stream), f.clock); err != nil {
+					t.Fatal(err)
+				}
+			}
+			const reveals = 32
+			var (
+				wg       sync.WaitGroup
+				winners  atomic.Int64
+				grants   atomic.Int64
+				contents sync.Map
+			)
+			for range reveals {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					rev, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now)
+					var g *SecretGoneError
+					switch {
+					case err == nil:
+						winners.Add(1)
+						contents.Store(rev.SealedText, true)
+						if rev.FileGrant != "" {
+							grants.Add(1)
+						}
+					case errors.As(err, &g) && g.Reason == SecretEndRead:
+					default:
+						t.Errorf("Reveal: %v", err)
+					}
+				}()
+			}
+			wg.Wait()
+			if winners.Load() != 1 {
+				t.Fatalf("file %v: %d successful reveals, want exactly 1", file, winners.Load())
+			}
+			if _, ok := contents.Load(sealedText); !ok {
+				t.Errorf("file %v: the winner did not get the content", file)
+			}
+			if file != (grants.Load() == 1) {
+				t.Errorf("file %v: %d file grants", file, grants.Load())
+			}
+			s, err := f.repo.Get(ctx, f.a, cs.Secret.ID)
+			if err != nil || s.State != SecretRead || s.FailedProofs != 0 {
+				t.Errorf("file %v: secret after the race = %+v, %v", file, s, err)
+			}
+			if left := rawInt(ctx, t, f.db, `SELECT count(*) FROM secrets WHERE id = '`+cs.Secret.ID+`'
+				AND (text_sealed IS NOT NULL OR text_key_id IS NOT NULL OR verifier IS NOT NULL)`); left != 0 {
+				t.Errorf("file %v: content left after the race", file)
+			}
+			f.assertNoOrphanKeys(t, "concurrent right reveals")
+		}
+	})
+}
+
+// TestSecretsSupervisionCounts checks the per-tenant secret figures of the
+// supervision on both engines: created, read and locked since a date and
+// the bytes of the stored files, each tenant counting only its own rows.
+func TestSecretsSupervisionCounts(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		f := newSecretFixture(t, e)
+		since := f.now.Add(-24 * time.Hour)
+		if got, err := f.db.Secrets(nil).SupervisionCounts(ctx, since); err != nil || len(got) != 0 {
+			t.Fatalf("empty = %+v, %v", got, err)
+		}
+		p := newProofs()
+		read := f.create(ctx, t, f.a, f.input(p))
+		if _, err := f.repo.Reveal(ctx, f.a, read.Token, p.key, p.proof, f.now); err != nil {
+			t.Fatal(err)
+		}
+		in := f.input(p)
+		in.KDFSalt = bytes.Repeat([]byte{7}, SecretKDFSaltLen)
+		locked := f.create(ctx, t, f.a, in)
+		wrong := p.proof
+		wrong[0] ^= 1
+		for range SecretMaxFailedProofs {
+			_, _ = f.repo.Reveal(ctx, f.a, locked.Token, p.key, wrong, f.now)
+		}
+		f.create(ctx, t, f.a, withFile(f.input(p), 300))
+		old := f.input(p)
+		old.Now = f.now.Add(-48 * time.Hour)
+		f.create(ctx, t, f.a, old)
+		f.create(ctx, t, f.b, withFile(f.input(p), 20))
+
+		got, err := f.db.Secrets(nil).SupervisionCounts(ctx, since)
+		want := []TenantSecretCounts{
+			{TenantID: f.a, CreatedSince: 3, ReadSince: 1, LockedSince: 1, FileBytes: 300},
+			{TenantID: f.b, CreatedSince: 1, FileBytes: 20},
+		}
+		if f.b < f.a {
+			want[0], want[1] = want[1], want[0]
+		}
+		if err != nil || len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+			t.Errorf("counts = %+v, %v; want %+v", got, err, want)
+		}
+		_ = f.db.Close()
+		if _, err := f.db.Secrets(nil).SupervisionCounts(ctx, since); err == nil {
+			t.Error("counts on a closed database")
+		}
+	})
+}
+
 // proofCounters maps a secret ID to the counter of its compared proofs
 // (TestSecretsConcurrentReveal).
 var proofCounters sync.Map
@@ -1547,4 +1671,15 @@ func TestInvitationPurgeKeepsSecretInvitations(t *testing.T) {
 			t.Fatalf("Purge after the secret deletion = %d, %v; want 1", n, err)
 		}
 	})
+}
+
+// TestSecretsSupervisionCountsFault makes the supervision query fail and
+// checks that the error surfaces.
+func TestSecretsSupervisionCountsFault(t *testing.T) {
+	t.Parallel()
+	db, plan := openFault(t)
+	plan.add(faultQuery, "end_reason = 'locked' AND ended_at", 0)
+	if _, err := db.Secrets(nil).SupervisionCounts(context.Background(), time.Now()); !errors.Is(err, errInjected) {
+		t.Errorf("query fault: %v", err)
+	}
 }

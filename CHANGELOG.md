@@ -8,78 +8,83 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Design of version 2.1, one-time secrets encrypted in the browser (specification section 22.1),
-  not implemented yet: OpenAPI 2.1.0 with the secret operations (`/secrets`,
-  `/secret-links/{secretToken}`, `/me/secrets`, administration list, deletion and settings),
-  answered by the stubs until implemented; migration 0033 on both engines
-  (`docs/architecture/data-model-v2.1.md`); secret format in `docs/architecture/e2e-format.md`
-  section 3.3 (key in the fragment, optional PBKDF2 passphrase, key and passphrase proofs
-  before any reading); threat model sections 6.56 to 6.63 (T-339 to T-375, P69 to P83); new
-  problem codes, audit actions `secret.*` and security events `secret_invalid` and
-  `secret_proof_invalid` (in the fail2ban and CrowdSec rules).
-- One-time secret cryptography (V2.1 step 2, `docs/architecture/e2e-format.md` section 3.3):
-  `internal/tte2` derives the secret root key (optional PBKDF2-SHA-256 passphrase at 600 000
-  iterations, NFC), the key proof and the proof with their verifiers, seals and opens the secret
-  text and checks its framing without the key; `web/src/shared/e2e/secret.ts` reproduces it with
-  WebCrypto. Shared test vectors `secrets` and `secretNegative` in
-  `internal/tte2/testdata/vectors.json`.
-- One-time secrets, link delivery of a text (V2.1 step 2): `internal/secret` and the public
-  operations `createSecret` (deposit session or API token, eligibility of the transfers),
-  `getSecretLink`, `revealSecret` (key proof first, not counted; 5 counted wrong passphrases lock),
-  `listMySecrets` and `deleteMySecret`; the page route `/s/{token}` (`Cache-Control: no-store`);
-  per-client limits of the links (`rate_limited` scopes `secret_link_ip` and `secret_link`); new
-  problem code `secret-passphrase-required`. The e-mail delivery and the file came at step 3.
-- One-time secrets administration and lifecycle (V2.1 step 2): admin operations
-  `listTenantSecrets` (metadata only, readable by an auditor), `deleteTenantSecret` (`204`, also
-  when the secret had already ended), `getSecretSettings` and `updateSecretSettings` (a missing or
-  null required member is `400 validation-failed`, `required` or `not-nullable`); secret settings
-  (enabled, durations, file and e-mail delivery, `emailRequiresPassphrase`) in `features.secrets`
-  of `getPublicTenant` and in the configuration export and import (`secretSettings`, no longer
-  refused on import); lifecycle sweeps run by the `expire` and `abandoned-uploads` tasks (expiry,
-  pending secrets after 1 hour, tombstones after 30 days, tenant erasure); secrets counted by the
-  data subject search and erasure and by the statistics; `POST /secrets`, `PUT /secrets/{id}/file`
-  and `POST /secrets/{id}/send` refused during maintenance.
-- One-time secrets, file and e-mail delivery (V2.1 step 3): `uploadSecretFile` streams the TTE2
-  ciphertext of the declared file through the keyless validator into `<tenant dir>/secrets/`,
-  encrypted again at rest (a fresh storage name per attempt; a failed attempt leaves the secret
-  pending, a concurrent one is `409 state-conflict`); `revealSecret` returns a one-time file
-  grant (10 minutes) and `downloadSecretFile` streams the file once, with the grant in the
-  `TransTeira-Secret-Grant` header, bounded by the concurrent stream limits of the downloads; the
-  first complete download, the grant expiry or the lock deletes the file and destroys its key.
-  `sendSecret` takes the `secretToken` and the `fragmentKey` once to mail the link (never stored
-  nor logged), after the blocklist and the recipient domain rules were checked again. Read
-  receipts (read, expired, locked) to the creator, sent once; recipient rules and blocklist
-  applied to the recipient (`transfer.recipient_refused` with `object: secret`); active secrets
-  counted by the abuse rules (alert only); secret files counted in the storage quota and swept
-  as orphans. New mails `secret_notification` and `secret_receipt` (French and English);
-  migration 0034 lets an entity customize them (template keys `secret-notification` and
+- **One-time secrets** (specification section 22.1; OpenAPI 2.1.0, migrations 0033 and 0034 on both
+  engines, threat model sections 6.56 to 6.63, T-339 to T-375 and P69 to P83, formats in
+  `docs/architecture/e2e-format.md` section 3.3 and `docs/architecture/data-model-v2.1.md`). A text
+  is sealed in the browser with a key that stays in the `#` fragment of the link and never reaches
+  the server; an optional passphrase (PBKDF2-SHA-256, 600 000 iterations, NFC) adds a second
+  factor. The server checks a key proof, then a passphrase proof, before any reading; the key proof
+  is not counted, 5 counted wrong passphrases lock the secret. The secret is read once, then
+  destroyed, or at expiry (1 hour to 30 days). Cryptography in `internal/tte2` and
+  `web/src/shared/e2e/secret.ts`, with shared test vectors (`secrets`, `secretNegative`).
+- One-time secrets, delivery: by link (the full link is shown once), or by e-mail to one
+  recipient (`sendSecret` takes the `secretToken` and the `fragmentKey` once to mail the link, never
+  stored nor logged, after the blocklist and the recipient domain rules are checked again). An
+  invited external can only create an e-mail secret, which goes to their inviter; they cannot
+  create one when the entity turned e-mail delivery off. Optional read receipt to the creator
+  (read, expired, locked), sent once. New mails `secret_notification` and `secret_receipt` (French
+  and English), customizable per entity (template keys `secret-notification` and
   `secret-receipt`).
-- One-time secrets web interface (V2.1 step 4): a "Share a secret" tab on the deposit form
-  (text, duration, optional passphrase kept out of password managers, optional file, link or
-  e-mail delivery, read receipt; e-mail to the inviter only for an invited external), sealed in
-  the browser; the full link shown once, forgotten as soon as the end screen is left, and the
-  key bytes wiped after use; the reveal page `/s/:token` (the key leaves the address bar and the
-  router state, nothing consumed before "Show the secret", passphrase with the attempts left,
-  revealed text that can be hidden, clipboard warning, attached file downloaded once, size
-  capped while reading, decrypted and checked in memory); "My secrets" in "My transfers"
-  (metadata only, deletion before reading); administration screens for the secret settings and
-  the list of secrets of an entity (read-only for the auditor); help topics `secret-share`,
-  `secret-read`, `tenant-secrets` and `auditor-tenant-secrets` with screenshots (French and
-  English); Playwright scenarios on both engines, including a capture of every request of a
-  creation and a reading that finds the key only in the `fragmentKey` of the e-mail send
-  (T-344).
-- Reverse proxy configurations (Caddy, Nginx, Apache, Traefik) now also redact the token of
-  `/s/{token}` and `/api/v1/secret-links/{token}` in the access log; `make check` asserts that
-  every configuration covers every token path (`TestProxyTokenRedaction`).
-- **Heads-up for the upgrade to 2.1:** once implemented, the one-time secrets module will be
-  **enabled by default in every entity, existing ones included** (decision P81): each entity
-  gains a channel of small end-to-end encrypted content (text and a file of up to 10 MiB by
-  default) and secret mails sent under its domain. Delegated admins and the super admin can
-  disable it per entity (`enabled` of the secret settings) or restrict it (durations, file,
-  e-mail delivery).
+- One-time secrets, file: an optional file (10 MiB by default, 1 to 25 MiB per entity), sealed in
+  the browser, streamed through a keyless validator into `<tenant dir>/secrets/` and encrypted
+  again at rest; it is not scanned by the antivirus. `revealSecret` returns a one-time file grant
+  (10 minutes) and `downloadSecretFile` streams the file once (grant in the `TransTeira-Secret-Grant`
+  header, bounded by the concurrent stream limits); the first complete download, the grant expiry
+  or the lock deletes the file and destroys its key. Secret files count in the storage quota and
+  are swept as orphans.
+- One-time secrets, API: `createSecret` (deposit session or API token), `getSecretLink`,
+  `revealSecret`, `uploadSecretFile`, `downloadSecretFile`, `sendSecret`, `listMySecrets`,
+  `deleteMySecret`; the page route `/s/{token}` (`Cache-Control: no-store`); per-client limits of
+  the links (`rate_limited` scopes `secret_link_ip` and `secret_link`); new problem codes.
+  Examples in Node.js and PowerShell in `docs/api/examples/` (`secret-create.mjs`,
+  `secret-create.ps1`), checked by `make check` against the shared vectors.
+- One-time secrets, administration: `listTenantSecrets` (metadata only, readable by an auditor),
+  `deleteTenantSecret`, `getSecretSettings` and `updateSecretSettings` (enabled, durations, file,
+  e-mail delivery, `emailRequiresPassphrase`), also exposed in `features.secrets` of
+  `getPublicTenant` and in the configuration export and import (`secretSettings`; secrets
+  themselves are never exported). Lifecycle sweeps (expiry, pending secrets after 1 hour,
+  tombstones after 30 days, tenant erasure); secrets counted by the data subject search and
+  erasure and by the abuse rules (alert only); `POST /secrets`, `PUT /secrets/{id}/file` and
+  `POST /secrets/{id}/send` refused during maintenance. Audit actions `secret.*`, security events
+  `secret_invalid` and `secret_proof_invalid`, also in the fail2ban and CrowdSec rules.
+- One-time secrets, supervision: statistics `secretsCreated` (daily counter
+  `tenant_daily_stats.secrets_created`, migration 0035, counted at creation) for each entity and
+  in the global view; Prometheus counters `transteira_secrets_created_total`,
+  `transteira_secrets_read_total` and `transteira_secrets_locked_total` and gauge
+  `transteira_secret_file_bytes` (per tenant, already counted in `transteira_storage_used_bytes`);
+  `/status` fields `secretFileBytes`, `secretsCreatedLast24h`, `secretsReadLast24h` and
+  `secretsLockedLast24h`; a "One-time secrets" row in the Grafana dashboard and new items and a
+  trigger in the Zabbix template. The data subject search and erasure screen shows the secrets.
+- One-time secrets, web interface: a "Share a secret" tab on the deposit form (passphrase kept out
+  of password managers, hint to prefer a long passphrase), the reveal page `/s/:token` (the key
+  leaves the address bar and the router state, nothing consumed before "Show the secret", clipboard
+  warning), "My secrets" in "My transfers", administration screens for the settings and the list
+  (read-only for the auditor), help topics `secret-share`, `secret-read`, `tenant-secrets` and
+  `auditor-tenant-secrets` with screenshots, and the `secrets` feature for `<!-- when: secrets -->`
+  in the public guides. Playwright scenarios on both engines, including a capture of every request
+  that finds the key only in the `fragmentKey` of the e-mail send (T-344).
+- Secret data keys are wrapped by the master key (`wrapped_keys`), so the master key rotation
+  covers them. A database backup taken while a secret is alive still holds its sealed text, which
+  only the key in the link opens (T-351, P71). `internal/secret` is in the critical 100 % coverage
+  list; new tests T-353 (concurrent reveals, exactly one wins) and T-375 (no secret material in the
+  logs, the audit rows and the tables).
+- **Heads-up for the upgrade to 2.1:** the one-time secrets module is **enabled by default in every
+  entity, existing ones included** (decision P81, T-372): each entity gains a channel of small
+  end-to-end encrypted content that the antivirus does not scan (text, and a file of up to 10 MiB
+  by default; durations 1 hour, 1 day and 7 days; e-mail delivery allowed; no passphrase required
+  for e-mail delivery) and secret mails sent under its domain. Delegated admins and the super admin
+  can disable it per entity (`enabled` of the secret settings) or restrict it. If your mail
+  gateways open or click links, turn on `emailRequiresPassphrase` (T-349).
 
 ### Changed
 
+- **Operator action:** the reverse proxy configurations (Caddy, `Caddyfile.on-demand`, Nginx,
+  Apache, Traefik) now also redact the token of `/s/{token}` and
+  `/api/v1/secret-links/{token}` in the access log. If you copied them, copy or merge the new
+  versions, otherwise secret tokens land in your proxy access logs (T-345). `make check` asserts
+  that every configuration covers every token path (`TestProxyTokenRedaction`). The fail2ban and
+  CrowdSec filters were updated too: they count `secret_invalid` and `secret_proof_invalid`, and
+  the `download_streams` exclusion now also matches secret identifiers (`sec_`).
 - TransTeira identity in the administration console: the TransTeira symbol as the favicon of the
   admin host (`web/static/favicon.svg`, a root file of the build also reachable on the entity
   hosts but referenced by no public page, with 32 px and 180 px PNG variants for the console), the

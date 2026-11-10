@@ -544,6 +544,8 @@ func (s *Server) GetTenantStats(ctx context.Context, req gen.GetTenantStatsReque
 		DownloadCount: int(st.Downloads), BytesDownloaded: st.BytesDownloaded, VirusDetections: int(st.VirusDetections),
 		StorageUsedBytes: st.UsedBytes, StorageQuotaBytes: st.QuotaBytes, StorageUsedRatio: float32(st.UsedRatio),
 	}
+	secrets := int(st.SecretsCreated)
+	resp.SecretsCreated = &secrets
 	resp.Series = makeLike(resp.Series, len(st.Series))
 	for i, pt := range st.Series {
 		out := &resp.Series[i]
@@ -573,6 +575,8 @@ func (s *Server) GetGlobalStats(ctx context.Context, req gen.GetGlobalStatsReque
 		out := &resp.Tenants[i]
 		out.TenantId, out.Name = string(row.TenantID), row.Name
 		out.TransferCount, out.BytesUploaded = int(row.Transfers), row.BytesUploaded
+		secrets := int(row.SecretsCreated)
+		out.SecretsCreated = &secrets
 		out.StorageUsedBytes, out.StorageQuotaBytes, out.StorageUsedRatio = row.UsedBytes, row.QuotaBytes, float32(row.UsedRatio)
 	}
 	return resp, nil

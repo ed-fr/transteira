@@ -72,6 +72,10 @@ All names start with `transteira_`.
 | `downloads_total` | counter | `tenant` | Downloads started. |
 | `downloaded_bytes_total` | counter | `tenant` | Bytes of files downloaded. |
 | `antivirus_detections_total` | counter | `tenant` | Infected files detected (and deleted). |
+| `secrets_created_total` | counter | `tenant` | Since 2.1. One-time secrets created. |
+| `secrets_read_total` | counter | `tenant` | Since 2.1. One-time secrets read. |
+| `secrets_locked_total` | counter | `tenant` | Since 2.1. One-time secrets locked after 5 wrong passphrase proofs. |
+| `secret_file_bytes` | gauge | `tenant` | Since 2.1. Bytes of the stored one-time secret files (already counted in `storage_used_bytes`). |
 | `storage_used_bytes` | gauge | `tenant` | Storage used by the tenant. |
 | `storage_quota_bytes` | gauge | `tenant` | Storage quota of the tenant. |
 | `active_transfers` | gauge | `tenant` | Transfers currently available. |
@@ -92,6 +96,10 @@ All names start with `transteira_`.
 | `mail_dropped_total` | counter | | Alert mails dropped. |
 | `lifecycle_last_success_timestamp_seconds` | gauge | `task` | Unix time of the last successful run of each periodic task (`expire`, `delete-after-download`, `abandoned-uploads`, `tenant-deletions`, `purge-rows`, `orphans`, `expiry-reminder`, `backup`). Absent until the task has succeeded once since the start. |
 
+The `transteira_secrets_*_total` counters count in memory since the process started, like the transfer
+counters: they reset to zero on a restart, so graph them with `increase()` or `rate()`. The
+`secrets*Last24h` fields of `/status`, in contrast, come from the database.
+
 New metrics may be added in a minor version; existing names are never renamed within `1.x`.
 
 ## `/status`
@@ -106,7 +114,7 @@ A JSON object (schema `InstanceStatus`), simpler to read than the Prometheus tex
 | `disk` | `totalBytes`, `usedBytes`, `usedRatio`, `alertThreshold`, `alertActive`. |
 | `antivirus` | `engine`, `queuedFiles`, `alertActive`. |
 | `lifecycle` | End time of the last successful run of each periodic task. |
-| `tenants` | One row per active tenant: `id`, `name`, `storageUsedBytes`, `storageQuotaBytes`, `storageUsedRatio`, `activeTransfers`, `transfersLast24h`. |
+| `tenants` | One row per active tenant: `id`, `name`, `storageUsedBytes`, `storageQuotaBytes`, `storageUsedRatio`, `activeTransfers`, `transfersLast24h` and, since 2.1, `secretFileBytes`, `secretsCreatedLast24h`, `secretsReadLast24h`, `secretsLockedLast24h` (taken from the database among the secrets still present: an unfinished secret is deleted after 1 hour and ended ones are purged 30 days after their end). |
 
 `/status` carries the tenant names, `/metrics` does not: give the status token only to tools you
 would trust with the list of your entities.

@@ -81,6 +81,19 @@ func (r storeRepo) scanQueueFiles(ctx context.Context) (int64, error) {
 	return r.db.Transfers().ScanQueueFiles(ctx)
 }
 
+// secretCounts implements repo.
+func (r storeRepo) secretCounts(ctx context.Context, since time.Time) (map[tenant.ID]store.TenantSecretCounts, error) {
+	rows, err := r.db.Secrets(nil).SupervisionCounts(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[tenant.ID]store.TenantSecretCounts, len(rows))
+	for _, c := range rows {
+		out[c.TenantID] = c
+	}
+	return out, nil
+}
+
 // activeCounts implements repo.
 func (r storeRepo) activeCounts(ctx context.Context, since time.Time) (map[tenant.ID]store.TenantTransferCounts, error) {
 	rows, err := r.db.Transfers().ActiveCounts(ctx, since)

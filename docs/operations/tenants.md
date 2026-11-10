@@ -24,6 +24,7 @@ statistics) is described in [Administration](admin.md).
 | Per-transfer limit | yes | only up to the ceiling |
 | Default language | yes | yes |
 | Branding, IP ranges and domains, SMTP, mail templates, legal texts | yes | yes |
+| One-time secrets settings (since 2.1) | yes | yes |
 
 A delegated admin never sees another tenant: its identifier answers 404, as
 an unknown one would. Deletion is reserved to the super admin and answers
@@ -92,10 +93,12 @@ working: add your database and ClamAV networks to the variable.
 
 ## Mail templates
 
-Each mail (verification code, transfer notification, confirmation, first
-download, file problems, file not scanned, invitation, quota warning and
-quota reached) can be customised per tenant and language: subject, HTML
-body and text body.
+Each mail (17 templates: verification code, transfer notification,
+confirmation, first download, file problems, file not scanned, invitation,
+quota warning, quota reached, antivirus unavailable, expiry reminder, abuse
+alert, abuse report, "My transfers" link, recipient verification code and,
+since 2.1, the secret link and the secret read receipt) can be customised per
+tenant and language: subject, HTML body and text body.
 
 - Only variables are allowed: `{{download_link}}`, `{{sender_email}}`… The
   list, with the required ones, is returned with each template. There is no
@@ -111,6 +114,11 @@ body and text body.
   (the administration's Content Security Policy would block them); the
   mails sent keep them.
 
+The two mails of the one-time secrets are `secret-notification` (the link
+with the decryption key; variables `sender_email`, `secret_link` (required),
+`expiry_datetime`, `passphrase_notice` and `file_notice`) and `secret-receipt`
+(the read receipt to the creator, outcome read, expired or locked).
+
 If a customised template cannot be read when a mail is sent, the default
 one is used and a warning is logged: mails are never lost because of a
 customisation.
@@ -119,7 +127,8 @@ customisation.
 
 The super admin sets the storage quota of each tenant. The storage used is
 the declared size of the tenant's transfers that are uploading, being
-scanned or available; space is reserved when a transfer is created, so a
+scanned or available, plus, since 2.1, the stored files of its one-time
+secrets (at most 25 MiB each); space is reserved when a transfer is created, so a
 deposit that would exceed the quota is refused at once (`507
 quota-exceeded`) and nothing is written.
 
@@ -164,6 +173,38 @@ The current usage and quota of a tenant also appear in its statistics
 sum of the quotas may exceed the disk: the super admin watches the disk
 usage in the global statistics.
 
+## One-time secrets
+
+Since 2.1, each tenant can let its users share one-time secrets, encrypted in
+the browser (see the [user guides](../user/en/delegated-admin.md)). Both the
+super admin and the delegated admins of the tenant can change all the
+settings (decision P72, threat model T-374), which are also exported and
+imported with the configuration (`secretSettings`).
+
+| Setting | Default | Bounds |
+|---|---|---|
+| `enabled` | on | |
+| `durations` | `1h`, `1d`, `7d` | a non-empty subset of `1h`, `12h`, `1d`, `3d`, `7d`, `30d` |
+| `defaultDuration` | none (the shortest of the durations) | one of the durations |
+| `fileAllowed` | yes | |
+| `fileMaxBytes` | 10 MiB | 1 to 25 MiB |
+| `emailAllowed` | yes | turning it off also closes the module to invited externals |
+| `emailRequiresPassphrase` | no | |
+
+- **On by default, existing entities included** (decision P81, threat model
+  T-372): after the upgrade to 2.1, every entity gets the module with these
+  values. Review them before reopening the service, see
+  [Upgrade](upgrade.md#from-20-to-21). The attached file is never scanned by
+  the antivirus.
+- An e-mailed secret carries the decryption key in its link: see
+  [Secrets by e-mail](../install/smtp.md#secrets-by-e-mail) and
+  `emailRequiresPassphrase`.
+- Every secret created by an address in the detection window (except one
+  still pending, not finished by its creator), whatever its state, counts in
+  its number of transfers for the abuse detection (alert only, never the volume).
+- The list of the secrets of the tenant (metadata only) and their deletion
+  are in [Administration](admin.md#one-time-secrets).
+
 ## Legal notice and privacy policy
 
 Written in limited Markdown (headings, paragraphs, bold, italics, lists,
@@ -182,8 +223,10 @@ is irreversible:
 1. the tenant is marked as being deleted: its host answers 421 at once, it
    can no longer be changed and no new transfer can be created in it;
 2. every transfer is erased (keys destroyed first, then files);
-3. every remaining key (SMTP password…) is destroyed;
-4. the tenant's directory (files, logo, background) is removed;
+3. every one-time secret is erased (rows first, then their keys, then their
+   files) and every remaining key (SMTP password…) is destroyed;
+4. the tenant's directory (files, `secrets/` subdirectory, logo, background)
+   is removed;
 5. the tenant and all its configuration are deleted, then the directory is
    removed once more in case a request still running recreated it.
 
