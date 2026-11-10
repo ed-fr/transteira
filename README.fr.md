@@ -250,6 +250,11 @@ sequenceDiagram
 
 ## Captures d'écran
 
+[![Vidéo de présentation de TransTeira 2.1 : écran titre avec le logo TransTeira et un bouton de lecture](docs/assets/presentation-2.1.png)](https://github.com/ed-fr/transteira/releases/download/v2.1.0/presentation-transteira-2.1.mp4)
+
+**Vidéo de présentation** (3 min 30 s, muette, MP4 14 Mo) : les fonctionnalités, les nouveautés de la
+2.0 et les secrets à usage unique de la 2.1, filmés sur une instance de démonstration.
+
 | | |
 |---|---|
 | ![Identification de l'expéditeur : le code de vérification à 6 chiffres reçu par mail est saisi sur la page](docs/user/screenshots/fr/deposit-code.png) | ![Formulaire de nouveau transfert d'une entité : un destinataire, un message, la disponibilité de 7 jours sélectionnée et le mot de passe facultatif](docs/user/screenshots/fr/deposit-form.png) |

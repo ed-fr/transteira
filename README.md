@@ -239,6 +239,11 @@ sequenceDiagram
 
 ## Screenshots
 
+[![Presentation video of TransTeira 2.1: title screen with the TransTeira logo and a play button](docs/assets/presentation-2.1.png)](https://github.com/ed-fr/transteira/releases/download/v2.1.0/presentation-transteira-2.1.mp4)
+
+**Presentation video** (3 min 30 s, silent, on-screen text in French, MP4 14 MB): the features, the
+novelties of 2.0 and the one-time secrets of 2.1, filmed on a demo instance.
+
 | | |
 |---|---|
 | ![Identification of the sender: the 6-digit verification code sent by email is entered on the page](docs/user/screenshots/en/deposit-code.png) | ![New transfer form of an entity: a recipient, a message, the availability of 7 days selected and the optional password](docs/user/screenshots/en/deposit-form.png) |

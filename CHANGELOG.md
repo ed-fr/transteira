@@ -29,6 +29,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `make check`, `make installer`, and `make install-smoke` in `make check-full` (real installation
   and upgrade in disposable Debian 12 and 13 containers, SQLite and PostgreSQL).
 
+### Changed
+
+- README: a presentation video of 2.1 (asset of the v2.1.0 release, linked from a thumbnail
+  in `docs/assets`), and the screenshots regenerated against the current interface.
+
 ### Fixed
 
 - fail2ban jails (`integrations/fail2ban`): a second action bans 443/udp, so a banned client can no
