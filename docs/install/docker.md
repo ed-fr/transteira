@@ -154,7 +154,7 @@ deploying and at every update**. Verification needs **cosign 3.0 or later**
 (the signatures use the bundle format of cosign 3).
 
 1. Get the project public key `cosign.pub`: from the repository **at the tag you
-   deploy** (`git show v2.0.0:cosign.pub`), or from the assets of the GitHub release.
+   deploy** (`git show v2.1.0:cosign.pub`), or from the assets of the GitHub release.
    Compute `sha256sum cosign.pub` and compare it with the line
    `cosign.pub SHA-256 fingerprint: ...` of `README.md` and `SECURITY.md`, with
    the GitHub release and with the Docker Hub repository description (a channel

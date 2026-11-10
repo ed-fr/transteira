@@ -161,7 +161,7 @@ vérification exige **cosign 3.0 ou plus récent** (les signatures utilisent le 
 cosign 3).
 
 1. Récupérez la clé publique du projet `cosign.pub` : depuis le dépôt **à l’étiquette que vous
-   déployez** (`git show v2.0.0:cosign.pub`), ou depuis les fichiers joints à la release GitHub.
+   déployez** (`git show v2.1.0:cosign.pub`), ou depuis les fichiers joints à la release GitHub.
    Calculez `sha256sum cosign.pub` et comparez-le avec la ligne
    `cosign.pub SHA-256 fingerprint: ...` de `README.md` et de `SECURITY.md`, avec la release
    GitHub et avec la description du dépôt Docker Hub (un canal hors de GitHub). Une clé qui diffère
