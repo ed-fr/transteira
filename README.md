@@ -21,6 +21,22 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 
 ## Highlights
 
+| | What TransTeira does |
+|---|---|
+| 🏢 **Multi-entity** | One instance, many entities: each with its own domain, logo, language, SMTP and isolated data. |
+| 📦 **Very large files** | Up to 20 GB per transfer, resumable after a cut (tus), streamed end to end. |
+| 🔒 **Security** | AES-256-GCM encryption at rest, optional end-to-end encryption, antivirus, TOTP, security log ready for fail2ban and CrowdSec. |
+| 🤫 **One-time secrets** | Passwords and keys sealed in the browser, read once, then destroyed. |
+| 👤 **No accounts** | Depositors prove their address with a code; external users deposit by invitation. |
+| 🛡️ **Controlled sharing** | Confidentiality levels, recipient verification, allowed domains, abuse detection. |
+| 🔑 **Enterprise** | Entra ID SSO, auditor role, signed PDF proofs of deposit and delivery. |
+| ⚙️ **Operations** | A single Go binary, SQLite or PostgreSQL, Prometheus, Grafana, Zabbix, syslog, webhooks. |
+| 🤖 **API and CLI** | Documented OpenAPI REST API, per-entity tokens, command-line client. |
+| 🇪🇺 **GDPR and compliance** | Automatic purges, right to erasure, GDPR and ISO 27001 kit, signed image with SBOM. |
+
+<details>
+<summary><strong>All features</strong></summary>
+
 - **Multi-tenant**: one instance serves several entities, each with its own domain name,
   branding, language, SMTP server, internal IP ranges and email domains, quotas and strictly
   isolated data.
@@ -105,6 +121,8 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 - **Signed releases (V2)**: multi-architecture image signed with cosign and published with its
   SBOM; compliance kit with a GDPR record of processing and an ISO 27001 Annex A mapping
   ([docs/compliance](docs/compliance/README.md)).
+
+</details>
 
 ## How it works
 

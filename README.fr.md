@@ -21,6 +21,22 @@ l'esprit de WeTransfer ou SwissTransfer, conçu pour les organisations composée
 
 ## Points forts
 
+| | Ce que fait TransTeira |
+|---|---|
+| 🏢 **Multi-entités** | Une instance, plusieurs entités : domaine, logo, langue, SMTP et données cloisonnées pour chacune. |
+| 📦 **Très gros fichiers** | Jusqu'à 20 Go par envoi, reprise après coupure (tus), streaming de bout en bout. |
+| 🔒 **Sécurité** | Chiffrement au repos AES-256-GCM, chiffrement de bout en bout en option, antivirus, TOTP, journal prêt pour fail2ban et CrowdSec. |
+| 🤫 **Secrets à usage unique** | Mots de passe et clés scellés dans le navigateur, lus une fois puis détruits. |
+| 👤 **Sans compte** | Les déposants prouvent leur adresse par un code ; les externes déposent sur invitation. |
+| 🛡️ **Maîtrise du partage** | Niveaux de confidentialité, vérification du destinataire, domaines autorisés, détection des abus. |
+| 🔑 **Entreprise** | SSO Entra ID, rôle auditeur, preuves de dépôt et de remise signées en PDF. |
+| ⚙️ **Exploitation** | Un binaire Go, SQLite ou PostgreSQL, Prometheus, Grafana, Zabbix, syslog, webhooks. |
+| 🤖 **API et CLI** | API REST OpenAPI documentée, jetons par entité, client en ligne de commande. |
+| 🇪🇺 **RGPD et conformité** | Purges automatiques, droit à l'effacement, kit RGPD et ISO 27001, image signée avec SBOM. |
+
+<details>
+<summary><strong>Toutes les fonctionnalités</strong></summary>
+
 - **Multi-tenant** : une instance sert plusieurs entités, chacune avec son propre nom de domaine,
   son identité visuelle, sa langue, son serveur SMTP, ses plages IP et domaines de messagerie
   internes, ses quotas et des données strictement cloisonnées.
@@ -113,6 +129,8 @@ l'esprit de WeTransfer ou SwissTransfer, conçu pour les organisations composée
 - **Publications signées (V2)** : image multi-architecture signée avec cosign et publiée avec son
   SBOM ; kit de conformité avec une fiche de registre des traitements RGPD et une correspondance
   avec l'annexe A de l'ISO 27001 ([docs/compliance](docs/compliance/fr/README.md)).
+
+</details>
 
 ## Comment ça marche
 
