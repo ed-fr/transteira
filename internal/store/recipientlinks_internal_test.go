@@ -33,7 +33,7 @@ func TestRecipientLinkKeyGuards(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		t.Parallel()
 		ctx := context.Background()
-		db := openEngine(t, e)
+		db := openMigratedEngine(t, e)
 		if _, err := db.Migrate(ctx); err != nil {
 			t.Fatalf("Migrate: %v", err)
 		}

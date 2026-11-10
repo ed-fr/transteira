@@ -541,8 +541,15 @@ func TestModifiedBetweenHashAndUpload(t *testing.T) {
 			if !fileExists(o.StatePath) {
 				t.Error("state removed: --restart could not cancel the transfer")
 			}
-			if up := fs.only().uploads[0]; tc.e2e && up.offset >= up.length-int64(tte2.TagSize) {
-				t.Errorf("the changed chunk was sent (%d of %d bytes)", up.offset, up.length)
+			// Run gave up in the middle of a PATCH: wait for its handler to
+			// end before reading what the server received.
+			fs.settle()
+			up := fs.only().uploads[0]
+			fs.mu.Lock()
+			offset, length := up.offset, up.length
+			fs.mu.Unlock()
+			if tc.e2e && offset >= length-int64(tte2.TagSize) {
+				t.Errorf("the changed chunk was sent (%d of %d bytes)", offset, length)
 			}
 		})
 	}

@@ -180,7 +180,6 @@ func TestDownloadFile(t *testing.T) {
 func TestDownloadFileErrors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	var limited *RateLimitError
 	tests := []struct {
 		name   string
 		grant  string
@@ -191,7 +190,7 @@ func TestDownloadFileErrors(t *testing.T) {
 	}{
 		{
 			"rate", validGrant, func(e *env) { e.requests.refuse = true },
-			func(err error) bool { return errors.As(err, &limited) },
+			func(err error) bool { var limited *RateLimitError; return errors.As(err, &limited) },
 			[]string{"rate_limited scope=" + ScopeLinkIP},
 			0,
 		},

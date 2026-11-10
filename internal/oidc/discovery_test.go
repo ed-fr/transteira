@@ -75,8 +75,11 @@ func TestTestSettings(t *testing.T) {
 func TestTestTimeout(t *testing.T) {
 	t.Parallel()
 	idp := oidctest.New(t)
-	idp.SetBehavior(oidctest.Behavior{Delay: 3 * time.Second})
-	c := NewClient(Options{Guard: loopbackGuard(), RootCAs: idp.CertPool(), Timeout: 200 * time.Millisecond})
+	// The provider answers long after the client timeout (it stops waiting
+	// as soon as the client leaves), and the timeout leaves room for the
+	// handshake under load: the request times out waiting for the answer.
+	idp.SetBehavior(oidctest.Behavior{Delay: time.Hour})
+	c := NewClient(Options{Guard: loopbackGuard(), RootCAs: idp.CertPool(), Timeout: testTimeout})
 	wantTest(t, c.Test(context.Background(), idp.Issuer()), StageDiscovery, CategoryTimeout)
 }
 
@@ -169,7 +172,9 @@ func TestGetBodyStall(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	pool := srv.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs
-	c := NewClient(Options{Guard: loopbackGuard(), RootCAs: pool, Timeout: 200 * time.Millisecond})
+	// testTimeout leaves room for the handshake and the headers under load:
+	// the request times out reading the stalled body.
+	c := NewClient(Options{Guard: loopbackGuard(), RootCAs: pool, Timeout: testTimeout})
 	_, err := c.get(context.Background(), srv.URL)
 	if err == nil || err.Stage != StageDiscovery || err.Category != CategoryTimeout {
 		t.Fatalf("get = %v", err)

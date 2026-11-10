@@ -223,6 +223,7 @@ func openFault(t *testing.T, opts ...Option) (*DB, *faultPlan) {
 	plan := &faultPlan{}
 	faultPlans.Store(path, plan)
 	t.Cleanup(func() { faultPlans.Delete(path) })
+	CopyMigratedSQLite(t, path)
 	db, err := openSQLite(context.Background(), faultDriverName, path, opts)
 	if err != nil {
 		t.Fatalf("openSQLite: %v", err)

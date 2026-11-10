@@ -28,34 +28,56 @@ type oracleFixture struct {
 	a, b tenant.ID
 }
 
-// newOracleFixture builds the two-tenant fixture.
+// oracleTemplate is the two-tenant fixture, built once per test binary:
+// the fuzz target runs hundreds of seed inputs, and migrating a new SQLite
+// database for each one is far too slow under the race detector.
+var (
+	oracleTemplate sqliteTemplate
+	oracleTenantA  tenant.ID
+	oracleTenantB  tenant.ID
+)
+
+// buildOracleTemplate creates tenants A and B in the migrated database db.
+func buildOracleTemplate(ctx context.Context, db *DB) error {
+	mk := func(name string) (tenant.ID, error) {
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: name, FQDN: name + ".example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		if err != nil {
+			return "", err
+		}
+		if _, err := db.NetworkRules().Replace(ctx, tn.ID, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, []string{name + ".example.com"}); err != nil {
+			return "", err
+		}
+		for _, v := range []string{"x@" + name + ".example.net", "shared@example.net"} {
+			if _, err := db.Blocklist().Create(ctx, tn.ID, BlocklistEntry{Kind: BlockEmail, Value: v, Comment: "note of " + name}); err != nil {
+				return "", err
+			}
+		}
+		return tn.ID, nil
+	}
+	var err error
+	if oracleTenantA, err = mk("tenant-a"); err != nil {
+		return err
+	}
+	oracleTenantB, err = mk("tenant-b")
+	return err
+}
+
+// newOracleFixture returns a private copy of the two-tenant fixture, so
+// that no input can influence the next one.
 func newOracleFixture(t *testing.T) *oracleFixture {
 	t.Helper()
-	ctx := context.Background()
-	db, err := openSQLite(ctx, sqliteDriverName, filepath.Join(t.TempDir(), "oracle.db"), nil)
+	src, err := oracleTemplate.get("oracle.db", buildOracleTemplate)
+	if err != nil {
+		t.Fatalf("building the oracle fixture: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "oracle.db")
+	copyTemplate(t, src, path)
+	db, err := openSQLite(context.Background(), sqliteDriverName, path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	if _, err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-	mk := func(name string) tenant.ID {
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: name, FQDN: name + ".example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.NetworkRules().Replace(ctx, tn.ID, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, []string{name + ".example.com"}); err != nil {
-			t.Fatal(err)
-		}
-		for _, v := range []string{"x@" + name + ".example.net", "shared@example.net"} {
-			if _, err := db.Blocklist().Create(ctx, tn.ID, BlocklistEntry{Kind: BlockEmail, Value: v, Comment: "note of " + name}); err != nil {
-				t.Fatal(err)
-			}
-		}
-		return tn.ID
-	}
-	return &oracleFixture{db: db, a: mk("tenant-a"), b: mk("tenant-b")}
+	return &oracleFixture{db: db, a: oracleTenantA, b: oracleTenantB}
 }
 
 // fingerprint returns every row of tenant tid, in a stable textual form.

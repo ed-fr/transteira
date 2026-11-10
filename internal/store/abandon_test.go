@@ -21,7 +21,7 @@ func TestStartKeyRules(t *testing.T) {
 	t.Parallel()
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ctx := context.Background()
-		db := openEngine(t, e)
+		db := openMigratedEngine(t, e)
 		if _, err := db.Migrate(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -71,7 +71,7 @@ func TestAbandon(t *testing.T) {
 	t.Parallel()
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ctx := context.Background()
-		db := openEngine(t, e)
+		db := openMigratedEngine(t, e)
 		if _, err := db.Migrate(ctx); err != nil {
 			t.Fatal(err)
 		}

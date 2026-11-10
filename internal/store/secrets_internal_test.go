@@ -103,7 +103,7 @@ func newSecretFixtureDB(t *testing.T, db *DB) *secretFixture {
 
 func newSecretFixture(t *testing.T, e storetest.Engine) *secretFixture {
 	t.Helper()
-	return newSecretFixtureDB(t, openEngine(t, e))
+	return newSecretFixtureDB(t, openMigratedEngine(t, e))
 }
 
 // proofs is a key proof and a proof with their verifiers.
@@ -1167,7 +1167,7 @@ func TestNormalizeCreateSecret(t *testing.T) {
 // TestSecretsWithoutKeys checks the operations that need the key vault.
 func TestSecretsWithoutKeys(t *testing.T) {
 	t.Parallel()
-	f := newSecretFixtureDB(t, openEngine(t, storetest.SQLite(t)))
+	f := newSecretFixtureDB(t, openMigratedEngine(t, storetest.SQLite(t)))
 	ctx := context.Background()
 	r := f.db.Secrets(nil)
 	var zero [32]byte

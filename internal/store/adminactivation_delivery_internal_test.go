@@ -51,7 +51,7 @@ func TestAdminActivationDelivery(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		t.Parallel()
 		ctx := context.Background()
-		db := openEngine(t, e, WithClock(func() time.Time { return adminTestNow }))
+		db := openMigratedEngine(t, e, WithClock(func() time.Time { return adminTestNow }))
 		if _, err := db.Migrate(ctx); err != nil {
 			t.Fatalf("Migrate: %v", err)
 		}
@@ -122,7 +122,7 @@ func TestTenantsCreateWith(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		t.Parallel()
 		ctx := context.Background()
-		db := openEngine(t, e, WithClock(func() time.Time { return adminTestNow }))
+		db := openMigratedEngine(t, e, WithClock(func() time.Time { return adminTestNow }))
 		if _, err := db.Migrate(ctx); err != nil {
 			t.Fatalf("Migrate: %v", err)
 		}
@@ -189,7 +189,7 @@ func TestConsumeTxReturnsDelivery(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		t.Parallel()
 		ctx := context.Background()
-		db := openEngine(t, e, WithClock(func() time.Time { return adminTestNow }))
+		db := openMigratedEngine(t, e, WithClock(func() time.Time { return adminTestNow }))
 		if _, err := db.Migrate(ctx); err != nil {
 			t.Fatalf("Migrate: %v", err)
 		}

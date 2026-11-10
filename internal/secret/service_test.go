@@ -613,10 +613,8 @@ func TestRevealErrors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s, _ := seal(t, "x", "")
-	var (
-		gone  *GoneError
-		proof *ProofError
-	)
+	// Each check declares its own errors.As target: the subtests run in
+	// parallel, so a shared target would be written concurrently.
 	tests := []struct {
 		name    string
 		err     error
@@ -628,13 +626,16 @@ func TestRevealErrors(t *testing.T) {
 		{"unknown", store.ErrNotFound, func(err error) bool { return errors.Is(err, ErrNotFound) }, []string{"secret_invalid"}, 1, nil},
 		{"pending", store.ErrSecretPending, func(err error) bool { return errors.Is(err, ErrNotFound) }, nil, 0, nil},
 		{"gone", &store.SecretGoneError{Reason: store.SecretEndDeletedByAdmin}, func(err error) bool {
+			var gone *GoneError
 			return errors.As(err, &gone) && gone.Reason == ReasonDeleted
 		}, nil, 0, nil},
-		{"key", store.ErrSecretKeyProof, func(err error) bool { return errors.As(err, &proof) && !proof.Counted }, []string{"secret_proof_invalid reason=key"}, 1, nil},
+		{"key", store.ErrSecretKeyProof, func(err error) bool { var proof *ProofError; return errors.As(err, &proof) && !proof.Counted }, []string{"secret_proof_invalid reason=key"}, 1, nil},
 		{"passphrase", &store.SecretProofError{ID: "sec_1", Remaining: 3}, func(err error) bool {
+			var proof *ProofError
 			return errors.As(err, &proof) && proof.Counted && proof.Remaining == 3
 		}, []string{"secret_proof_invalid reason=passphrase"}, 1, nil},
 		{"locked", &store.SecretProofError{ID: "sec_1", RemovedFile: "f1"}, func(err error) bool {
+			var gone *GoneError
 			return errors.As(err, &gone) && gone.Reason == ReasonLocked
 		}, []string{"secret_proof_invalid reason=passphrase"}, 1, []audit.Action{audit.ActionSecretLocked}},
 		{"store", errBoom, func(err error) bool { return errors.Is(err, errBoom) }, nil, 0, nil},

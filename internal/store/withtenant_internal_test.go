@@ -25,7 +25,7 @@ type withTenantFixture struct {
 func newWithTenantFixture(t *testing.T, e storetest.Engine) *withTenantFixture {
 	t.Helper()
 	ctx := context.Background()
-	db := openEngine(t, e)
+	db := openMigratedEngine(t, e)
 	if _, err := db.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}

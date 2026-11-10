@@ -118,6 +118,16 @@ func (fs *fakeServer) count(prefix string) int {
 	return n
 }
 
+// settle closes the server and waits for its in-flight handlers, so that
+// a test may read the server state once Run has returned. Run can return
+// while a handler still consumes an aborted request body (a PATCH whose
+// client gave up halfway) and keeps updating the upload; reading the state
+// before that handler ends is a data race and gives a value that is not yet
+// final. Closing is idempotent, so the cleanup's Close stays harmless.
+func (fs *fakeServer) settle() {
+	fs.srv.Close()
+}
+
 // only returns the single transfer of the server.
 func (fs *fakeServer) only() *fakeTransfer {
 	fs.mu.Lock()

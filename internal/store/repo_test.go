@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -24,6 +25,10 @@ var fixedNow = time.Date(2026, 10, 19, 12, 30, 45, 123_456_789, time.UTC)
 func openDB(t *testing.T, e storetest.Engine) *store.DB {
 	t.Helper()
 	ctx := context.Background()
+	if e.Driver == config.DriverSQLite {
+		// Start from a migrated copy: Migrate below then applies nothing.
+		store.CopyMigratedSQLite(t, e.DSN)
+	}
 	db, err := store.Open(ctx, e.Config(), store.WithClock(func() time.Time { return fixedNow }))
 	if err != nil {
 		t.Fatalf("Open: %v", err)

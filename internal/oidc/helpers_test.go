@@ -65,13 +65,19 @@ type env struct {
 	cfg   Config
 }
 
+// testTimeout bounds one request of the test client. It is long enough
+// for the connection and TLS handshake to complete under -race on a loaded
+// machine: a timeout test expiring it must expire it at the discovery
+// stage (the answer), never during the handshake.
+const testTimeout = 5 * time.Second
+
 // newEnv starts a fake provider and returns a client trusting it.
 func newEnv(t testing.TB) *env {
 	t.Helper()
 	idp := oidctest.New(t)
 	clk := newClock()
 	idp.SetNow(clk.Now)
-	c := NewClient(Options{Guard: loopbackGuard(), RootCAs: idp.CertPool(), Now: clk.Now, Timeout: 5 * time.Second})
+	c := NewClient(Options{Guard: loopbackGuard(), RootCAs: idp.CertPool(), Now: clk.Now, Timeout: testTimeout})
 	return &env{
 		idp: idp, clk: clk, c: c, flows: NewFlows(c, testKeys(t)),
 		cfg: Config{
