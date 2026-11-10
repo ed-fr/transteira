@@ -6,9 +6,26 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-10
+
+The V2.1 scope of the specification (CLAUDE.md section 2, section 22.1): one-time secrets
+encrypted in the browser, on top of 2.0. A text of at most 10 000 characters, with an optional
+small file and an optional passphrase, is read once and then destroyed; the key stays in the `#`
+fragment of the link, the server never sees the secret in clear, and the link is copied by the
+author or sent by e-mail, with read receipts. Secrets have their entity settings, administration
+and auditor views, statistics, supervision figures (Prometheus, `/status`, Grafana, Zabbix),
+audit and security log events (fail2ban, CrowdSec), and API examples in Node and PowerShell.
+Still compatible with 2.0: the API stays `/api/v1` with additions only. The module is **enabled
+by default in every entity**, and the reverse proxy configurations must be copied again to
+redact the secret links in the access logs (migrations 0033 to 0035 are applied at start-up; see
+[Upgrade](docs/operations/upgrade.md#from-20-to-21)). Threat model 2.1 in force. Validated by
+`make check` and `make check-full` (unit, integration, contract, tenant isolation, fuzzing,
+end-to-end on SQLite and PostgreSQL, race detector, automated 20 GB test, release dry run with a
+local registry) and by a real trial behind Caddy.
+
 ### Added
 
-- **One-time secrets** (specification section 22.1; OpenAPI 2.1.0, migrations 0033 and 0034 on both
+- **One-time secrets** (specification section 22.1; OpenAPI 2.1.0, migrations 0033 to 0035 on both
   engines, threat model sections 6.56 to 6.63, T-339 to T-375 and P69 to P83, formats in
   `docs/architecture/e2e-format.md` section 3.3 and `docs/architecture/data-model-v2.1.md`). A text
   is sealed in the browser with a key that stays in the `#` fragment of the link and never reaches
@@ -1452,7 +1469,9 @@ The detailed list of the changes made during the development of the V1 follows.
   contact your administrator."), revealing nothing about the blocklist. The "not available"
   page remains for `403 invitation-not-allowed` (depositor not internal).
 
-[Unreleased]: https://github.com/ed-fr/transteira/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/ed-fr/transteira/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/ed-fr/transteira/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/ed-fr/transteira/compare/v1.2.1...v2.0.0
 [1.2.1]: https://github.com/ed-fr/transteira/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/ed-fr/transteira/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/ed-fr/transteira/compare/v1.0.0...v1.1.0

@@ -83,8 +83,8 @@ git config gpg.format ssh
 git config user.signingKey ~/.ssh/id_ed25519.pub
 git config gpg.ssh.allowedSignersFile ~/.config/git/allowed_signers
 echo "$(git config user.email) $(cat ~/.ssh/id_ed25519.pub)" >> ~/.config/git/allowed_signers
-git tag -s v2.0.0 -m "TransTeira 2.0.0"
-git tag -v v2.0.0
+git tag -s v2.1.0 -m "TransTeira 2.1.0"
+git tag -v v2.1.0
 ```
 
 Also create `docs/security/allowed_signers` in the repository (committed), with the maintainer's
@@ -188,10 +188,10 @@ release**. Push the tag, then create the release with the assets (the command pr
 the same rule as the Docker `latest` tag; this is its shape for the highest stable version):
 
 ```sh
-git push origin v2.0.0
-gh release create v2.0.0 --verify-tag --latest --title "TransTeira 2.0.0" \
+git push origin v2.1.0
+gh release create v2.1.0 --verify-tag --latest --title "TransTeira 2.1.0" \
   --notes-file RELEASE_NOTES.md \
-  dist/release/v2.0.0/*
+  dist/release/v2.1.0/*
 ```
 
 A pre-release gets `--prerelease --latest=false`, and a patch of an older line `--latest=false`,

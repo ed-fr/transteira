@@ -190,7 +190,7 @@ cosign 3).
 4. **Épinglez par condensé** dans `deploy/.env`, jamais une étiquette mobile comme `latest` :
 
    ```sh
-   TRANSTEIRA_IMAGE=docker.io/<account>/transteira:2.0.0@sha256:<condensé de l’index>
+   TRANSTEIRA_IMAGE=docker.io/<account>/transteira:2.1.0@sha256:<condensé de l’index>
    ```
 
    Les fichiers compose gardent `${TRANSTEIRA_IMAGE:-transteira:local}`. À chaque mise à jour,

@@ -183,7 +183,7 @@ deploying and at every update**. Verification needs **cosign 3.0 or later**
 4. **Pin by digest** in `deploy/.env`, never a mutable tag such as `latest`:
 
    ```sh
-   TRANSTEIRA_IMAGE=docker.io/<account>/transteira:2.0.0@sha256:<index digest>
+   TRANSTEIRA_IMAGE=docker.io/<account>/transteira:2.1.0@sha256:<index digest>
    ```
 
    The compose files keep `${TRANSTEIRA_IMAGE:-transteira:local}`. At each update,

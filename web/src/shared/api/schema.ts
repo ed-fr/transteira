@@ -8864,7 +8864,7 @@ export interface operations {
                 content: {
                     /**
                      * @example {
-                     *       "version": "2.0.0",
+                     *       "version": "2.1.0",
                      *       "apiVersion": "v1",
                      *       "commit": "3f9c2ab"
                      *     }
@@ -15752,7 +15752,7 @@ export interface operations {
                      * @example {
                      *       "schemaVersion": 1,
                      *       "exportedAt": "2026-11-04T10:00:00Z",
-                     *       "sourceVersion": "2.0.0",
+                     *       "sourceVersion": "2.1.0",
                      *       "settings": {
                      *         "defaultLanguage": "fr",
                      *         "maxTransferBytes": 21474836480,
@@ -15810,7 +15810,7 @@ export interface operations {
                  *       "config": {
                  *         "schemaVersion": 1,
                  *         "exportedAt": "2026-11-04T10:00:00Z",
-                 *         "sourceVersion": "2.0.0",
+                 *         "sourceVersion": "2.1.0",
                  *         "settings": {
                  *           "defaultLanguage": "fr",
                  *           "maxTransferBytes": 21474836480

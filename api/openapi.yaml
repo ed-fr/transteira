@@ -651,7 +651,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VersionInfo' }
-              example: { version: 2.0.0, apiVersion: v1, commit: 3f9c2ab }
+              example: { version: 2.1.0, apiVersion: v1, commit: 3f9c2ab }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -7042,7 +7042,7 @@ paths:
               example:
                 schemaVersion: 1
                 exportedAt: '2026-11-04T10:00:00Z'
-                sourceVersion: 2.0.0
+                sourceVersion: 2.1.0
                 settings:
                   defaultLanguage: fr
                   maxTransferBytes: 21474836480
@@ -7099,7 +7099,7 @@ paths:
               config:
                 schemaVersion: 1
                 exportedAt: '2026-11-04T10:00:00Z'
-                sourceVersion: 2.0.0
+                sourceVersion: 2.1.0
                 settings: { defaultLanguage: fr, maxTransferBytes: 21474836480 }
                 network: { internalCidrs: [10.30.0.0/16], internalDomains: [entity-c.example.com] }
       responses:
@@ -8202,8 +8202,8 @@ paths:
                     commit: 3f9c2ab
                     updateCheck:
                       enabled: true
-                      latestVersion: 2.0.0
-                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.0.0
+                      latestVersion: 2.1.0
+                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.1.0
                       updateAvailable: false
                       checkedAt: '2026-10-31T10:15:00Z'
                       lastError: none
@@ -8214,8 +8214,8 @@ paths:
                     commit: 3f9c2ab
                     updateCheck:
                       enabled: true
-                      latestVersion: 2.0.0
-                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.0.0
+                      latestVersion: 2.1.0
+                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.1.0
                       updateAvailable: false
                       checkedAt: '2026-10-30T06:00:00Z'
                       lastError: network
