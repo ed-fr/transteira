@@ -214,6 +214,40 @@ sequenceDiagram
     Note over T: À l'expiration, après le premier téléchargement si choisi,<br/>ou à la suppression : fichiers et clés effacés
 ```
 
+### Vie d'un secret
+
+Un secret à usage unique suit un autre chemin : il est chiffré dans le navigateur, le serveur ne
+le voit jamais en clair et ne l'analyse pas.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor S as Expéditeur
+    participant T as TransTeira
+    actor R as Destinataire
+
+    S->>T: Adresse mail vérifiée par code (mêmes règles d'accès qu'un transfert)
+    Note over S: Le navigateur chiffre le texte et le petit fichier facultatif (AES-256-GCM)<br/>la clé reste dans le fragment # du lien, la phrase de passe n'est jamais envoyée
+    S->>T: Secret scellé, vérificateurs des preuves (jamais les preuves), durée (1 h à 30 jours)
+    Note over T: Chiffré de nouveau au repos avec sa propre clé,<br/>enveloppée par la clé maître
+    alt Remise par mail
+        T-->>R: Mail avec le lien complet, clé comprise
+    else Lien copié
+        S-->>R: Lien transmis par l'expéditeur lui-même
+    end
+    opt Phrase de passe
+        S-->>R: Transmise par un autre canal (téléphone, SMS)
+    end
+    R->>T: Ouverture de la page : rien n'est consommé
+    R->>T: « Afficher le secret », avec les preuves de la clé et de la phrase de passe
+    T-->>R: Secret scellé, déchiffré dans le navigateur, puis détruit sur le serveur
+    opt Fichier joint
+        R->>T: Un seul téléchargement, dans les 10 minutes
+    end
+    T-->>S: Accusé de lecture (facultatif)
+    Note over T: Non lu à l'expiration, supprimé, ou 5 phrases de passe erronées :<br/>contenu et clés détruits
+```
+
 ## Captures d'écran
 
 | | |

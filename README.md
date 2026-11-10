@@ -203,6 +203,40 @@ sequenceDiagram
     Note over T: At expiry, after the first download if chosen,<br/>or on deletion: files and keys erased
 ```
 
+### Life of a secret
+
+A one-time secret takes another path: it is encrypted in the browser, and the server never sees
+it in clear and does not scan it.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor S as Sender
+    participant T as TransTeira
+    actor R as Recipient
+
+    S->>T: Email address verified by code (same access rules as a transfer)
+    Note over S: The browser encrypts the text and the optional small file (AES-256-GCM)<br/>the key stays in the # fragment of the link, the passphrase is never sent
+    S->>T: Sealed secret, proof verifiers (never the proofs), lifetime (1 h to 30 days)
+    Note over T: Encrypted again at rest with its own key,<br/>wrapped by the master key
+    alt Delivery by email
+        T-->>R: Email with the full link, key included
+    else Link copied
+        S-->>R: Link passed on by the sender
+    end
+    opt Passphrase
+        S-->>R: Passed on through another channel (phone, text message)
+    end
+    R->>T: Opening the page consumes nothing
+    R->>T: "Show the secret", with the proofs of the key and of the passphrase
+    T-->>R: Sealed secret, decrypted in the browser, then destroyed on the server
+    opt Attached file
+        R->>T: A single download, within 10 minutes
+    end
+    T-->>S: Read receipt (optional)
+    Note over T: Unread at expiry, deleted, or 5 wrong passphrases:<br/>content and keys destroyed
+```
+
 ## Screenshots
 
 | | |
