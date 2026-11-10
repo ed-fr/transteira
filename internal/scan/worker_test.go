@@ -44,7 +44,13 @@ func TestSweep(t *testing.T) {
 		if perTenant[ev.a.ID.String()] != 6 || perTenant[ev.b.ID.String()] != 3 {
 			t.Errorf("jobs per tenant %v", perTenant)
 		}
-		ev.waitUntil("last sweep", func() bool { return ev.f.called("sweep") >= 2 })
+		// Wait for the last sweep to finish, not merely to start: closing the
+		// worker during it would cancel it, and the short last page that ends
+		// the sweeper would then go unexercised.
+		ev.waitUntil("last sweep", func() bool { return ev.logs.count("antivirus sweep") >= 2 })
+		if n := ev.logs.count("antivirus sweep failed"); n != 0 {
+			t.Errorf("%d failed sweeps", n)
+		}
 	})
 }
 
