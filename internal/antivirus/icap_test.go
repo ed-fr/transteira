@@ -879,6 +879,19 @@ func TestICAPExchangeTryWaitFinished(t *testing.T) {
 	}
 }
 
+// The "sender still running" branch is otherwise reached only by timing, so
+// the coverage gate must not depend on it.
+func TestICAPExchangeTryWaitPendingThenDone(t *testing.T) {
+	x := &icapExchange{done: make(chan error, 1)}
+	if ok, err := x.tryWait(); ok || err != nil {
+		t.Fatalf("pending tryWait = %t, %v", ok, err)
+	}
+	x.done <- errInjected
+	if ok, err := x.tryWait(); !ok || !errors.Is(err, errInjected) || !x.finished {
+		t.Fatalf("done tryWait = %t, %v, finished %t", ok, err, x.finished)
+	}
+}
+
 func TestICAPParserBounds(t *testing.T) {
 	br := func(s string) *bufio.Reader { return bufio.NewReader(strings.NewReader(s)) }
 
