@@ -70,6 +70,18 @@ sha256sum -c --ignore-missing SHA256SUMS
 Details: [installation guide](docs/install/docker.md#5-image) and
 [client guide](docs/api/cli.md). Pin the image by digest and verify it at every update.
 
+**Installer.** Since 2.2.0, the release also carries `install.sh`, which runs as root on a
+blank Debian server. It is listed in `SHA256SUMS`, so the two commands above (`verify-blob` on
+`SHA256SUMS`, then `sha256sum -c --ignore-missing SHA256SUMS`, which must print
+`install.sh: OK`) verify it. Both are required: `sha256sum -c` alone only detects a corrupted
+download, since `SHA256SUMS` comes from the same place as `install.sh`; on a blank server without
+cosign, verify on a workstation or fetch cosign checked by the SHA-256 given in the guide. Do it
+after comparing the fingerprint of `cosign.pub`, and never run a copy that was not checked or that
+was piped from `curl`. The installer embeds `cosign.pub`
+and checks its fingerprint, downloads cosign by a version and SHA-256 baked into the script, and
+verifies the image signature and SBOM attestation by digest before pulling it
+([quick install guide](docs/install/quick-install.md#2-download-and-verify-the-installer)).
+
 ### Signing key compromise, revocation and replacement
 
 If the private signing key is lost or suspected stolen, or on a scheduled rotation:

@@ -21,8 +21,10 @@
 #      binary and npm packages under /usr/share/transteira/web-deps), checked for both;
 #   4. `cosign sign --recursive` of the index digest (index and platform manifests) and
 #      `cosign attest --type spdxjson` of each platform digest, recorded in Rekor;
-#   5. the command-line client (`make cli`, GOFLAGS cleared, GOTOOLCHAIN=local): SHA256SUMS and
-#      the client SBOM signed with `cosign sign-blob --bundle`;
+#   5. the command-line client (`make cli`, GOFLAGS cleared, GOTOOLCHAIN=local) and the installer
+#      install.sh (scripts/install/build.sh: this version, the repository, the index and platform
+#      digests and the public key baked in), both listed in SHA256SUMS; SHA256SUMS and the client
+#      SBOM signed with `cosign sign-blob --bundle`;
 #   6. self-verification with cosign.pub, with the commands of the operator documentation
 #      (verify on the index digest, verify-attestation on each digest of platform-digests.txt,
 #      verify-blob);
@@ -347,6 +349,16 @@ publish() {
 	clisbom="$out/transteira-cli_${version}_sbom.spdx.json"
 	syft scan "file:$out/transteira-cli_${version}_linux_amd64" -q -o "spdx-json=$clisbom"
 	sbom_check "$clisbom" "golang.org/x/term"
+
+	# The installer, listed in SHA256SUMS before it is signed: the verify-blob and sha256sum -c
+	# below (and those of the operator, docs/install/quick-install.md) cover it.
+	log "installer (install.sh)"
+	INSTALL_VERSION="$version" RELEASE_IMAGE="$repo" INSTALL_IMAGE_DIGEST_FILE="$out/image-digest.txt" \
+		INSTALL_PLATFORM_DIGESTS_FILE="$out/platform-digests.txt" INSTALL_COSIGN_PUB="$PUBKEY" \
+		INSTALL_OUT="$out/install.sh" bash scripts/install/build.sh
+	(cd "$out" && sha256sum install.sh >>SHA256SUMS)
+	grep -qE '^[0-9a-f]{64}  install\.sh$' "$out/SHA256SUMS" || die "install.sh is not listed in SHA256SUMS"
+
 	for f in "$out/SHA256SUMS" "$clisbom"; do
 		cosign sign-blob --yes --key "$key" --bundle "$f.sigstore.json" "${tlogflags[@]}" "$f" >/dev/null
 	done
@@ -393,6 +405,7 @@ mode_release() {
 	publish "$RELEASE_IMAGE" "$version" "$(git rev-parse HEAD)" "$COSIGN_KEY" "$out" 1
 	cp cosign.pub "$out/cosign.pub"
 	log "done: $(cat "$out/image-digest.txt")"
+	log "install.sh SHA-256 (also give it in the release notes): $(sha256sum "$out/install.sh" | cut -d' ' -f1)"
 	log "publish the GitHub release (the update check reads releases/latest):"
 	printf '  gh release create v%s --verify-tag %s --notes-file <notes> %s/*\n' "$version" "$(gh_flags "$version")" "$out"
 }
@@ -423,6 +436,17 @@ mode_dry() {
 	key_without_password "$key" || die "key_without_password does not detect a key without password"
 	PUBKEY="$WORK/dry.pub"
 	publish "$repo" "$version" "$(git rev-parse HEAD)" "$key" "$WORK/out" 0
+
+	# The installer of the dry release: its baked version and its --dry-run (which changes nothing
+	# on this machine, temporary folder aside). It is never run for real here.
+	log "installer: --version and --dry-run"
+	[ "$(bash "$WORK/out/install.sh" --version)" = "$version" ] || die "install.sh does not report $version"
+	grep -qE '^[0-9a-f]{64}  install\.sh$' "$WORK/out/SHA256SUMS" || die "install.sh is not listed in SHA256SUMS"
+	local plan
+	mkdir -p "$WORK/install-tmp"
+	plan="$(TMPDIR="$WORK/install-tmp" bash "$WORK/out/install.sh" --dry-run --admin-host admin.transfer.example.com \
+		--acme-email "")" || die "install.sh --dry-run failed"
+	grep -qF "image $repo@$DIGEST" <<<"$plan" || die "install.sh --dry-run does not plan the image $repo@$DIGEST"
 
 	log "smoke test of the amd64 image pulled from the registry"
 	local local_tag="transteira-release-dry:amd64"

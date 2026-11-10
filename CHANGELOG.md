@@ -6,6 +6,34 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `install.sh`, a new asset of each release (planned for 2.2.0): installs TransTeira, ClamAV and
+  the reference Caddy in Docker on a blank Debian 12 or 13 server (amd64 or arm64). It installs Docker
+  CE from the official repository, verifies the signed image of its own version by digest (cosign
+  pinned by SHA-256, `cosign.pub` embedded), generates the secrets and `.env`, starts both compose
+  projects with on-demand TLS, and sets up a dedicated nftables table (`inet transteira_fw`, SSH
+  ports read from `sshd -T`, the sshd sockets and `ssh.socket`, listed before the confirmation;
+  80/443 accepted over IPv4 only), the fail2ban jails (TCP and HTTP/3) and the automatic Debian
+  security updates (each one can be skipped). The installation serves IPv4 only: Docker's userland
+  proxy is disabled so that IPv6 clients are refused instead of reaching TransTeira with the
+  gateway address of the proxy network. Interactive with defaults, or unattended with `--yes` and options (`--admin-host`,
+  `--acme-email`, `--postgres`, `--smtp-*`, `--no-firewall`, `--no-fail2ban`, `--no-auto-updates`,
+  `--dry-run`); `--upgrade` upgrades it later (new secrets created if any, new compose files
+  checked in a staging folder first, database copy, previous files kept and restored if the new
+  version does not become healthy; `.env`, secrets and Caddyfile kept). It never creates the super
+  admin: the setup token is shown on the terminal only (not at all with `--yes`), with a reminder
+  to save the master key. It is listed in the signed `SHA256SUMS`.
+  Guide: [Quick install](docs/install/quick-install.md). The application and the API are unchanged.
+- `make install-lint` (syntax, shellcheck by a pinned image, unit tests of the installer) in
+  `make check`, `make installer`, and `make install-smoke` in `make check-full` (real installation
+  and upgrade in disposable Debian 12 and 13 containers, SQLite and PostgreSQL).
+
+### Fixed
+
+- fail2ban jails (`integrations/fail2ban`): a second action bans 443/udp, so a banned client can no
+  longer go on over HTTP/3 with the reference Caddy.
+
 ## [2.1.0] - 2026-11-10
 
 The V2.1 scope of the specification (CLAUDE.md section 2, section 22.1): one-time secrets

@@ -1,0 +1,1724 @@
+#!/usr/bin/env bash
+# TransTeira installer: TransTeira, ClamAV and the reference Caddy reverse proxy, in Docker, on a
+# blank Debian 12 (bookworm) or 13 (trixie) server, amd64 or arm64.
+#
+#   sudo bash install.sh [options]          interactive installation (questions with defaults)
+#   sudo bash install.sh --yes --admin-host admin.transfer.example.com --acme-email ops@example.com
+#   sudo bash install.sh --upgrade          upgrade an installation made by this script
+#   bash install.sh --dry-run ...           print the plan, change nothing (root not needed)
+#   bash install.sh --help
+#
+# This file is GENERATED at release time by scripts/install/build.sh from
+# scripts/install/install.sh.in: the version, the image repository and digests, the pinned cosign
+# release and the public key of the project are baked in, and the deployment files (deploy/, the
+# reference Caddy folder, the fail2ban files) follow the last line of the script as a base64 tar
+# payload. It is published as an asset of the GitHub release, listed in SHA256SUMS, which is
+# signed with cosign: check it before running it (docs/install/quick-install.md).
+#
+# What it does (each step is idempotent; progress in /var/log/transteira-install.log, which never
+# receives a secret):
+#   1. preflight: root, Debian 12/13, amd64/arm64, memory (8 GiB, 10 GiB with PostgreSQL),
+#      disk, ports 80/443 free, DNS of the admin host name, outbound access;
+#   2. questions (each one has an option, --yes accepts the defaults);
+#   3. packages: Docker CE from the official Docker APT repository (key fingerprint checked; Docker
+#      userland proxy disabled in /etc/docker/daemon.json, an existing Docker must be 25+ with
+#      Compose 2.24+), nftables, fail2ban, unattended-upgrades; cosign downloaded and checked by
+#      SHA-256;
+#   4. image: cosign verify of the image index with the embedded cosign.pub (fingerprint
+#      checked), verify-attestation of the SPDX SBOM of the host platform, image pinned by digest;
+#   5. files: /opt/transteira/deploy (compose files, secrets from init-secrets.sh, .env mode 600)
+#      and /opt/reverse-proxy (Caddy, on-demand TLS, ACME contact and admin host name), Docker
+#      network "proxy" 172.30.0.0/24;
+#   6. start of both compose projects, wait until healthy (the first ClamAV signature download
+#      takes several minutes);
+#   7. host security: nftables table "inet transteira_fw" (input closed except SSH, and 80/tcp,
+#      443/tcp, 443/udp over IPv4: the proxy network has no IPv6; Docker's rules are never
+#      touched), fail2ban jails on the security log (TCP and HTTP/3), automatic Debian security
+#      updates;
+#   8. summary: setup URL and setup token (interactive terminal only; with --yes, the command that
+#      reads it), master key vault reminder.
+# It never creates the super admin nor a tenant: the TOTP secret and the recovery codes stay with
+# the operator.
+#
+# Test hook (scripts/install-smoke harness only, NEVER in production): TT_INSTALL_TEST_MODE set to
+# exactly "insecure-test-only" (any other non-empty value is refused) switches on, with a loud
+# warning:
+#   - Caddy "local_certs": certificates from Caddy's internal CA, no ACME;
+#   - cosign verification without transparency log (--insecure-ignore-tlog=true) and with an HTTP
+#     registry allowed (--allow-insecure-registry --allow-http-registry), as the release dry run
+#     signs without Rekor on a throwaway local registry;
+#   - TT_INSTALL_TEST_IMAGE_REPO: replaces the baked image repository (the baked digests are still
+#     required, so the image must be the one the script was built for);
+#   - TT_INSTALL_TEST_COSIGN: path of an existing cosign binary, used instead of the download
+#     (its SHA-256 is not checked);
+#   - the outbound reachability and admin DNS checks are skipped.
+# The Docker APT repository is skipped whenever "docker compose" already works, in any mode.
+set -Eeuo pipefail
+umask 022
+
+# --- Baked values (scripts/install/build.sh replaces every @...@ placeholder) ------------------
+TTI_VERSION='@TTI_VERSION@'
+TTI_IMAGE_REPO='@TTI_IMAGE_REPO@'
+TTI_INDEX_DIGEST='@TTI_INDEX_DIGEST@'
+# "os/arch=sha256:..." entries, space separated.
+TTI_PLATFORM_DIGESTS='@TTI_PLATFORM_DIGESTS@'
+TTI_COSIGN_VERSION='@TTI_COSIGN_VERSION@'
+TTI_COSIGN_SHA256_AMD64='@TTI_COSIGN_SHA256_AMD64@'
+TTI_COSIGN_SHA256_ARM64='@TTI_COSIGN_SHA256_ARM64@'
+TTI_COSIGN_PUB_SHA256='@TTI_COSIGN_PUB_SHA256@'
+TTI_PAYLOAD_SHA256='@TTI_PAYLOAD_SHA256@'
+TTI_COSIGN_PUB='@TTI_COSIGN_PUB@'
+
+# --- Constants -----------------------------------------------------------------------------------
+INSTALL_DIR=/opt/transteira
+DEPLOY_DIR=$INSTALL_DIR/deploy
+PROXY_DIR=/opt/reverse-proxy
+STATE_FILE=$INSTALL_DIR/install.conf
+# Files replaced by the last --upgrade, kept for its rollback.
+PREVIOUS_DIR=$INSTALL_DIR/previous
+LOG_FILE=/var/log/transteira-install.log
+COSIGN_BIN=$INSTALL_DIR/bin/cosign
+PROXY_NETWORK=proxy
+PROXY_SUBNET=172.30.0.0/24
+PROXY_IP=172.30.0.10
+# Official Docker APT repository key (https://docs.docker.com/engine/install/debian/).
+DOCKER_GPG_FPR=9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+# Docker daemon settings written before Docker CE is installed (render_daemon_json).
+DOCKER_DAEMON_JSON=/etc/docker/daemon.json
+# Oldest Docker Engine and Compose accepted when Docker is already installed (docs/install/docker.md).
+DOCKER_MIN_VERSION=25.0.0
+COMPOSE_MIN_VERSION=2.24.0
+# Seconds apt-get waits for the dpkg lock (cloud-init or apt-daily right after the first boot).
+APT_LOCK_TIMEOUT=600
+TEST_MODE_VALUE=insecure-test-only
+PAYLOAD_MARKER=__TRANSTEIRA_INSTALL_PAYLOAD_BELOW__
+SMTP_OVERLAY=docker-compose.installer-smtp.yml
+SMTP_SECRET=system_smtp_password
+FW_UNIT=/etc/systemd/system/transteira-firewall.service
+FW_RULES=/etc/transteira/firewall.nft
+F2B_JAIL=/etc/fail2ban/jail.d/transteira.local
+F2B_SSHD=/etc/fail2ban/jail.d/transteira-sshd-journal.local
+UU_CONF=/etc/apt/apt.conf.d/52transteira-unattended-upgrades
+AUTO_CONF=/etc/apt/apt.conf.d/20auto-upgrades
+# Memory thresholds in MiB (the guest usually reports a little less than its nominal size).
+MEM_WARN_SQLITE=7680
+MEM_WARN_POSTGRES=9728
+DISK_FAIL_GIB=10
+DISK_WARN_GIB=30
+CLAMAV_SIG_TIMEOUT=1500
+HEALTH_TIMEOUT=900
+
+# --- Options (parse_args) and configuration --------------------------------------------------------
+OPT_ADMIN_HOST=""
+OPT_ACME_EMAIL=""
+OPT_ACME_EMAIL_SET=0
+OPT_POSTGRES=0
+OPT_SMTP_HOST=""
+OPT_SMTP_PORT=""
+OPT_SMTP_SECURITY=""
+OPT_SMTP_USER=""
+OPT_SMTP_PASSWORD_FILE=""
+OPT_SMTP_FROM=""
+OPT_FIREWALL=1
+OPT_FAIL2BAN=1
+OPT_AUTO_UPDATES=1
+OPT_YES=0
+OPT_DRY_RUN=0
+OPT_UPGRADE=0
+OPT_HELP=0
+OPT_VERSION=0
+
+CFG_ADMIN_HOST=""
+CFG_ACME_EMAIL=""
+CFG_ENGINE=sqlite
+CFG_SMTP_HOST=""
+CFG_SMTP_PORT=""
+CFG_SMTP_SECURITY=""
+CFG_SMTP_FROM=""
+CFG_SMTP_USER=""
+# Where the system SMTP password comes from: "" (none), file:<path>, or prompt (typed, held in
+# SMTP_PASSWORD only until it is written to the secret file).
+CFG_SMTP_PASSWORD_SOURCE=""
+SMTP_PASSWORD=""
+IMAGE_REF=""
+# Version and image replaced by the last --upgrade (state file; empty before any upgrade).
+PREVIOUS_VERSION=""
+PREVIOUS_IMAGE=""
+ARCH=""
+OS_ID=""
+OS_VERSION=""
+OS_CODENAME=""
+LOG_READY=0
+# 1 when an interrupted installation already wrote its files: the answers come from the state file.
+RESUMED=0
+WORK_DIR=""
+WARNINGS=()
+# Problem found by a check function (detect_os, smtp_check).
+REASON=""
+
+# --- Output ----------------------------------------------------------------------------------------
+
+# log MESSAGE: to the terminal and the log file. Never pass a secret to it.
+log() {
+	printf 'transteira-install: %s\n' "$*"
+	[ "$LOG_READY" = 0 ] || printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$LOG_FILE"
+}
+
+warn() {
+	WARNINGS+=("$*")
+	printf 'transteira-install: WARNING: %s\n' "$*" >&2
+	[ "$LOG_READY" = 0 ] || printf '%s WARNING: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$LOG_FILE"
+}
+
+die() {
+	printf 'transteira-install: ERROR: %s\n' "$*" >&2
+	[ "$LOG_READY" = 0 ] || printf '%s ERROR: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$LOG_FILE"
+	exit 1
+}
+
+# run COMMAND...: runs a command whose output only goes to the log file (none of the commands
+# passed here prints a secret). On failure, the end of the log is shown.
+run() {
+	printf '%s $ %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$LOG_FILE"
+	if ! "$@" >>"$LOG_FILE" 2>&1; then
+		printf 'transteira-install: ERROR: command failed: %s\n--- last lines of %s ---\n' "$*" "$LOG_FILE" >&2
+		tail -n 25 "$LOG_FILE" >&2
+		exit 1
+	fi
+}
+
+usage() {
+	cat <<'EOF'
+TransTeira installer: TransTeira + ClamAV + Caddy in Docker on a blank Debian 12/13 server.
+
+Usage: sudo bash install.sh [options]
+
+Questions (asked interactively, unless given here or --yes is used):
+  --admin-host FQDN        host name of the administration (e.g. admin.transfer.example.com);
+                           its DNS record must point at this server
+  --acme-email ADDRESS     contact address of the Let's Encrypt account (expiry notices);
+                           --acme-email "" gives none
+  --postgres               PostgreSQL instead of SQLite (default: SQLite)
+
+System mail (disk space alerts to the super admins; optional, empty host = none):
+  --smtp-host HOST         system SMTP server (TT_SYSTEM_SMTP_HOST)
+  --smtp-port PORT         its port (default: 25 with none, 587 with starttls, 465 with tls)
+  --smtp-security MODE     none | starttls | tls (default: starttls)
+  --smtp-from ADDRESS      sender address of the system mails (required with --smtp-host)
+  --smtp-user NAME         user name (not with --smtp-security none)
+  --smtp-password-file F   file holding the password (required with --smtp-user); copied to a
+                           Docker secret, never written to .env or to the log
+
+Host security (all on by default):
+  --no-firewall            do not install the nftables table inet transteira_fw
+  --no-fail2ban            do not install fail2ban and its TransTeira jails
+  --no-auto-updates        do not enable the automatic Debian security updates
+
+Run mode:
+  --yes, -y                accept every default, ask nothing (automation); the master key
+                           reminder is still printed but does not wait
+  --dry-run                print the plan and the generated settings, change nothing
+  --upgrade                upgrade an installation made by this script (backup, new compose
+                           files and image; .env, secrets and Caddyfile are kept)
+  --version                print the TransTeira version this script installs
+  --help, -h               this help
+
+Log: /var/log/transteira-install.log (no secret is written to it).
+EOF
+}
+
+# --- Pure functions (unit tested by scripts/install/install_test.go) --------------------------------
+
+# lower STRING
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# valid_fqdn NAME: a DNS host name with at least two labels.
+valid_fqdn() {
+	local n=$1
+	[ "${#n}" -le 253 ] || return 1
+	[[ "$n" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,63}|xn--[a-z0-9-]{1,59})$ ]]
+}
+
+# valid_email ADDRESS: a bare mail address (no display name, no quoting).
+valid_email() {
+	[ "${#1}" -le 254 ] && [[ "$1" =~ ^[A-Za-z0-9._%+-]+@([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
+}
+
+# valid_port PORT
+valid_port() { [[ "$1" =~ ^[1-9][0-9]{0,4}$ ]] && [ "$1" -le 65535 ]; }
+
+# valid_smtp_host HOST: a host name, an IPv4 or an IPv6 address.
+valid_smtp_host() { [ "${#1}" -le 253 ] && [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9.:-]*[A-Za-z0-9])?$ ]]; }
+
+# valid_smtp_user NAME: characters safe in an env file without quoting.
+valid_smtp_user() { [ "${#1}" -le 256 ] && [[ "$1" =~ ^[A-Za-z0-9._@+-]+$ ]]; }
+
+# need_value OPTION ARGC: the option has a value.
+need_value() { [ "$2" -ge 2 ] || die "option $1 needs a value (see --help)"; }
+
+# parse_args ARG...: fills the OPT_* variables; dies on an unknown or invalid option.
+parse_args() {
+	local a v
+	while [ $# -gt 0 ]; do
+		a=$1
+		v=""
+		case "$a" in
+		--*=*)
+			v=${a#*=}
+			a=${a%%=*}
+			set -- "$a" "$v" "${@:2}"
+			;;
+		esac
+		case "$a" in
+		--admin-host)
+			need_value "$a" $#
+			OPT_ADMIN_HOST=$(lower "$2")
+			valid_fqdn "$OPT_ADMIN_HOST" || die "--admin-host: '$2' is not a fully qualified host name"
+			shift 2
+			;;
+		--acme-email)
+			need_value "$a" $#
+			OPT_ACME_EMAIL=$2
+			OPT_ACME_EMAIL_SET=1
+			[ -z "$2" ] || valid_email "$2" || die "--acme-email: '$2' is not a mail address"
+			shift 2
+			;;
+		--postgres) OPT_POSTGRES=1 && shift ;;
+		--smtp-host)
+			need_value "$a" $#
+			OPT_SMTP_HOST=$2
+			valid_smtp_host "$2" || die "--smtp-host: '$2' is not a host name or an IP address"
+			shift 2
+			;;
+		--smtp-port)
+			need_value "$a" $#
+			OPT_SMTP_PORT=$2
+			valid_port "$2" || die "--smtp-port: '$2' is not a port (1 to 65535)"
+			shift 2
+			;;
+		--smtp-security)
+			need_value "$a" $#
+			case "$2" in none | starttls | tls) OPT_SMTP_SECURITY=$2 ;; *) die "--smtp-security: none, starttls or tls" ;; esac
+			shift 2
+			;;
+		--smtp-user)
+			need_value "$a" $#
+			OPT_SMTP_USER=$2
+			valid_smtp_user "$2" || die "--smtp-user: only letters, digits and . _ @ + - are accepted"
+			shift 2
+			;;
+		--smtp-password-file)
+			need_value "$a" $#
+			OPT_SMTP_PASSWORD_FILE=$2
+			shift 2
+			;;
+		--smtp-from)
+			need_value "$a" $#
+			OPT_SMTP_FROM=$2
+			valid_email "$2" || die "--smtp-from: '$2' is not a mail address"
+			shift 2
+			;;
+		--no-firewall) OPT_FIREWALL=0 && shift ;;
+		--no-fail2ban) OPT_FAIL2BAN=0 && shift ;;
+		--no-auto-updates) OPT_AUTO_UPDATES=0 && shift ;;
+		--yes | -y) OPT_YES=1 && shift ;;
+		--dry-run) OPT_DRY_RUN=1 && shift ;;
+		--upgrade) OPT_UPGRADE=1 && shift ;;
+		--version) OPT_VERSION=1 && shift ;;
+		--help | -h) OPT_HELP=1 && shift ;;
+		*) die "unknown option '$a' (see --help)" ;;
+		esac
+	done
+	if [ "$OPT_UPGRADE" = 1 ]; then
+		local o
+		for o in "$OPT_ADMIN_HOST" "$OPT_ACME_EMAIL" "$OPT_SMTP_HOST" "$OPT_SMTP_PORT" "$OPT_SMTP_SECURITY" \
+			"$OPT_SMTP_USER" "$OPT_SMTP_PASSWORD_FILE" "$OPT_SMTP_FROM"; do
+			[ -z "$o" ] || die "--upgrade keeps the settings of the installation: no --admin-host, --acme-email or --smtp-* with it"
+		done
+		[ "$OPT_POSTGRES" = 0 ] || die "--upgrade keeps the database engine of the installation: no --postgres with it"
+	fi
+	[ -n "$OPT_SMTP_HOST" ] || [ -z "$OPT_SMTP_PORT$OPT_SMTP_SECURITY$OPT_SMTP_USER$OPT_SMTP_PASSWORD_FILE$OPT_SMTP_FROM" ] ||
+		die "--smtp-port, --smtp-security, --smtp-user, --smtp-password-file and --smtp-from need --smtp-host"
+	return 0
+}
+
+# smtp_check: the system SMTP settings (CFG_SMTP_*) follow the rules of TT_SYSTEM_SMTP_* (root
+# .env.example); fills the default security and port. Fails with the problem in REASON otherwise.
+smtp_check() {
+	[ -n "$CFG_SMTP_HOST" ] || return 0
+	[ -n "$CFG_SMTP_SECURITY" ] || CFG_SMTP_SECURITY=starttls
+	if [ -z "$CFG_SMTP_PORT" ]; then
+		case "$CFG_SMTP_SECURITY" in none) CFG_SMTP_PORT=25 ;; starttls) CFG_SMTP_PORT=587 ;; tls) CFG_SMTP_PORT=465 ;; esac
+	fi
+	if [ -z "$CFG_SMTP_FROM" ]; then
+		REASON="the system SMTP server needs a sender address (--smtp-from)"
+		return 1
+	fi
+	if [ -n "$CFG_SMTP_USER" ] && [ "$CFG_SMTP_SECURITY" = none ]; then
+		REASON="an SMTP user name is refused with --smtp-security none (the password would travel in clear)"
+		return 1
+	fi
+	if [ -n "$CFG_SMTP_USER" ] && [ -z "$CFG_SMTP_PASSWORD_SOURCE" ]; then
+		REASON="an SMTP user name needs a password (--smtp-password-file)"
+		return 1
+	fi
+	if [ -z "$CFG_SMTP_USER" ] && [ -n "$CFG_SMTP_PASSWORD_SOURCE" ]; then
+		REASON="an SMTP password needs a user name (--smtp-user)"
+		return 1
+	fi
+	return 0
+}
+
+# os_release_value FILE KEY: the unquoted value of KEY in an os-release file (never sourced).
+os_release_value() {
+	sed -n "s/^$2=//p" "$1" | head -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+}
+
+# detect_os FILE: sets OS_ID, OS_VERSION, OS_CODENAME; fails (the problem in REASON) unless
+# Debian 12 or 13.
+detect_os() {
+	local f=$1 want
+	[ -r "$f" ] || {
+		REASON="$f is missing: not a Debian system"
+		return 1
+	}
+	OS_ID=$(os_release_value "$f" ID)
+	OS_VERSION=$(os_release_value "$f" VERSION_ID)
+	OS_CODENAME=$(os_release_value "$f" VERSION_CODENAME)
+	if [ "$OS_ID" != debian ]; then
+		REASON="unsupported system '${OS_ID:-unknown}': Debian 12 or 13 is required"
+		return 1
+	fi
+	case "$OS_VERSION" in
+	12) want=bookworm ;;
+	13) want=trixie ;;
+	*)
+		REASON="unsupported Debian version '${OS_VERSION:-unknown}' (testing or unstable?): Debian 12 or 13 is required"
+		return 1
+		;;
+	esac
+	[ -n "$OS_CODENAME" ] || OS_CODENAME=$want
+	if [ "$OS_CODENAME" != "$want" ]; then
+		REASON="inconsistent os-release: Debian $OS_VERSION with codename $OS_CODENAME"
+		return 1
+	fi
+	return 0
+}
+
+# map_arch MACHINE: amd64 or arm64 from a dpkg or uname architecture name; fails otherwise.
+map_arch() {
+	case "$1" in
+	amd64 | x86_64) echo amd64 ;;
+	arm64 | aarch64) echo arm64 ;;
+	*) return 1 ;;
+	esac
+}
+
+# platform_digest ARCH: the baked digest of the linux/ARCH image manifest.
+platform_digest() {
+	local e
+	for e in $TTI_PLATFORM_DIGESTS; do
+		case "$e" in "linux/$1="*)
+			echo "${e#*=}"
+			return 0
+			;;
+		esac
+	done
+	return 1
+}
+
+# render_env SRC: the .env of the installation, from deploy/.env.example (SRC), on stdout:
+# image pinned by digest, admin host name, Caddy as the only trusted proxy and on-demand TLS
+# client, compose file list, system SMTP. Reads IMAGE_REF and CFG_*.
+render_env() {
+	local src=$1 files=docker-compose.yml out
+	[ "$CFG_ENGINE" = postgres ] && files+=:docker-compose.postgres.yml
+	[ -z "$CFG_SMTP_USER" ] || files+=:$SMTP_OVERLAY
+	out=$(sed -e "s|^TRANSTEIRA_IMAGE=.*|TRANSTEIRA_IMAGE=$IMAGE_REF|" \
+		-e "s|^PROXY_NETWORK=.*|PROXY_NETWORK=$PROXY_NETWORK|" \
+		-e "s|^TT_ADMIN_HOSTS=.*|TT_ADMIN_HOSTS=$CFG_ADMIN_HOST|" \
+		-e "s|^TT_TRUSTED_PROXIES=.*|TT_TRUSTED_PROXIES=$PROXY_IP|" "$src")
+	local v
+	for v in "TRANSTEIRA_IMAGE=$IMAGE_REF" "PROXY_NETWORK=$PROXY_NETWORK" "TT_ADMIN_HOSTS=$CFG_ADMIN_HOST" \
+		"TT_TRUSTED_PROXIES=$PROXY_IP"; do
+		grep -qxF "$v" <<<"$out" || {
+			echo "render_env: $src: cannot set $v (variable missing?)" >&2
+			return 1
+		}
+	done
+	for v in TT_TLS_ASK_ALLOWED_IPS COMPOSE_FILE TT_SYSTEM_SMTP_HOST; do
+		if grep -q "^$v=" <<<"$out"; then
+			echo "render_env: $src already sets $v" >&2
+			return 1
+		fi
+	done
+	printf '%s\n\n' "$out"
+	cat <<EOF
+# ============================================================================
+# Set by the TransTeira installer (install.sh $TTI_VERSION)
+# ============================================================================
+
+# On-demand TLS: Caddy (its fixed address on the proxy network) may ask
+# whether a host name is a tenant before obtaining its certificate.
+TT_TLS_ASK_ALLOWED_IPS=$PROXY_IP
+
+# Compose files applied by a plain \`docker compose\` run from this folder.
+COMPOSE_FILE=$files
+EOF
+	if [ -n "$CFG_SMTP_HOST" ]; then
+		printf '\n# System mail (disk space alerts to the super admins).\n'
+		printf 'TT_SYSTEM_SMTP_HOST=%s\nTT_SYSTEM_SMTP_PORT=%s\nTT_SYSTEM_SMTP_SECURITY=%s\nTT_SYSTEM_SMTP_FROM=%s\n' \
+			"$CFG_SMTP_HOST" "$CFG_SMTP_PORT" "$CFG_SMTP_SECURITY" "$CFG_SMTP_FROM"
+		if [ -n "$CFG_SMTP_USER" ]; then
+			printf '# The password is the Docker secret of %s.\nTT_SYSTEM_SMTP_USERNAME=%s\n' "$SMTP_OVERLAY" "$CFG_SMTP_USER"
+		fi
+	fi
+}
+
+# render_smtp_overlay: the compose overlay that mounts the system SMTP password as a Docker
+# secret (transteira, and migrate with PostgreSQL: it checks the whole configuration).
+render_smtp_overlay() {
+	local svc svcs=(transteira)
+	[ "$CFG_ENGINE" = postgres ] && svcs+=(migrate)
+	echo "# Generated by the TransTeira installer: the system SMTP password as a Docker secret."
+	echo "# Kept by install.sh --upgrade. The file is owned by UID 10001, mode 0400."
+	echo "services:"
+	for svc in "${svcs[@]}"; do
+		cat <<EOF
+  $svc:
+    environment:
+      TT_SYSTEM_SMTP_PASSWORD_FILE: /run/secrets/transteira_system_smtp_password
+    secrets:
+      - transteira_system_smtp_password
+EOF
+	done
+	cat <<EOF
+secrets:
+  transteira_system_smtp_password:
+    file: \${SECRETS_DIR:-./secrets}/$SMTP_SECRET
+EOF
+}
+
+# render_caddyfile SRC ADMIN_HOST ACME_EMAIL TEST(0|1): the Caddyfile of the installation, from
+# integrations/reverse-proxy/caddy/Caddyfile.on-demand (SRC), on stdout: the ACME contact (or
+# none), the admin host name, and in test mode local_certs (Caddy's internal CA, no ACME).
+render_caddyfile() {
+	echo "# Generated by the TransTeira installer from Caddyfile.on-demand; kept by --upgrade."
+	awk -v admin="$2" -v email="$3" -v test="$4" '
+		/^\{$/ && !g {
+			g = 1; print
+			if (test == "1") {
+				print "\t# TEST MODE (TT_INSTALL_TEST_MODE): internal CA, no ACME. Never in production."
+				print "\tlocal_certs"
+			}
+			next
+		}
+		/^\temail acme-contact@example\.com$/ {
+			e = 1
+			if (email != "") print "\temail " email
+			else print "\t# No ACME contact address was given to the installer (no expiry notices)."
+			next
+		}
+		/^admin\.transfer\.example\.com \{$/ { a = 1; print admin " {"; next }
+		{ print }
+		END { if (!g || !e || !a) exit 3 }
+	' "$1" || {
+		echo "render_caddyfile: the global block, the email line or the admin site of $1 was not found" >&2
+		return 1
+	}
+}
+
+# render_nft PORT...: the nftables ruleset of the host firewall (SSH ports given), on stdout. A
+# dedicated table, replaced as a whole when the file is loaded (no "flush ruleset": the rules of
+# Docker and of fail2ban live in other tables and are never touched). Only the input hook: the
+# published ports of the containers go through FORWARD, handled by Docker (and DOCKER-USER).
+render_nft() {
+	local ports
+	ports=$(printf '%s, ' "$@")
+	ports=${ports%, }
+	cat <<EOF
+#!/usr/sbin/nft -f
+# Host firewall of TransTeira, written by the installer (install.sh) and loaded by
+# transteira-firewall.service. Only this table is replaced: the rest of the ruleset (the
+# tables of Docker and of fail2ban) is never flushed.
+table inet transteira_fw
+delete table inet transteira_fw
+
+table inet transteira_fw {
+	chain input {
+		type filter hook input priority filter; policy drop;
+
+		iif "lo" accept
+		ct state established,related accept
+		ct state invalid drop
+
+		# ICMP and ICMPv6 essentials (path MTU discovery, neighbor discovery, ping).
+		icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept
+		icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert, mld-listener-query } accept
+		# DHCPv6 client replies.
+		ip6 saddr fe80::/10 udp dport 546 accept
+
+		# SSH (ports read from sshd -T, the sshd sockets and the installing session).
+		tcp dport { $ports } accept
+		# Caddy: HTTP (ACME challenge, redirect), HTTPS, HTTP/3, IPv4 only. The proxy network
+		# has no IPv6: an IPv6 client relayed by docker-proxy would reach Caddy with the gateway
+		# address (shared rate limits, no ban, internal ranges), so IPv6 is dropped here.
+		meta nfproto ipv4 tcp dport { 80, 443 } accept
+		meta nfproto ipv4 udp dport 443 accept
+	}
+}
+EOF
+}
+
+# render_fw_unit: the systemd unit that loads the firewall at boot, before the network.
+render_fw_unit() {
+	cat <<EOF
+# Host firewall of TransTeira (installer). Loads only the table inet transteira_fw.
+[Unit]
+Description=TransTeira host firewall (nftables table inet transteira_fw)
+DefaultDependencies=no
+Wants=network-pre.target
+Before=network-pre.target shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f $FW_RULES
+ExecReload=/usr/sbin/nft -f $FW_RULES
+ExecStop=/usr/sbin/nft delete table inet transteira_fw
+
+[Install]
+WantedBy=sysinit.target
+EOF
+}
+
+# render_jail SRC LOGPATH: the fail2ban jails from integrations/fail2ban/jail.d/transteira.local
+# (SRC), on stdout, reading LOGPATH, with the documentation example ranges removed from ignoreip.
+render_jail() {
+	echo "# Written by the TransTeira installer from integrations/fail2ban/jail.d/transteira.local."
+	echo "# Add your internal ranges, NAT egress addresses and probes to ignoreip (README of fail2ban)."
+	awk -v logpath="$2" '
+		/^logpath *=/ { l++; print "logpath  = " logpath; next }
+		/^ignoreip *=/ { i++; print "ignoreip = 127.0.0.1/8 ::1"; next }
+		{ print }
+		END { if (l != 2 || i != 2) exit 3 }
+	' "$1" || {
+		echo "render_jail: expected two logpath and two ignoreip lines in $1" >&2
+		return 1
+	}
+}
+
+# render_sshd_journal: fail2ban override of the Debian sshd jail, reading the systemd journal.
+render_sshd_journal() {
+	cat <<'EOF'
+# Written by the TransTeira installer: no /var/log/auth.log on this server (no rsyslog), so
+# the sshd jail of Debian reads the systemd journal (python3-systemd).
+[sshd]
+backend = systemd
+EOF
+}
+
+# render_unattended: apt settings that limit unattended-upgrades to the Debian security archive.
+render_unattended() {
+	cat <<'EOF'
+// Written by the TransTeira installer: automatic updates limited to the Debian
+// security archive (Docker CE and the point releases are updated by hand).
+#clear Unattended-Upgrade::Origins-Pattern;
+Unattended-Upgrade::Origins-Pattern {
+	"origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+	"origin=Debian,codename=${distro_codename},label=Debian-Security";
+};
+Unattended-Upgrade::Automatic-Reboot "false";
+EOF
+}
+
+render_auto_upgrades() {
+	cat <<'EOF'
+// Written by the TransTeira installer.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
+}
+
+# render_daemon_json: the Docker daemon settings. Without the userland proxy, a published port is
+# reached through the NAT rules of Docker only: an IPv6 client of the IPv4-only proxy network is
+# refused instead of being relayed with the gateway address as its source.
+render_daemon_json() {
+	cat <<'EOF'
+{
+  "userland-proxy": false
+}
+EOF
+}
+
+# state_value FILE KEY: a value of the state file (never sourced).
+state_value() { sed -n "s/^$2=//p" "$1" 2>/dev/null | head -n 1; }
+
+# version_lt A B: A is a lower SemVer than B (build metadata ignored; a pre-release is lower
+# than its release; pre-releases compared with sort -V).
+version_lt() {
+	local a=${1%%+*} b=${2%%+*}
+	local ab=${a%%-*} bb=${b%%-*}
+	if [ "$ab" != "$bb" ]; then
+		[ "$(printf '%s\n%s\n' "$ab" "$bb" | sort -V | head -n 1)" = "$ab" ]
+		return
+	fi
+	[ "$a" != "$b" ] || return 1
+	[ "$a" != "$ab" ] || return 1
+	[ "$b" != "$bb" ] || return 0
+	[ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | head -n 1)" = "$a" ]
+}
+
+# test_mode: 0 when the test hook is on (exact value), dies on any other non-empty value.
+test_mode() {
+	case "${TT_INSTALL_TEST_MODE:-}" in
+	"") return 1 ;;
+	"$TEST_MODE_VALUE") return 0 ;;
+	*) die "TT_INSTALL_TEST_MODE is set to an unknown value: unset it (it is a test hook, never for production)" ;;
+	esac
+}
+
+# --- System probes ---------------------------------------------------------------------------------
+
+# ssh_ports: the SSH ports to keep open, one per line, from every source available (sudo drops
+# SSH_CONNECTION, sshd -T misses an ssh.socket): the port and listenaddress lines of sshd -T, the
+# listening and established sockets of sshd (ss), the ListenStream of an active ssh.socket and
+# the port of the current SSH session; 22 when none gives one.
+ssh_ports() {
+	local p
+	p=$({
+		if command -v sshd >/dev/null 2>&1; then
+			sshd -T 2>/dev/null | awk '$1 == "port" { print $2 } $1 == "listenaddress" { n = split($2, a, ":"); print a[n] }'
+		fi
+		if command -v ss >/dev/null 2>&1; then
+			ss -Hltnp 2>/dev/null | awk '/"sshd/ { n = split($4, a, ":"); print a[n] }'
+			ss -Htnp state established 2>/dev/null | awk '/"sshd/ { n = split($3, a, ":"); print a[n] }'
+		fi
+		if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet ssh.socket 2>/dev/null; then
+			systemctl show -p Listen ssh.socket 2>/dev/null | grep -oE ':[0-9]+ \(Stream\)' | grep -oE '[0-9]+'
+		fi
+		if [ -n "${SSH_CONNECTION:-}" ]; then awk '{ print $4 }' <<<"$SSH_CONNECTION"; fi
+	} | grep -E '^[0-9]+$' | sort -un || true)
+	if [ -z "$p" ]; then echo 22; else echo "$p"; fi
+}
+
+mem_mib() { awk '/^MemTotal:/ { printf "%d", $2 / 1024 }' /proc/meminfo; }
+
+# free_gib PATH: free space of the file system holding PATH (or its closest existing parent).
+free_gib() {
+	local p=$1
+	while [ ! -e "$p" ]; do p=$(dirname "$p"); done
+	df -P -k "$p" | awk 'NR == 2 { printf "%d", $4 / 1048576 }'
+}
+
+# port_busy PROTO PORT: something listens on the port.
+port_busy() {
+	local flag=-Hltn
+	[ "$1" = udp ] && flag=-Hlun
+	[ -n "$(ss "$flag" "sport = :$2" 2>/dev/null)" ]
+}
+
+# reachable HOST: a TCP connection to HOST:443 opens within 10 s (bash only: curl may not be
+# installed yet).
+# shellcheck disable=SC2016 # $1 is expanded by the inner bash, on purpose
+reachable() { timeout 10 bash -c 'exec 3<>"/dev/tcp/$1/443"' _ "$1" >/dev/null 2>&1; }
+
+# registry_host REPO: the host serving an image repository (Docker Hub when none is named).
+registry_host() {
+	local first=${1%%/*}
+	case "$first" in
+	*.* | *:* | localhost) echo "$first" ;;
+	*) echo registry-1.docker.io ;;
+	esac
+}
+
+# install_state: none, installing (an earlier run stopped), installed, or foreign (a TransTeira
+# container or files exist without the state of this script).
+install_state() {
+	if [ -f "$STATE_FILE" ]; then
+		state_value "$STATE_FILE" TTI_STATE
+		return
+	fi
+	if [ -e "$DEPLOY_DIR/.env" ] || [ -e "$PROXY_DIR/Caddyfile" ] ||
+		{ command -v docker >/dev/null 2>&1 && docker container inspect transteira >/dev/null 2>&1; }; then
+		echo foreign
+		return
+	fi
+	echo none
+}
+
+write_state() {
+	mkdir -p "$INSTALL_DIR"
+	cat >"$STATE_FILE.tmp" <<EOF
+# TransTeira installer state: read by install.sh (--upgrade). Do not edit.
+TTI_STATE=$1
+TTI_INSTALLED_VERSION=$TTI_VERSION
+TTI_ENGINE=$CFG_ENGINE
+TTI_ADMIN_HOST=$CFG_ADMIN_HOST
+TTI_IMAGE=$IMAGE_REF
+TTI_FIREWALL=$OPT_FIREWALL
+TTI_FAIL2BAN=$OPT_FAIL2BAN
+TTI_AUTO_UPDATES=$OPT_AUTO_UPDATES
+TTI_ACME_EMAIL=$CFG_ACME_EMAIL
+TTI_SMTP_HOST=$CFG_SMTP_HOST
+TTI_SMTP_PORT=$CFG_SMTP_PORT
+TTI_SMTP_SECURITY=$CFG_SMTP_SECURITY
+TTI_SMTP_FROM=$CFG_SMTP_FROM
+TTI_SMTP_USER=$CFG_SMTP_USER
+TTI_PREVIOUS_VERSION=$PREVIOUS_VERSION
+TTI_PREVIOUS_IMAGE=$PREVIOUS_IMAGE
+EOF
+	chmod 0600 "$STATE_FILE.tmp"
+	mv -f "$STATE_FILE.tmp" "$STATE_FILE"
+}
+
+# --- Payload ---------------------------------------------------------------------------------------
+
+# script_path: this file (the payload follows its last line).
+script_path() {
+	local s=${BASH_SOURCE[0]:-$0}
+	[ -f "$s" ] && [ -r "$s" ] || die "run this script from a file (sudo bash install.sh), not from a pipe"
+	printf '%s' "$s"
+}
+
+# payload_extract DEST: extracts the payload into DEST after checking its baked SHA-256.
+payload_extract() {
+	local dest=$1 self line tgz sum
+	self=$(script_path)
+	line=$(awk -v m="$PAYLOAD_MARKER" '$0 == m { print NR + 1; exit }' "$self")
+	[ -n "$line" ] || die "no payload in $self: use the install.sh asset of a release, not install.sh.in"
+	tgz="$dest.tgz"
+	tail -n "+$line" "$self" | base64 -d >"$tgz" || die "the payload of $self is corrupted (base64)"
+	sum=$(sha256sum "$tgz" | cut -d' ' -f1)
+	[ "$sum" = "$TTI_PAYLOAD_SHA256" ] || die "the payload of $self does not match its checksum: download install.sh again"
+	mkdir -p "$dest"
+	tar -xzf "$tgz" -C "$dest" --no-same-owner --no-same-permissions
+	rm -f "$tgz"
+}
+
+# --- Configuration (questions) ----------------------------------------------------------------------
+
+# ask VAR QUESTION DEFAULT: reads an answer from the terminal into VAR (DEFAULT when empty).
+ask() {
+	local __a
+	if [ "$OPT_YES" = 1 ]; then
+		printf -v "$1" '%s' "$3"
+		return
+	fi
+	read -r -p "$2${3:+ [$3]}: " __a </dev/tty || die "no answer (no terminal?): use --yes and the options"
+	printf -v "$1" '%s' "${__a:-$3}"
+}
+
+# ask_yes_no QUESTION DEFAULT(y|n): 0 for yes.
+ask_yes_no() {
+	local r
+	ask r "$1 (y/n)" "$2"
+	case "$(lower "$r")" in y | yes | o | oui) return 0 ;; *) return 1 ;; esac
+}
+
+default_admin_host() {
+	local h
+	h=$(lower "$(hostname -f 2>/dev/null || true)")
+	if valid_fqdn "$h"; then echo "$h"; fi
+}
+
+collect_config() {
+	if [ "$OPT_YES" = 0 ] && [ "$OPT_DRY_RUN" = 0 ] && ! { : </dev/tty; } 2>/dev/null; then
+		die "no terminal to ask the questions: run with --yes and the options (--admin-host...)"
+	fi
+	[ "$OPT_DRY_RUN" = 0 ] || OPT_YES=1
+	local h=$OPT_ADMIN_HOST
+	if [ -z "$h" ]; then
+		while :; do
+			ask h "Host name of the administration (DNS pointing at this server)" "$(default_admin_host)"
+			h=$(lower "$h")
+			valid_fqdn "$h" && break
+			[ "$OPT_YES" = 0 ] || die "--admin-host is required (no fully qualified host name found with hostname -f)"
+			echo "  '$h' is not a fully qualified host name (e.g. admin.transfer.example.com)."
+		done
+	fi
+	CFG_ADMIN_HOST=$h
+
+	local e=$OPT_ACME_EMAIL
+	if [ "$OPT_ACME_EMAIL_SET" = 0 ]; then
+		while :; do
+			ask e "Let's Encrypt contact address (expiry notices; empty for none)" ""
+			if [ -z "$e" ] || valid_email "$e"; then break; fi
+			echo "  '$e' is not a mail address."
+		done
+	fi
+	CFG_ACME_EMAIL=$e
+	[ -n "$CFG_ACME_EMAIL" ] || warn "no Let's Encrypt contact address: you will get no certificate expiry notice"
+
+	if [ "$OPT_POSTGRES" = 1 ]; then
+		CFG_ENGINE=postgres
+	elif [ "$OPT_YES" = 0 ] && [ "$RESUMED" = 0 ] && ask_yes_no "Use PostgreSQL instead of SQLite? (SQLite suits most installations)" n; then
+		CFG_ENGINE=postgres
+	fi
+
+	CFG_SMTP_HOST=$OPT_SMTP_HOST
+	CFG_SMTP_PORT=$OPT_SMTP_PORT
+	CFG_SMTP_SECURITY=$OPT_SMTP_SECURITY
+	CFG_SMTP_FROM=$OPT_SMTP_FROM
+	CFG_SMTP_USER=$OPT_SMTP_USER
+	if [ -n "$OPT_SMTP_PASSWORD_FILE" ]; then
+		if [ "$OPT_DRY_RUN" = 0 ] && { [ ! -f "$OPT_SMTP_PASSWORD_FILE" ] || [ ! -r "$OPT_SMTP_PASSWORD_FILE" ]; }; then
+			die "--smtp-password-file: $OPT_SMTP_PASSWORD_FILE is not a readable file"
+		fi
+		CFG_SMTP_PASSWORD_SOURCE="file:$OPT_SMTP_PASSWORD_FILE"
+	fi
+	if [ -z "$CFG_SMTP_HOST" ] && [ "$OPT_YES" = 0 ] && [ "$RESUMED" = 0 ]; then
+		ask_smtp
+	fi
+	if [ "$RESUMED" = 1 ] && [ -n "$CFG_SMTP_USER" ] && [ -z "$CFG_SMTP_PASSWORD_SOURCE" ]; then
+		# The secret file was written by the interrupted run (before .env): it is kept.
+		CFG_SMTP_PASSWORD_SOURCE=kept
+	fi
+	smtp_check || die "system SMTP: $REASON"
+}
+
+ask_smtp() {
+	local h
+	while :; do
+		ask h "System SMTP server for the disk space alerts (empty for none)" ""
+		[ -z "$h" ] && return 0
+		valid_smtp_host "$h" && break
+		echo "  '$h' is not a host name or an IP address."
+	done
+	CFG_SMTP_HOST=$h
+	local s p f u pw
+	while :; do
+		ask s "  Security: none, starttls or tls" starttls
+		case "$s" in none | starttls | tls) break ;; esac
+	done
+	CFG_SMTP_SECURITY=$s
+	case "$s" in none) p=25 ;; starttls) p=587 ;; tls) p=465 ;; esac
+	while :; do
+		ask p "  Port" "$p"
+		valid_port "$p" && break
+	done
+	CFG_SMTP_PORT=$p
+	while :; do
+		ask f "  Sender address of the system mails" ""
+		valid_email "$f" && break
+		echo "  '$f' is not a mail address."
+	done
+	CFG_SMTP_FROM=$f
+	[ "$s" != none ] || return 0
+	while :; do
+		ask u "  User name (empty for none)" ""
+		if [ -z "$u" ] || valid_smtp_user "$u"; then break; fi
+		echo "  only letters, digits and . _ @ + - are accepted."
+	done
+	CFG_SMTP_USER=$u
+	[ -n "$u" ] || return 0
+	while :; do
+		IFS= read -r -s -p "  Password (hidden): " pw </dev/tty
+		echo
+		[ -n "$pw" ] && break
+	done
+	SMTP_PASSWORD=$pw
+	CFG_SMTP_PASSWORD_SOURCE=prompt
+}
+
+# resume_same LABEL GIVEN SAVED: refuses an option value that differs from the saved answer.
+resume_same() {
+	[ -z "$2" ] || [ "$2" = "$3" ] ||
+		die "the interrupted installation already wrote its files with $1 '$3' (not '$2'): rerun with the same answers, or without this option"
+}
+
+# resume_load: an interrupted installation that already wrote its Caddyfile or .env keeps the
+# answers of its first run (those files and the SMTP overlay are not rewritten): they are reloaded
+# from the state file, and an option giving a different answer is refused.
+resume_load() {
+	[ -e "$DEPLOY_DIR/.env" ] || [ -e "$PROXY_DIR/Caddyfile" ] || return 0
+	RESUMED=1
+	local v
+	v=$(state_value "$STATE_FILE" TTI_ADMIN_HOST)
+	[ -n "$v" ] || die "$STATE_FILE records no admin host name: the interrupted installation cannot be resumed"
+	resume_same --admin-host "$OPT_ADMIN_HOST" "$v"
+	OPT_ADMIN_HOST=$v
+	v=$(state_value "$STATE_FILE" TTI_ACME_EMAIL)
+	[ "$OPT_ACME_EMAIL_SET" = 0 ] || [ "$OPT_ACME_EMAIL" = "$v" ] ||
+		die "the interrupted installation already wrote its files with --acme-email '$v': rerun with the same answers, or without this option"
+	OPT_ACME_EMAIL=$v
+	OPT_ACME_EMAIL_SET=1
+	v=$(state_value "$STATE_FILE" TTI_ENGINE)
+	if [ "$v" = postgres ]; then
+		OPT_POSTGRES=1
+	elif [ "$OPT_POSTGRES" = 1 ]; then
+		die "the interrupted installation already wrote its files with the engine '${v:-sqlite}': rerun without --postgres"
+	fi
+	v=$(state_value "$STATE_FILE" TTI_SMTP_HOST)
+	if [ -z "$v" ]; then
+		[ -z "$OPT_SMTP_HOST" ] ||
+			die "the interrupted installation already wrote its files without a system SMTP server: rerun without the --smtp-* options"
+		return 0
+	fi
+	resume_same --smtp-host "$OPT_SMTP_HOST" "$v"
+	OPT_SMTP_HOST=$v
+	v=$(state_value "$STATE_FILE" TTI_SMTP_PORT)
+	resume_same --smtp-port "$OPT_SMTP_PORT" "$v"
+	OPT_SMTP_PORT=$v
+	v=$(state_value "$STATE_FILE" TTI_SMTP_SECURITY)
+	resume_same --smtp-security "$OPT_SMTP_SECURITY" "$v"
+	OPT_SMTP_SECURITY=$v
+	v=$(state_value "$STATE_FILE" TTI_SMTP_FROM)
+	resume_same --smtp-from "$OPT_SMTP_FROM" "$v"
+	OPT_SMTP_FROM=$v
+	v=$(state_value "$STATE_FILE" TTI_SMTP_USER)
+	resume_same --smtp-user "$OPT_SMTP_USER" "$v"
+	OPT_SMTP_USER=$v
+}
+
+# --- Preflight ---------------------------------------------------------------------------------------
+
+require_root() { [ "$(id -u)" = 0 ] || die "run as root: sudo bash $0 ..."; }
+
+preflight_platform() {
+	local a
+	detect_os /etc/os-release || die "$REASON"
+	a=$(dpkg --print-architecture 2>/dev/null || uname -m)
+	ARCH=$(map_arch "$a") || die "unsupported architecture '$a': amd64 or arm64 is required"
+	platform_digest "$ARCH" >/dev/null || die "this release has no image for linux/$ARCH"
+	log "system: Debian $OS_VERSION ($OS_CODENAME), $ARCH"
+}
+
+preflight_resources() {
+	local mem want free
+	mem=$(mem_mib)
+	want=$MEM_WARN_SQLITE
+	[ "$CFG_ENGINE" = sqlite ] || want=$MEM_WARN_POSTGRES
+	if [ "$mem" -lt "$want" ]; then
+		warn "$mem MiB of memory: at least $((want / 1024 + 1)) GiB is advised with $CFG_ENGINE (clamd alone may use 4 GiB)"
+	fi
+	free=$(free_gib /var/lib/docker)
+	[ "$free" -ge "$DISK_FAIL_GIB" ] || die "only $free GiB free for /var/lib/docker: at least $DISK_FAIL_GIB GiB are needed"
+	[ "$free" -ge "$DISK_WARN_GIB" ] || warn "only $free GiB free for /var/lib/docker: the files of the transfers are stored there"
+}
+
+preflight_ports() {
+	local p
+	if ! command -v ss >/dev/null 2>&1; then
+		warn "ss (iproute2) is missing: ports 80/443 not checked before the installation (Caddy fails to start if they are taken)"
+		return 0
+	fi
+	for p in tcp:80 tcp:443 udp:443; do
+		! port_busy "${p%%:*}" "${p#*:}" || die "port ${p#*:}/${p%%:*} is already in use: Caddy needs 80/tcp, 443/tcp and 443/udp (ss -lntup)"
+	done
+}
+
+preflight_dns() {
+	local resolved local_ips ip
+	resolved=$(getent ahosts "$CFG_ADMIN_HOST" 2>/dev/null | awk '{ print $1 }' | sort -u || true)
+	if [ -z "$resolved" ]; then
+		warn "$CFG_ADMIN_HOST does not resolve: create its DNS A record before the first visit, or no certificate can be issued"
+		return 0
+	fi
+	if grep -q ':' <<<"$resolved"; then
+		warn "$CFG_ADMIN_HOST has an IPv6 (AAAA) record: this installation serves IPv4 only (the firewall and Docker refuse IPv6 on 80/443), so remove the AAAA records of the admin and tenant host names"
+	fi
+	resolved=$(grep -v ':' <<<"$resolved" || true)
+	if [ -z "$resolved" ]; then
+		warn "$CFG_ADMIN_HOST has no IPv4 (A) record: create one before the first visit, or no certificate can be issued"
+		return 0
+	fi
+	if command -v ip >/dev/null 2>&1; then
+		local_ips=$(ip -o addr show 2>/dev/null | awk '{ sub(/\/.*/, "", $4); print $4 }')
+	else
+		local_ips=$(hostname -I 2>/dev/null | tr ' ' '\n')
+	fi
+	for ip in $resolved; do
+		grep -qxF "$ip" <<<"$local_ips" && return 0
+	done
+	warn "$CFG_ADMIN_HOST resolves to $(echo "$resolved" | tr '\n' ' ')which is not an address of this server (fine behind a NAT that forwards 80 and 443 here)"
+}
+
+preflight_network() {
+	local h hosts
+	hosts=("$(registry_host "$(image_repo)")" acme-v02.api.letsencrypt.org database.clamav.net github.com
+		tuf-repo-cdn.sigstore.dev rekor.sigstore.dev deb.debian.org)
+	command -v docker >/dev/null 2>&1 || hosts+=(download.docker.com)
+	for h in "${hosts[@]}"; do
+		reachable "${h%%:*}" || warn "cannot reach $h on port 443 (proxy or firewall?): the installation will probably fail"
+	done
+}
+
+# --- Installation steps ----------------------------------------------------------------------------
+
+# apt_get ARG...: apt-get, non-interactive, waiting for the dpkg and apt locks (cloud-init or
+# apt-daily may hold them right after the first boot of a VM); output to the log file only.
+apt_get() {
+	local i out
+	for i in $(seq 1 60); do
+		printf '%s $ apt-get %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$LOG_FILE"
+		if out=$(env DEBIAN_FRONTEND=noninteractive apt-get -o "DPkg::Lock::Timeout=$APT_LOCK_TIMEOUT" "$@" 2>&1); then
+			printf '%s\n' "$out" >>"$LOG_FILE"
+			return 0
+		fi
+		printf '%s\n' "$out" >>"$LOG_FILE"
+		if ! grep -qiE 'could not get lock|unable to lock|unable to acquire' <<<"$out"; then
+			printf 'transteira-install: ERROR: command failed: apt-get %s\n--- last lines of %s ---\n' "$*" "$LOG_FILE" >&2
+			tail -n 25 "$LOG_FILE" >&2
+			exit 1
+		fi
+		[ "$i" != 1 ] || log "another package manager holds the apt lock (cloud-init, apt-daily?): waiting"
+		sleep 10
+	done
+	die "the apt lock is still held after 10 minutes: retry once the other package manager has finished"
+}
+
+apt_install() { apt_get install -y -q --no-install-recommends "$@"; }
+
+# docker_versions_ok: the installed Docker daemon answers and is recent enough for deploy/.
+docker_versions_ok() {
+	local server compose
+	docker info >/dev/null 2>&1 || die "Docker is installed but its daemon does not answer: systemctl status docker"
+	server=$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)
+	compose=$(docker compose version --short 2>/dev/null || true)
+	compose=${compose#v}
+	if [ -z "$server" ] || version_lt "$server" "$DOCKER_MIN_VERSION"; then
+		die "Docker Engine '$server' is too old: $DOCKER_MIN_VERSION or later is required (upgrade it, or install on a blank server)"
+	fi
+	if [ -z "$compose" ] || version_lt "$compose" "$COMPOSE_MIN_VERSION"; then
+		die "Docker Compose '$compose' is too old: $COMPOSE_MIN_VERSION or later is required (docker-compose-plugin)"
+	fi
+}
+
+# docker_daemon_config: disables the userland proxy of Docker (render_daemon_json). Written before
+# Docker CE is installed, so that it starts with it; an existing configuration is never changed.
+docker_daemon_config() {
+	if [ -e "$DOCKER_DAEMON_JSON" ]; then
+		grep -Eq '"userland-proxy"[[:space:]]*:[[:space:]]*false' "$DOCKER_DAEMON_JSON" ||
+			warn "$DOCKER_DAEMON_JSON does not set \"userland-proxy\": false: with --no-firewall, IPv6 clients would reach Caddy with the gateway address of the proxy network (docs/install/quick-install.md)"
+		return 0
+	fi
+	install -d -m 0755 "$(dirname "$DOCKER_DAEMON_JSON")"
+	render_daemon_json | write_root_file "$DOCKER_DAEMON_JSON" 0644
+	if command -v docker >/dev/null 2>&1 && systemctl is-active --quiet docker 2>/dev/null; then
+		if [ -z "$(docker ps -q 2>/dev/null)" ]; then
+			run systemctl restart docker
+		else
+			warn "$DOCKER_DAEMON_JSON written; Docker runs other containers, so it was not restarted: restart it (systemctl restart docker) to apply it"
+		fi
+	fi
+}
+
+# docker_key_ok FILE: the Docker APT key file holds exactly one primary key, the expected one.
+docker_key_ok() {
+	local gnupg cols
+	gnupg=$(mktemp -d)
+	cols=$(GNUPGHOME=$gnupg gpg --batch --show-keys --with-colons "$1" 2>/dev/null || true)
+	rm -rf "$gnupg"
+	[ "$(awk -F: '$1 == "pub"' <<<"$cols" | wc -l)" = 1 ] || return 1
+	[ "$(awk -F: '$1 == "pub" { p = 1; next } p && $1 == "fpr" { print $10; exit }' <<<"$cols")" = "$DOCKER_GPG_FPR" ]
+}
+
+install_docker() {
+	docker_daemon_config
+	if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+		log "Docker already present ($(docker --version 2>/dev/null)): the Docker APT repository is not added"
+		docker_versions_ok
+		return 0
+	fi
+	log "installing Docker CE from the official Docker APT repository"
+	install -d -m 0755 /etc/apt/keyrings
+	run curl -fsSL --proto '=https' --tlsv1.2 -o /etc/apt/keyrings/docker.asc.tmp "https://download.docker.com/linux/debian/gpg"
+	docker_key_ok /etc/apt/keyrings/docker.asc.tmp ||
+		die "the Docker APT key file is not exactly the key with fingerprint $DOCKER_GPG_FPR: refused"
+	chmod 0644 /etc/apt/keyrings/docker.asc.tmp
+	mv -f /etc/apt/keyrings/docker.asc.tmp /etc/apt/keyrings/docker.asc
+	printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian %s stable\n' \
+		"$ARCH" "$OS_CODENAME" >/etc/apt/sources.list.d/docker.list
+	apt_get update -q
+	apt_install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+	run systemctl enable --now docker
+	docker compose version >/dev/null 2>&1 || die "docker compose does not work after the installation"
+	docker_versions_ok
+}
+
+install_packages() {
+	log "installing the system packages"
+	apt_get update -q
+	local pkgs=(ca-certificates curl gpg iproute2 tar gzip coreutils)
+	[ "$OPT_FIREWALL" = 0 ] || pkgs+=(nftables)
+	[ "$OPT_FAIL2BAN" = 0 ] || pkgs+=(fail2ban python3-systemd)
+	[ "$OPT_AUTO_UPDATES" = 0 ] || pkgs+=(unattended-upgrades)
+	apt_install "${pkgs[@]}"
+	install_docker
+}
+
+install_cosign() {
+	install -d -m 0755 "$INSTALL_DIR/bin"
+	if test_mode && [ -n "${TT_INSTALL_TEST_COSIGN:-}" ]; then
+		warn "TEST MODE: cosign from TT_INSTALL_TEST_COSIGN ($TT_INSTALL_TEST_COSIGN), checksum NOT checked"
+		install -m 0755 "$TT_INSTALL_TEST_COSIGN" "$COSIGN_BIN"
+		return 0
+	fi
+	local want sum tmp
+	case "$ARCH" in amd64) want=$TTI_COSIGN_SHA256_AMD64 ;; arm64) want=$TTI_COSIGN_SHA256_ARM64 ;; esac
+	if [ -x "$COSIGN_BIN" ] && [ "$(sha256sum "$COSIGN_BIN" | cut -d' ' -f1)" = "$want" ]; then
+		log "cosign $TTI_COSIGN_VERSION already present"
+		return 0
+	fi
+	log "downloading cosign $TTI_COSIGN_VERSION (checked by SHA-256)"
+	tmp=$(mktemp "$INSTALL_DIR/bin/cosign.XXXXXX")
+	run curl -fsSL --proto '=https' --tlsv1.2 -o "$tmp" \
+		"https://github.com/sigstore/cosign/releases/download/$TTI_COSIGN_VERSION/cosign-linux-$ARCH"
+	sum=$(sha256sum "$tmp" | cut -d' ' -f1)
+	if [ "$sum" != "$want" ]; then
+		rm -f "$tmp"
+		die "the cosign download has SHA-256 $sum, expected $want: refused"
+	fi
+	chmod 0755 "$tmp"
+	mv -f "$tmp" "$COSIGN_BIN"
+}
+
+# image_repo: the repository to pull from (the baked one, or the test override).
+image_repo() {
+	if test_mode && [ -n "${TT_INSTALL_TEST_IMAGE_REPO:-}" ]; then
+		[[ "$TT_INSTALL_TEST_IMAGE_REPO" =~ ^[a-z0-9.:-]+(/[a-z0-9._-]+)+$ ]] ||
+			die "TT_INSTALL_TEST_IMAGE_REPO must be a repository without tag or digest"
+		echo "$TT_INSTALL_TEST_IMAGE_REPO"
+	else
+		echo "$TTI_IMAGE_REPO"
+	fi
+}
+
+verify_image() {
+	local repo pub fp pd
+	local -a flags=()
+	repo=$(image_repo)
+	pub="$INSTALL_DIR/cosign.pub"
+	printf '%s\n' "$TTI_COSIGN_PUB" >"$pub.tmp"
+	fp=$(sha256sum "$pub.tmp" | cut -d' ' -f1)
+	[ "$fp" = "$TTI_COSIGN_PUB_SHA256" ] || die "the embedded cosign.pub has fingerprint $fp, expected $TTI_COSIGN_PUB_SHA256"
+	chmod 0644 "$pub.tmp"
+	mv -f "$pub.tmp" "$pub"
+	log "cosign.pub SHA-256 fingerprint: $fp (compare with README.md and SECURITY.md of the project)"
+	if test_mode; then
+		flags=(--insecure-ignore-tlog=true --allow-insecure-registry --allow-http-registry)
+	fi
+	pd=$(platform_digest "$ARCH")
+	log "verifying the signature of $repo@$TTI_INDEX_DIGEST"
+	run "$COSIGN_BIN" verify --key "$pub" "${flags[@]}" "$repo@$TTI_INDEX_DIGEST"
+	log "verifying the SBOM attestation of linux/$ARCH ($pd)"
+	run "$COSIGN_BIN" verify-attestation --key "$pub" --type spdxjson "${flags[@]}" "$repo@$pd"
+	IMAGE_REF="$repo@$TTI_INDEX_DIGEST"
+	log "pulling $IMAGE_REF"
+	run docker pull -q --platform "linux/$ARCH" "$IMAGE_REF"
+	local got
+	got=$(docker image inspect --format '{{.Id}}' "$IMAGE_REF" 2>/dev/null || true)
+	[ -n "$got" ] || die "the image $IMAGE_REF is not available after the pull"
+}
+
+ensure_proxy_network() {
+	if docker network inspect "$PROXY_NETWORK" >/dev/null 2>&1; then
+		local subnet
+		subnet=$(docker network inspect "$PROXY_NETWORK" --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}')
+		grep -qw -- "$PROXY_SUBNET" <<<"$subnet" ||
+			die "the Docker network $PROXY_NETWORK exists with subnet '$subnet', expected $PROXY_SUBNET"
+		return 0
+	fi
+	log "creating the Docker network $PROXY_NETWORK ($PROXY_SUBNET)"
+	run docker network create --subnet "$PROXY_SUBNET" "$PROXY_NETWORK"
+}
+
+# copy_deploy_files SRC [DEST]: the deployment files of the payload (SRC = its deploy/ folder)
+# into DEST (default DEPLOY_DIR); never .env, secrets/ or the SMTP overlay.
+copy_deploy_files() {
+	local src=$1 dest=${2:-$DEPLOY_DIR}
+	install -d -m 0755 "$dest"
+	(cd "$src" && tar -cf - --exclude=./secrets --exclude=./.env .) | tar -xf - -C "$dest" --no-same-owner
+}
+
+write_root_file() { # PATH MODE (content on stdin)
+	local tmp
+	tmp=$(mktemp "$1.XXXXXX")
+	cat >"$tmp"
+	chmod "$2" "$tmp"
+	mv -f "$tmp" "$1"
+}
+
+deploy_files() {
+	local p=$WORK_DIR/payload
+	log "writing $DEPLOY_DIR and $PROXY_DIR"
+	copy_deploy_files "$p/deploy"
+	install -d -m 0755 "$PROXY_DIR"
+	install -m 0644 "$p/reverse-proxy/caddy/docker-compose.yml" "$PROXY_DIR/docker-compose.yml"
+	install -m 0644 "$p/reverse-proxy/caddy/README.md" "$PROXY_DIR/README.md"
+	install -m 0644 "$p/reverse-proxy/caddy/Caddyfile.on-demand" "$PROXY_DIR/Caddyfile.on-demand.reference"
+	local test=0
+	test_mode && test=1
+	if [ -e "$PROXY_DIR/Caddyfile" ]; then
+		log "keeping the existing $PROXY_DIR/Caddyfile"
+	else
+		render_caddyfile "$p/reverse-proxy/caddy/Caddyfile.on-demand" "$CFG_ADMIN_HOST" "$CFG_ACME_EMAIL" "$test" |
+			write_root_file "$PROXY_DIR/Caddyfile" 0644
+	fi
+	ensure_proxy_network
+
+	local pg=()
+	[ "$CFG_ENGINE" = sqlite ] || pg=(--postgres)
+	run sh "$DEPLOY_DIR/init-secrets.sh" "${pg[@]}" "$DEPLOY_DIR/secrets"
+	if [ -n "$CFG_SMTP_USER" ]; then
+		local f="$DEPLOY_DIR/secrets/$SMTP_SECRET"
+		if [ ! -e "$f" ]; then
+			[ "$CFG_SMTP_PASSWORD_SOURCE" != kept ] ||
+				die "$f is missing: rerun with --smtp-password-file"
+			(
+				umask 077
+				if [ "$CFG_SMTP_PASSWORD_SOURCE" = prompt ]; then
+					printf '%s\n' "$SMTP_PASSWORD" >"$f"
+				else
+					cat -- "${CFG_SMTP_PASSWORD_SOURCE#file:}" >"$f"
+				fi
+			)
+			chown 10001:10001 "$f"
+			chmod 0400 "$f"
+		fi
+		SMTP_PASSWORD=""
+		render_smtp_overlay | write_root_file "$DEPLOY_DIR/$SMTP_OVERLAY" 0644
+	fi
+	if [ -e "$DEPLOY_DIR/.env" ]; then
+		log "keeping the existing $DEPLOY_DIR/.env (image line updated)"
+		set_env_image "$DEPLOY_DIR/.env"
+	else
+		(umask 077 && render_env "$DEPLOY_DIR/.env.example" >"$DEPLOY_DIR/.env.tmp")
+		chmod 0600 "$DEPLOY_DIR/.env.tmp"
+		mv -f "$DEPLOY_DIR/.env.tmp" "$DEPLOY_DIR/.env"
+	fi
+}
+
+# set_env_image FILE: points TRANSTEIRA_IMAGE of an existing .env at IMAGE_REF.
+set_env_image() {
+	grep -q '^TRANSTEIRA_IMAGE=' "$1" || die "$1 has no TRANSTEIRA_IMAGE line"
+	sed -i "s|^TRANSTEIRA_IMAGE=.*|TRANSTEIRA_IMAGE=$IMAGE_REF|" "$1"
+	chmod 0600 "$1"
+}
+
+compose_tt() { (cd "$DEPLOY_DIR" && docker compose "$@"); }
+compose_proxy() { (cd "$PROXY_DIR" && docker compose -f docker-compose.yml "$@"); }
+
+# wait_healthy CONTAINER TIMEOUT
+wait_healthy() {
+	local c=$1 deadline=$((SECONDS + $2)) state
+	while :; do
+		state=$(docker inspect --format '{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$c" 2>/dev/null || echo missing)
+		case "$state" in
+		*/healthy) return 0 ;;
+		exited/* | dead/*) die "$c is $state: docker logs $c" ;;
+		esac
+		[ "$SECONDS" -lt "$deadline" ] || die "$c is not healthy after $2 s (state $state): docker logs $c"
+		sleep 5
+	done
+}
+
+# wait_signatures: the first freshclam run fills the signature volume before clamd starts (clamd
+# does not start without signatures).
+wait_signatures() {
+	local deadline=$((SECONDS + CLAMAV_SIG_TIMEOUT))
+	log "waiting for the first ClamAV signature download (several minutes)"
+	until docker exec transteira-clamav-update sh -c 'ls /var/lib/clamav/main.c[vl]d /var/lib/clamav/daily.c[vl]d /var/lib/clamav/bytecode.c[vl]d' >/dev/null 2>&1; do
+		[ "$SECONDS" -lt "$deadline" ] || die "no ClamAV signatures after $CLAMAV_SIG_TIMEOUT s: docker logs transteira-clamav-update"
+		sleep 10
+	done
+}
+
+start_stack() {
+	log "starting TransTeira (compose project transteira)"
+	compose_tt pull -q --ignore-buildable >>"$LOG_FILE" 2>&1 || true
+	run compose_tt up -d clamav-update
+	wait_signatures
+	run compose_tt up -d
+	wait_healthy transteira-clamav "$HEALTH_TIMEOUT"
+	[ "$CFG_ENGINE" = sqlite ] || wait_healthy transteira-postgres "$HEALTH_TIMEOUT"
+	wait_healthy transteira "$HEALTH_TIMEOUT"
+	log "starting Caddy (compose project reverse-proxy)"
+	run compose_proxy up -d
+	local deadline=$((SECONDS + 60))
+	until [ "$(docker inspect --format '{{.State.Status}}' reverse-proxy-caddy-1 2>/dev/null || true)" = running ]; do
+		[ "$SECONDS" -lt "$deadline" ] || die "Caddy is not running: docker compose -f $PROXY_DIR/docker-compose.yml logs"
+		sleep 2
+	done
+	check_version
+}
+
+check_version() {
+	local got
+	got=$(docker exec transteira /transteira version 2>/dev/null || true)
+	case "$got" in
+	*"$TTI_VERSION"*) log "running: $got" ;;
+	*) die "the running TransTeira reports '$got', expected $TTI_VERSION" ;;
+	esac
+}
+
+setup_firewall() {
+	local ports
+	mapfile -t ports < <(ssh_ports)
+	log "host firewall: nftables table inet transteira_fw (SSH ${ports[*]}, 80/tcp, 443/tcp, 443/udp)"
+	install -d -m 0755 /etc/transteira
+	render_nft "${ports[@]}" | write_root_file "$FW_RULES" 0644
+	run nft -c -f "$FW_RULES"
+	render_fw_unit | write_root_file "$FW_UNIT" 0644
+	run systemctl daemon-reload
+	run systemctl enable transteira-firewall.service
+	run systemctl restart transteira-firewall.service
+}
+
+setup_fail2ban() {
+	local p=$WORK_DIR/payload/fail2ban logpath
+	logpath=$(docker volume inspect transteira_logs --format '{{.Mountpoint}}')/security.log
+	[ -f "$logpath" ] || die "$logpath is missing (TransTeira writes it at start)"
+	log "fail2ban: jails transteira and transteira-sso on $logpath"
+	install -m 0644 "$p/filter.d/transteira.conf" /etc/fail2ban/filter.d/transteira.conf
+	install -m 0644 "$p/filter.d/transteira-sso.conf" /etc/fail2ban/filter.d/transteira-sso.conf
+	if [ -e "$F2B_JAIL" ]; then
+		log "keeping the existing $F2B_JAIL"
+	else
+		render_jail "$p/jail.d/transteira.local" "$logpath" | write_root_file "$F2B_JAIL" 0644
+	fi
+	# Debian 12 enables the sshd jail on /var/log/auth.log, which a server without rsyslog does
+	# not have: fail2ban would then refuse to start at all. sshd logs to the journal.
+	if [ ! -e /var/log/auth.log ] && [ ! -e "$F2B_SSHD" ]; then
+		render_sshd_journal | write_root_file "$F2B_SSHD" 0644
+	fi
+	run systemctl enable fail2ban
+	run systemctl restart fail2ban
+	local deadline=$((SECONDS + 30))
+	while [ "$SECONDS" -lt "$deadline" ]; do
+		fail2ban-client status transteira >/dev/null 2>&1 && return 0
+		sleep 2
+	done
+	warn "fail2ban does not report the transteira jail: check journalctl -u fail2ban"
+}
+
+setup_auto_updates() {
+	log "automatic Debian security updates (unattended-upgrades)"
+	render_unattended | write_root_file "$UU_CONF" 0644
+	render_auto_upgrades | write_root_file "$AUTO_CONF" 0644
+	run systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
+}
+
+# setup_token: the setup token printed by TransTeira while no admin exists (empty otherwise).
+setup_token() {
+	docker logs transteira 2>&1 | sed -n 's/.*Setup token: \([A-Za-z0-9_-]*\).*/\1/p' | tail -n 1
+}
+
+summary() {
+	local token
+	token=$(setup_token)
+	echo
+	echo "=============================================================================="
+	echo " TransTeira $TTI_VERSION is installed."
+	echo "=============================================================================="
+	if [ -n "$token" ]; then
+		echo " 1. Create the super admin (with TOTP) at:"
+		echo "      https://$CFG_ADMIN_HOST/admin/setup"
+		if [ "$OPT_YES" = 0 ]; then
+			# Interactive terminal only: the setup token never reaches the log file. With --yes,
+			# the output usually lands in an automation log (cloud-init, Ansible): not printed.
+			echo "    setup token: $token"
+			echo "    (valid until TransTeira restarts; then read the new one with"
+			echo "     docker logs transteira 2>&1 | grep 'Setup token')"
+		else
+			echo "    setup token: not printed with --yes (it would stay in automation logs);"
+			echo "    read it on the server with: docker logs transteira 2>&1 | grep 'Setup token'"
+		fi
+	else
+		echo " 1. Administration: https://$CFG_ADMIN_HOST/admin/"
+	fi
+	echo " 2. Create the first entity in the assistant, then its DNS record (pointing"
+	echo "    at this server: Caddy gets its certificate on demand) and its SMTP server."
+	echo " Files: $DEPLOY_DIR (docker compose), $PROXY_DIR (Caddy)."
+	echo " Log of this installation: $LOG_FILE"
+	if [ "${#WARNINGS[@]}" -gt 0 ]; then
+		echo " Warnings:"
+		printf '   - %s\n' "${WARNINGS[@]}"
+	fi
+	echo
+	echo "!!! MASTER KEY: copy $DEPLOY_DIR/secrets/master_key into your password vault,"
+	echo "!!! OUTSIDE this server (show it with: sudo cat $DEPLOY_DIR/secrets/master_key)."
+	echo "!!! Without it, the files and the backups can never be decrypted."
+	if [ "$OPT_YES" = 0 ]; then
+		local r=""
+		while [ "$r" != copied ]; do
+			read -r -p "Type 'copied' once the master key is in your vault: " r </dev/tty || break
+		done
+	fi
+	log "installation finished"
+}
+
+test_mode_banner() {
+	test_mode || return 0
+	{
+		echo "######################################################################"
+		echo "# TT_INSTALL_TEST_MODE=$TEST_MODE_VALUE: TEST HOOK ON. NEVER IN PRODUCTION."
+		echo "# Internal CA instead of Let's Encrypt, image signatures checked WITHOUT"
+		echo "# the transparency log, HTTP registries allowed. Unset it and start again."
+		echo "######################################################################"
+	} >&2
+	warn "TEST MODE (TT_INSTALL_TEST_MODE) is on"
+	sleep 3
+}
+
+init_log() {
+	touch "$LOG_FILE"
+	chmod 0600 "$LOG_FILE"
+	LOG_READY=1
+	log "=== install.sh $TTI_VERSION started ($*)"
+}
+
+cleanup() {
+	[ -z "$WORK_DIR" ] || rm -rf "$WORK_DIR"
+}
+
+on_error() {
+	local rc=$?
+	printf 'transteira-install: ERROR: failed at line %s (exit %s); details in %s\n' "$1" "$rc" "$LOG_FILE" >&2
+}
+
+# --- Modes ---------------------------------------------------------------------------------------------
+
+do_dry_run() {
+	local tmp
+	tmp=$(mktemp -d)
+	WORK_DIR=$tmp
+	collect_config
+	detect_os /etc/os-release || echo "dry run: note: $REASON (the real run would stop here)"
+	ARCH=$(map_arch "$(dpkg --print-architecture 2>/dev/null || uname -m)") || ARCH=amd64
+	IMAGE_REF="$(image_repo)@$TTI_INDEX_DIGEST"
+	payload_extract "$tmp/payload"
+	local test=0
+	test_mode && test=1
+	echo "=== DRY RUN: nothing is changed on this machine ==="
+	echo "TransTeira $TTI_VERSION, image $IMAGE_REF (linux/$ARCH: $(platform_digest "$ARCH" || echo none))"
+	echo "cosign $TTI_COSIGN_VERSION, cosign.pub SHA-256 fingerprint: $TTI_COSIGN_PUB_SHA256"
+	echo "Plan:"
+	echo "  1. preflight checks (root, Debian 12/13, amd64/arm64, memory, disk, ports, DNS, network)"
+	echo "  2. packages: Docker CE (official APT repository)$([ "$OPT_FIREWALL" = 0 ] || echo ", nftables")$([ "$OPT_FAIL2BAN" = 0 ] || echo ", fail2ban")$([ "$OPT_AUTO_UPDATES" = 0 ] || echo ", unattended-upgrades"); cosign"
+	echo "  3. cosign verify of the image index and verify-attestation (spdxjson) of linux/$ARCH"
+	echo "  4. $DEPLOY_DIR ($CFG_ENGINE), secrets, .env; $PROXY_DIR (Caddy, on-demand TLS); network $PROXY_NETWORK $PROXY_SUBNET"
+	echo "  5. docker compose up of transteira and reverse-proxy, wait until healthy"
+	[ "$OPT_FIREWALL" = 0 ] || echo "  6. firewall: $FW_RULES + $FW_UNIT (SSH $(ssh_ports | tr '\n' ' ')80/tcp 443/tcp 443/udp)"
+	[ "$OPT_FAIL2BAN" = 0 ] || echo "  7. fail2ban: $F2B_JAIL"
+	[ "$OPT_AUTO_UPDATES" = 0 ] || echo "  8. unattended-upgrades: $UU_CONF (Debian security only)"
+	echo "--- installer settings appended to $DEPLOY_DIR/.env ---"
+	render_env "$tmp/payload/deploy/.env.example" | sed -n '/^# Set by the TransTeira installer/,$p'
+	echo "--- $PROXY_DIR/Caddyfile (changed lines) ---"
+	render_caddyfile "$tmp/payload/reverse-proxy/caddy/Caddyfile.on-demand" "$CFG_ADMIN_HOST" "$CFG_ACME_EMAIL" "$test" |
+		grep -E '^\s*(email|local_certs|# No ACME)|^[a-z0-9.-]+ \{$' || true
+	echo "=== DRY RUN: end ==="
+}
+
+# upgrade_check_staged: the compose projects of the new release load with the kept .env (image
+# line updated), SMTP overlay, secrets and Caddyfile, in a staging folder, before any file of the
+# installation is replaced.
+upgrade_check_staged() {
+	local stage=$WORK_DIR/stage proxy=$WORK_DIR/stage-proxy
+	install -d -m 0700 "$stage" "$proxy"
+	(cd "$DEPLOY_DIR" && tar -cf - --exclude=./secrets .) | tar -xpf - -C "$stage"
+	copy_deploy_files "$WORK_DIR/payload/deploy" "$stage"
+	ln -s "$DEPLOY_DIR/secrets" "$stage/secrets"
+	set_env_image "$stage/.env"
+	install -m 0644 "$WORK_DIR/payload/reverse-proxy/caddy/docker-compose.yml" "$proxy/docker-compose.yml"
+	ln -s "$PROXY_DIR/Caddyfile" "$proxy/Caddyfile"
+	printf '%s $ docker compose config -q (staged %s)\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$TTI_VERSION" >>"$LOG_FILE"
+	(cd "$stage" && docker compose config -q) >>"$LOG_FILE" 2>&1 ||
+		die "the compose files of $TTI_VERSION do not load with the current $DEPLOY_DIR/.env (see $LOG_FILE): nothing was changed; read the upgrade notes of the release"
+	(cd "$proxy" && docker compose -f docker-compose.yml config -q) >>"$LOG_FILE" 2>&1 ||
+		die "the Caddy compose file of $TTI_VERSION does not load (see $LOG_FILE): nothing was changed"
+}
+
+# upgrade_save_previous: the files the upgrade replaces (deployment folder without its secrets,
+# with .env; compose file of Caddy), kept in PREVIOUS_DIR for the rollback.
+upgrade_save_previous() {
+	[ ! -e "$PREVIOUS_DIR" ] || rm -r -- "$PREVIOUS_DIR"
+	install -d -m 0700 "$PREVIOUS_DIR" "$PREVIOUS_DIR/deploy" "$PREVIOUS_DIR/reverse-proxy"
+	(cd "$DEPLOY_DIR" && tar -cf - --exclude=./secrets .) | tar -xpf - -C "$PREVIOUS_DIR/deploy"
+	cp -p "$PROXY_DIR/docker-compose.yml" "$PREVIOUS_DIR/reverse-proxy/docker-compose.yml"
+}
+
+# upgrade_restart: starts the new release (run in a subshell: any failure returns non-zero).
+upgrade_restart() {
+	log "restarting with $IMAGE_REF"
+	compose_tt pull -q --ignore-buildable >>"$LOG_FILE" 2>&1 || true
+	run compose_tt up -d --remove-orphans
+	wait_healthy transteira "$HEALTH_TIMEOUT"
+	run compose_proxy up -d
+	check_version
+}
+
+# upgrade_rollback: puts back the files of the previous release and restarts it.
+upgrade_rollback() {
+	warn "the upgrade to $TTI_VERSION failed: restoring the files of $PREVIOUS_VERSION ($PREVIOUS_DIR) and restarting it"
+	(cd "$PREVIOUS_DIR/deploy" && tar -cf - .) | tar -xpf - -C "$DEPLOY_DIR"
+	cp -p "$PREVIOUS_DIR/reverse-proxy/docker-compose.yml" "$PROXY_DIR/docker-compose.yml"
+	local rc=0
+	trap - ERR
+	set +e
+	(
+		set -e
+		run compose_tt up -d --remove-orphans
+		wait_healthy transteira "$HEALTH_TIMEOUT"
+		run compose_proxy up -d
+	)
+	rc=$?
+	set -e
+	trap 'on_error $LINENO' ERR
+	if [ "$rc" = 0 ]; then
+		die "the upgrade to $TTI_VERSION failed; $PREVIOUS_VERSION runs again (see $LOG_FILE)"
+	fi
+	die "the upgrade to $TTI_VERSION failed and $PREVIOUS_VERSION did not start again (it may refuse a database already migrated by $TTI_VERSION): restore the pre-upgrade backup (docs/operations/upgrade.md); see $LOG_FILE"
+}
+
+do_upgrade() {
+	local state old engine
+	state=$(install_state)
+	[ "$state" = installed ] || die "--upgrade needs an installation made by this script ($STATE_FILE with TTI_STATE=installed; found: $state)"
+	old=$(state_value "$STATE_FILE" TTI_INSTALLED_VERSION)
+	engine=$(state_value "$STATE_FILE" TTI_ENGINE)
+	CFG_ENGINE=${engine:-sqlite}
+	CFG_ADMIN_HOST=$(state_value "$STATE_FILE" TTI_ADMIN_HOST)
+	CFG_ACME_EMAIL=$(state_value "$STATE_FILE" TTI_ACME_EMAIL)
+	CFG_SMTP_HOST=$(state_value "$STATE_FILE" TTI_SMTP_HOST)
+	CFG_SMTP_PORT=$(state_value "$STATE_FILE" TTI_SMTP_PORT)
+	CFG_SMTP_SECURITY=$(state_value "$STATE_FILE" TTI_SMTP_SECURITY)
+	CFG_SMTP_FROM=$(state_value "$STATE_FILE" TTI_SMTP_FROM)
+	CFG_SMTP_USER=$(state_value "$STATE_FILE" TTI_SMTP_USER)
+	! version_lt "$TTI_VERSION" "$old" || die "installed version $old is newer than $TTI_VERSION: downgrades are not supported"
+	log "upgrade from $old to $TTI_VERSION ($CFG_ENGINE)"
+	OPT_FIREWALL=$(state_value "$STATE_FILE" TTI_FIREWALL)
+	OPT_FAIL2BAN=$(state_value "$STATE_FILE" TTI_FAIL2BAN)
+	OPT_AUTO_UPDATES=$(state_value "$STATE_FILE" TTI_AUTO_UPDATES)
+	PREVIOUS_VERSION=$old
+	PREVIOUS_IMAGE=$(sed -n 's/^TRANSTEIRA_IMAGE=//p' "$DEPLOY_DIR/.env" | head -n 1)
+	docker_versions_ok
+	install_cosign
+	verify_image
+
+	WORK_DIR=$(mktemp -d)
+	payload_extract "$WORK_DIR/payload"
+	local pg=()
+	[ "$CFG_ENGINE" = sqlite ] || pg=(--postgres)
+	# Secrets a new release may need: created only when missing, existing ones are never changed.
+	run sh "$WORK_DIR/payload/deploy/init-secrets.sh" "${pg[@]}" "$DEPLOY_DIR/secrets"
+	ensure_proxy_network
+	upgrade_check_staged
+
+	local ts
+	ts=$(date -u +%Y%m%dT%H%M%SZ)
+	log "backup of the database before the upgrade"
+	if [ "$CFG_ENGINE" = sqlite ]; then
+		run docker exec transteira /transteira backup
+	else
+		run docker exec transteira-db-backup pg_dump --enable-row-security --format=custom \
+			--file="/backups/transteira-pre-upgrade-$ts.dump"
+	fi
+
+	upgrade_save_previous
+	copy_deploy_files "$WORK_DIR/payload/deploy"
+	install -m 0644 "$WORK_DIR/payload/reverse-proxy/caddy/docker-compose.yml" "$PROXY_DIR/docker-compose.yml"
+	install -m 0644 "$WORK_DIR/payload/reverse-proxy/caddy/README.md" "$PROXY_DIR/README.md"
+	install -m 0644 "$WORK_DIR/payload/reverse-proxy/caddy/Caddyfile.on-demand" "$PROXY_DIR/Caddyfile.on-demand.reference"
+	set_env_image "$DEPLOY_DIR/.env"
+	# In a subshell with errexit on (not in an || list, where errexit would be ignored), without the
+	# ERR trap: a failure of the new release starts the rollback instead of ending the script.
+	local rc=0
+	trap - ERR
+	set +e
+	(
+		set -e
+		upgrade_restart
+	)
+	rc=$?
+	set -e
+	trap 'on_error $LINENO' ERR
+	[ "$rc" = 0 ] || upgrade_rollback
+	if [ "$OPT_FAIL2BAN" = 1 ]; then
+		install -m 0644 "$WORK_DIR/payload/fail2ban/filter.d/transteira.conf" /etc/fail2ban/filter.d/transteira.conf
+		install -m 0644 "$WORK_DIR/payload/fail2ban/filter.d/transteira-sso.conf" /etc/fail2ban/filter.d/transteira-sso.conf
+		run systemctl restart fail2ban
+	fi
+	write_state installed
+	log "upgrade to $TTI_VERSION finished; .env (apart from its image line), secrets and Caddyfile were kept; previous files in $PREVIOUS_DIR"
+	if [ "${#WARNINGS[@]}" -gt 0 ]; then printf ' warning: %s\n' "${WARNINGS[@]}"; fi
+}
+
+do_install() {
+	local state
+	state=$(install_state)
+	case "$state" in
+	installed) die "TransTeira is already installed by this script: use --upgrade" ;;
+	foreign) die "a TransTeira installation not made by this script exists ($DEPLOY_DIR/.env, $PROXY_DIR/Caddyfile or a container 'transteira'): this script only installs on a blank server" ;;
+	installing)
+		log "resuming an earlier installation that did not finish"
+		resume_load
+		;;
+	esac
+	collect_config
+	preflight_resources
+	if [ "$state" = none ]; then preflight_ports; fi
+	if ! test_mode; then
+		preflight_dns
+		preflight_network
+	fi
+	echo
+	echo "About to install TransTeira $TTI_VERSION ($CFG_ENGINE) for https://$CFG_ADMIN_HOST/"
+	echo "  firewall: $([ "$OPT_FIREWALL" = 1 ] && echo yes || echo no), fail2ban: $([ "$OPT_FAIL2BAN" = 1 ] && echo yes || echo no), automatic security updates: $([ "$OPT_AUTO_UPDATES" = 1 ] && echo yes || echo no)"
+	if [ "$OPT_FIREWALL" = 1 ]; then
+		echo "  SSH port(s) the firewall keeps open: $(ssh_ports | tr '\n' ' ')(check it is the port you log in with:"
+		echo "  any other port is closed; answer n and use --no-firewall otherwise)"
+	fi
+	if [ "$OPT_YES" = 0 ] && ! ask_yes_no "Continue?" y; then
+		die "cancelled"
+	fi
+	IMAGE_REF="$(image_repo)@$TTI_INDEX_DIGEST"
+	write_state installing
+	WORK_DIR=$(mktemp -d)
+	payload_extract "$WORK_DIR/payload"
+	install_packages
+	install_cosign
+	verify_image
+	deploy_files
+	start_stack
+	[ "$OPT_FIREWALL" = 0 ] || setup_firewall
+	[ "$OPT_FAIL2BAN" = 0 ] || setup_fail2ban
+	[ "$OPT_AUTO_UPDATES" = 0 ] || setup_auto_updates
+	write_state installed
+	summary
+}
+
+main() {
+	parse_args "$@"
+	if [ "$OPT_HELP" = 1 ]; then
+		usage
+		return 0
+	fi
+	if [ "$OPT_VERSION" = 1 ]; then
+		echo "$TTI_VERSION"
+		return 0
+	fi
+	trap cleanup EXIT
+	test_mode_banner
+	if [ "$OPT_DRY_RUN" = 1 ]; then
+		do_dry_run
+		return 0
+	fi
+	require_root
+	init_log "$@"
+	trap 'on_error $LINENO' ERR
+	preflight_platform
+	if [ "$OPT_UPGRADE" = 1 ]; then
+		do_upgrade
+	else
+		do_install
+	fi
+}
+
+if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then
+	main "$@"
+	exit $?
+fi
+# The deployment files follow (scripts/install/build.sh): base64 of a gzipped tar.

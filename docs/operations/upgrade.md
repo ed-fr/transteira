@@ -11,6 +11,30 @@ files of your deployment: add `-f deploy/docker-compose.postgres.yml` with
 PostgreSQL (and any file of your own), or set `COMPOSE_FILE` in
 `deploy/.env` and run `docker compose` from `deploy/`.
 
+## Upgrading with `install.sh`
+
+A server installed with [`install.sh`](../install/quick-install.md) is upgraded with the
+`install.sh` of the new release, downloaded and verified like the first one:
+
+```sh
+sudo bash install.sh --upgrade
+```
+
+Read the notes of the version below first. The script refuses a downgrade and a server it did not
+install (`/opt/transteira/install.conf` must record the installation). It verifies the new image
+by digest, creates the secrets the new release needs (missing files only), checks in a staging
+folder that the new compose files load with the kept `.env`, secrets and Caddyfile (it stops
+before changing anything otherwise), takes a database copy (`transteira backup` with SQLite into
+the `transteira_backups` volume, `pg_dump` with PostgreSQL), keeps the files it replaces in
+`/opt/transteira/previous`, replaces the compose files, the Caddy compose file and the fail2ban
+filters, points `TRANSTEIRA_IMAGE` of `/opt/transteira/deploy/.env` at the new digest, restarts
+and checks the version. If the new version does not become healthy, it puts the previous files
+back and restarts the previous version. `.env`, the secrets, the SMTP overlay, the Caddyfile and the
+fail2ban jail are **kept**: where a version asks you to change one of them (a new variable, a
+new proxy rule), do it by hand in `/opt/transteira/deploy/.env` or `/opt/reverse-proxy/Caddyfile`,
+then `docker compose up -d` in the folder. For a rollback, see [Rollback](#rollback) with the
+same folder and the same copy. The sections below describe the manual procedure.
+
 ## From 2.0 to 2.1
 
 Version 2.1 adds one-time secrets. Follow the usual procedure below. What to

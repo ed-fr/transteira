@@ -2,6 +2,11 @@
 
 > Version anglaise de référence : [../docker.md](../docker.md). En cas de différence, la version anglaise fait foi.
 
+> **Sur un serveur Debian 12 ou 13 vierge, l'`install.sh` signé de la release fait tout
+> cela pour vous** (Docker, Caddy, ClamAV, pare-feu, fail2ban) :
+> voir [Installation rapide](quick-install.md). Ce guide manuel reste la référence
+> pour un hôte Docker existant, un reverse proxy partagé ou un autre système.
+
 Ce guide installe TransTeira sur une VM exécutant Docker, derrière un reverse proxy
 partagé avec d’autres services (CLAUDE.md section 18). Il utilise les fichiers compose
 de production de [`deploy/`](../../../deploy/README.md), avec SQLite par défaut ;

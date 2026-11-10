@@ -38,8 +38,11 @@ bantime.maxtime   = 1w
 # If the reverse proxy runs on the host network (network_mode: host or not
 # in Docker), replace chain=DOCKER-USER with chain=INPUT.
 # The action is given explicitly, with all its parameters, on purpose: do
-# not add banaction/chain/port/protocol lines, which this line overrides.
+# not add banaction/chain/port/protocol lines, which these lines override.
+# The second line bans HTTP/3 (QUIC, 443/udp), which the reference Caddy
+# publishes: without it a banned client could go on over HTTP/3.
 action = iptables-multiport[name=transteira, port="http,https", protocol=tcp, chain=DOCKER-USER]
+         iptables-multiport[name=transteira-udp, port="https", protocol=udp, chain=DOCKER-USER]
 
 # Never ban your own users (see "Never ban your own users" in README.md):
 # list every tenant's internal ranges, the corporate egress (NAT) addresses
@@ -70,6 +73,7 @@ bantime.increment = true
 bantime.maxtime   = 1w
 
 action = iptables-multiport[name=transteira-sso, port="http,https", protocol=tcp, chain=DOCKER-USER]
+         iptables-multiport[name=transteira-sso-udp, port="https", protocol=udp, chain=DOCKER-USER]
 
 # Same exemptions as the jail above (internal ranges, NAT addresses, probes).
 ignoreip = 127.0.0.1/8 ::1 192.0.2.0/24 198.51.100.10 2001:db8:10::/48

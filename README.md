@@ -256,6 +256,25 @@ interface.
 
 ## Installation (Docker + reverse proxy)
 
+### Quick install (blank Debian 12 or 13)
+
+Each release carries a signed `install.sh` that installs TransTeira, ClamAV and Caddy in Docker on
+a blank Debian 12 or 13 server (amd64 or arm64): Docker CE, the signed image pinned by digest, a
+host firewall, fail2ban and automatic security updates. Download it with `SHA256SUMS`,
+`SHA256SUMS.sigstore.json` and `cosign.pub`, verify it, then run it as root:
+
+```sh
+cosign verify-blob --key cosign.pub --bundle SHA256SUMS.sigstore.json SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+sudo bash install.sh        # questions with defaults; --yes and --admin-host for automation
+```
+
+Compare `sha256sum cosign.pub` with the fingerprint below first. It ends with the setup URL of the
+first super admin and a reminder to save the master key in a password vault. Guide:
+[docs/install/quick-install.md](docs/install/quick-install.md).
+
+### Manual installation
+
 TransTeira runs on a VM with Docker Engine 25+ and Compose 2.24+, behind a reverse proxy that
 has its own compose project (Caddy is the reference; Nginx, Traefik and Apache configurations are
 provided). Plan at least 8 GiB of RAM (ClamAV is limited to 4 GiB, its in-memory scan spool

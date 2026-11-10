@@ -2,6 +2,11 @@
 
 > Version française : [fr/docker.md](fr/docker.md).
 
+> **On a blank Debian 12 or 13 server, the signed `install.sh` of the release does
+> all of this for you** (Docker, Caddy, ClamAV, firewall, fail2ban):
+> see [Quick install](quick-install.md). This manual guide stays the reference for
+> an existing Docker host, a shared reverse proxy or another system.
+
 This guide installs TransTeira on a VM running Docker, behind a reverse proxy
 shared with other services (CLAUDE.md section 18). It uses the production
 compose files of [`deploy/`](../../deploy/README.md), with SQLite by default;

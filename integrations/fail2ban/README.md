@@ -45,6 +45,11 @@ it, so the jail uses an explicit `action = iptables-multiport[...]` with
 `chain=DOCKER-USER` (and no separate `banaction`/`chain`/`port`/`protocol`
 lines, which that explicit action would override anyway).
 
+Each jail has two actions: TCP ports 80 and 443, and UDP port 443. The UDP
+one covers HTTP/3 (QUIC), which the reference Caddy publishes on 443/udp:
+without it a banned client could go on over HTTP/3. If your proxy does not
+publish 443/udp, the second action is harmless.
+
 In `DOCKER-USER` the destination port is already the **container** port. If
 the proxy publishes `8443:443`, list `443`, or switch to `iptables-allports`.
 If the proxy runs on the host network, use `chain=INPUT` in the action.

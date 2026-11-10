@@ -197,6 +197,8 @@ async function main() {
     },
     [201],
   );
+  // Link-only transfers are off by default (super admin setting, since 2.0).
+  await adminCall('PATCH', `/admin/tenants/${tenant.id}`, { linkOnlyAllowed: true });
   const page = expectStatus(await request(TENANT_HOST, 'GET', '/'), 200, `GET https://${TENANT_HOST}/`);
   const csp = page.headers['content-security-policy'] ?? '';
   check(/default-src/.test(csp) && /frame-ancestors 'none'/.test(csp), `public page CSP missing or weak: "${csp}"`);
@@ -247,7 +249,10 @@ async function main() {
     await request(TENANT_HOST, 'POST', '/api/v1/transfers', {
       body: {
         senderEmail: `smoke-sender@${INTERNAL_DOMAIN}`,
-        recipients: ['smoke-recipient@example.org'],
+        // Link-only: since 1.1 every other transfer gives each recipient their own mailed link and
+        // never shows one to the sender, and the smoke tenant has no SMTP. The single shared link
+        // is returned once, by the finalization.
+        linkOnly: true,
         expiryDays: 1,
         language: 'en',
         files: files.map((f) => ({
@@ -277,11 +282,11 @@ async function main() {
       `tus PATCH ${f.name}`,
     );
   }
-  expectStatus(
+  const finalized = expectStatus(
     await request(TENANT_HOST, 'POST', `/api/v1/transfers/${created.id}/finalize`, { headers: bearer }),
     [200, 202],
     'finalize',
-  );
+  ).json;
   log(`token deposit ${created.id}: 2 files uploaded with tus through Caddy, finalized`);
 
   // The real clamd scans both files; poll until the scan is over.
@@ -309,8 +314,8 @@ async function main() {
   log(`clamd: clean file "clean", EICAR "infected" (audit file.infected ${JSON.stringify(infected.details ?? {})})`);
 
   // 6. Recipient view and downloads through Caddy.
-  check(transfer.downloadUrl, 'the sender view has no downloadUrl');
-  const linkToken = new URL(transfer.downloadUrl).pathname.split('/').pop();
+  check(finalized.downloadUrl, 'the finalization of a link-only transfer returned no downloadUrl');
+  const linkToken = new URL(finalized.downloadUrl).pathname.split('/').pop();
   const view = expectStatus(await request(TENANT_HOST, 'GET', `/api/v1/downloads/${linkToken}`), 200, 'GET download view').json;
   check(view.files.length === 1 && view.files[0].name === 'smoke-clean.bin', `recipient view lists ${view.files.map((f) => f.name)}`);
   check(view.files[0].sha256 === sha256(clean), 'SHA-256 shown to the recipient differs from the original');
