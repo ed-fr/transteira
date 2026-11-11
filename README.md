@@ -10,14 +10,14 @@
 **English** | [Français](README.fr.md)
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](CHANGELOG.md)
 
 **TransTeira** is a self-hosted, multi-tenant large file transfer service, in the spirit of
 WeTransfer or SwissTransfer, designed for organisations made of several entities.
 
-> **Status: stable.** Version 2.1.0 delivers the V1 scope (the core), the V1.1 scope
+> **Status: stable.** Version 2.2.0 delivers the V1 scope (the core), the V1.1 scope
 > (operations), the V1.2 scope (onboarding), the V2 scope (enterprise) and the V2.1 scope
-> (one-time secrets); see [Versions](#versions).
+> (one-time secrets), with an installer for a blank Debian server; see [Versions](#versions).
 
 ## Highlights
 
@@ -447,12 +447,15 @@ returned by `/api/v1/version` and `/healthz` and printed by `transteira version`
 | V1.1, operations (1.1) | Monitoring, abuse detection, sharing controls, "My transfers", dark mode, antivirus engines. |
 | V1.2, onboarding (1.2) | Entity setup, delegated admin invitation, branding library, provisioning API, update check. |
 | V2, enterprise (2.0) | OpenID Connect SSO (Entra ID), auditor role, proof of deposit and delivery, entity configuration export and import, permanent deposit links, signed image with SBOM, command line client, link-only option without email, optional end-to-end encryption, compliance kit. |
-| **V2.1, one-time secrets** (2.1, current) | Secrets sealed in the browser and read once, with an optional passphrase, file, email delivery and read receipt. |
+| V2.1, one-time secrets (2.1) | Secrets sealed in the browser and read once, with an optional passphrase, file, email delivery and read receipt. |
+| **2.2, quick install** (2.2, current) | `install.sh`, a signed release asset that installs TransTeira, ClamAV and Caddy on a blank Debian 12 or 13 server, with firewall, fail2ban and security updates, and upgrades it later. |
 
-Version 2.1 adds one-time secrets. It stays compatible with 2.0: the API is still `/api/v1` with
-additions only, migrations 0033, 0034 and 0035 are applied at start-up and no configuration change is
-needed. The module is on by default in every entity, existing ones included; if you copied the
-reverse proxy configurations, update them too
+Version 2.2 adds the installer ([Quick install](docs/install/quick-install.md)); the application,
+the API and the database are unchanged (rebuilt with Go 1.27.4), so upgrading from 2.1 only means
+changing the image. Version 2.1 added one-time secrets, compatible with 2.0: the API is still
+`/api/v1` with additions only, migrations 0033, 0034 and 0035 are applied at start-up and no
+configuration change is needed. The module is on by default in every entity, existing ones
+included; if you copied the reverse proxy configurations, update them too
 ([upgrade guide](docs/operations/upgrade.md#from-20-to-21)). A release is
 the commit tagged `vX.Y.Z`; `make build` and `make docker` take the version from that tag.
 
