@@ -388,6 +388,16 @@ publish() {
 
 # --- modes --------------------------------------------------------------------------------------
 
+# The command-line client is built with GOTOOLCHAIN=local (publish): the local Go must be the
+# toolchain of go.mod, so that the signed binaries carry the same standard library as the image.
+require_go_toolchain() {
+	local want have
+	want="$(awk '$1 == "toolchain" { print $2 }' go.mod)"
+	[ -n "$want" ] || die "go.mod has no toolchain line"
+	have="$(env -u GOFLAGS GOENV=off GOTOOLCHAIN=local go env GOVERSION)"
+	[ "$have" = "$want" ] || die "the local Go is $have, go.mod requires $want: install $want first (the client is built with GOTOOLCHAIN=local)"
+}
+
 mode_release() {
 	: "${RELEASE_IMAGE:?set RELEASE_IMAGE to the registry repository, e.g. docker.io/<account>/transteira}"
 	[[ "$RELEASE_IMAGE" =~ ^[a-z0-9.:-]+(/[a-z0-9._-]+)+$ ]] ||
@@ -396,6 +406,7 @@ mode_release() {
 	local version out
 	version="$(release_version)"
 	require_check_full
+	require_go_toolchain
 	require_pubkey
 	ask_password
 	require_key

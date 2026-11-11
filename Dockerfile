@@ -52,7 +52,7 @@ RUN mkdir -p /out/web-deps && cp package.json /out/web-deps/package.json && \
     test -f /out/web-deps/node_modules/svelte/package.json
 
 # --- build: static Go binary and minimal root file system --------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS build
 
 ARG VERSION=0.0.0-dev
 ARG COMMIT=unknown
@@ -61,7 +61,7 @@ ARG DATE=unknown
 ARG TARGETOS
 ARG TARGETARCH
 
-# Never download another toolchain: the image provides the one of go.mod (toolchain go1.27.3).
+# Never download another toolchain: the image provides the one of go.mod (toolchain go1.27.4).
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=readonly
 
 WORKDIR /src

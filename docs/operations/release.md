@@ -121,7 +121,8 @@ make release
 ```
 
 `scripts/release.sh` checks, in order: a clean tree, a signed tag `vX.Y.Z` on HEAD, the
-`.cache/check-full.ok` marker, that the public key of `COSIGN_KEY` equals `cosign.pub`, and that
+`.cache/check-full.ok` marker, that the local Go (`GOTOOLCHAIN=local`) is the `toolchain` of
+`go.mod` (the client binaries are built with it), that the public key of `COSIGN_KEY` equals `cosign.pub`, and that
 the fingerprint of `cosign.pub` appears in `README.md`, `README.fr.md` and `SECURITY.md`. Then it:
 
 1. builds `linux/amd64` and `linux/arm64` by cross-compilation, **always without the BuildKit cache**

@@ -11,8 +11,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 An installer for a blank Debian server, on top of 2.1. `install.sh`, a new signed asset of each
 release, installs TransTeira, ClamAV and the reference Caddy in Docker on Debian 12 or 13, with
 the signed image of its own version pinned by digest, a dedicated firewall, fail2ban and the
-automatic Debian security updates, and upgrades that installation later. The application, the
-API and the database are unchanged: upgrading from 2.1 only means changing the image. Threat model
+automatic Debian security updates, and upgrades that installation later. The application is
+rebuilt with Go 1.27.4 (security fix); the API and the database are unchanged: upgrading from 2.1
+only means changing the image. Threat model
 2.2 in force. Validated by `make check` and `make check-full` (including `install-smoke`, a real
 installation and upgrade in Debian 12 and 13 containers on SQLite and PostgreSQL).
 
@@ -43,6 +44,12 @@ installation and upgrade in Debian 12 and 13 containers on SQLite and PostgreSQL
 
 - README: a presentation video of 2.1 (asset of the v2.1.0 release, linked from a thumbnail
   in `docs/assets`), and the screenshots regenerated against the current interface.
+
+### Security
+
+- Go toolchain 1.27.4 (fix for GO-2026-6859, a crash of the HTTP/1 server through a race on
+  `MaxBytesReader` in `net/http`); `make release` now refuses to run when the local Go is not the
+  `toolchain` of `go.mod`, since the command-line client is built with it.
 
 ### Fixed
 
