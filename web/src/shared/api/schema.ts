@@ -8606,7 +8606,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "ok",
-                     *       "version": "2.1.0",
+                     *       "version": "2.2.0",
                      *       "maintenance": false,
                      *       "checks": {
                      *         "database": "ok",
@@ -8629,7 +8629,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "degraded",
-                     *       "version": "2.1.0",
+                     *       "version": "2.2.0",
                      *       "maintenance": false,
                      *       "checks": {
                      *         "database": "ok",
@@ -8732,7 +8732,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "ok",
-                     *       "version": "2.1.0",
+                     *       "version": "2.2.0",
                      *       "checkedAt": "2026-10-27T09:00:00Z",
                      *       "uptimeSeconds": 864000,
                      *       "maintenance": false,
@@ -8864,7 +8864,7 @@ export interface operations {
                 content: {
                     /**
                      * @example {
-                     *       "version": "2.1.0",
+                     *       "version": "2.2.0",
                      *       "apiVersion": "v1",
                      *       "commit": "3f9c2ab"
                      *     }
@@ -15752,7 +15752,7 @@ export interface operations {
                      * @example {
                      *       "schemaVersion": 1,
                      *       "exportedAt": "2026-11-04T10:00:00Z",
-                     *       "sourceVersion": "2.1.0",
+                     *       "sourceVersion": "2.2.0",
                      *       "settings": {
                      *         "defaultLanguage": "fr",
                      *         "maxTransferBytes": 21474836480,
@@ -15810,7 +15810,7 @@ export interface operations {
                  *       "config": {
                  *         "schemaVersion": 1,
                  *         "exportedAt": "2026-11-04T10:00:00Z",
-                 *         "sourceVersion": "2.1.0",
+                 *         "sourceVersion": "2.2.0",
                  *         "settings": {
                  *           "defaultLanguage": "fr",
                  *           "maxTransferBytes": 21474836480

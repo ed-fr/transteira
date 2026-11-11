@@ -6,9 +6,19 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-11
+
+An installer for a blank Debian server, on top of 2.1. `install.sh`, a new signed asset of each
+release, installs TransTeira, ClamAV and the reference Caddy in Docker on Debian 12 or 13, with
+the signed image of its own version pinned by digest, a dedicated firewall, fail2ban and the
+automatic Debian security updates, and upgrades that installation later. The application, the
+API and the database are unchanged: upgrading from 2.1 only means changing the image. Threat model
+2.2 in force. Validated by `make check` and `make check-full` (including `install-smoke`, a real
+installation and upgrade in Debian 12 and 13 containers on SQLite and PostgreSQL).
+
 ### Added
 
-- `install.sh`, a new asset of each release (planned for 2.2.0): installs TransTeira, ClamAV and
+- `install.sh`, a new asset of each release: installs TransTeira, ClamAV and
   the reference Caddy in Docker on a blank Debian 12 or 13 server (amd64 or arm64). It installs Docker
   CE from the official repository, verifies the signed image of its own version by digest (cosign
   pinned by SHA-256, `cosign.pub` embedded), generates the secrets and `.env`, starts both compose
@@ -1502,7 +1512,8 @@ The detailed list of the changes made during the development of the V1 follows.
   contact your administrator."), revealing nothing about the blocklist. The "not available"
   page remains for `403 invitation-not-allowed` (depositor not internal).
 
-[Unreleased]: https://github.com/ed-fr/transteira/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/ed-fr/transteira/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/ed-fr/transteira/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/ed-fr/transteira/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/ed-fr/transteira/compare/v1.2.1...v2.0.0
 [1.2.1]: https://github.com/ed-fr/transteira/compare/v1.2.0...v1.2.1

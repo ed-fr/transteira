@@ -399,7 +399,7 @@ paths:
               schema: { $ref: '#/components/schemas/Health' }
               example:
                 status: ok
-                version: 2.1.0
+                version: 2.2.0
                 maintenance: false
                 checks: { database: ok, antivirus: ok, storage: ok }
         '503':
@@ -409,7 +409,7 @@ paths:
               schema: { $ref: '#/components/schemas/Health' }
               example:
                 status: degraded
-                version: 2.1.0
+                version: 2.2.0
                 maintenance: false
                 checks: { database: ok, antivirus: unavailable, storage: ok }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -542,7 +542,7 @@ paths:
               schema: { $ref: '#/components/schemas/InstanceStatus' }
               example:
                 status: ok
-                version: 2.1.0
+                version: 2.2.0
                 checkedAt: '2026-10-27T09:00:00Z'
                 uptimeSeconds: 864000
                 maintenance: false
@@ -651,7 +651,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VersionInfo' }
-              example: { version: 2.1.0, apiVersion: v1, commit: 3f9c2ab }
+              example: { version: 2.2.0, apiVersion: v1, commit: 3f9c2ab }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -7042,7 +7042,7 @@ paths:
               example:
                 schemaVersion: 1
                 exportedAt: '2026-11-04T10:00:00Z'
-                sourceVersion: 2.1.0
+                sourceVersion: 2.2.0
                 settings:
                   defaultLanguage: fr
                   maxTransferBytes: 21474836480
@@ -7099,7 +7099,7 @@ paths:
               config:
                 schemaVersion: 1
                 exportedAt: '2026-11-04T10:00:00Z'
-                sourceVersion: 2.1.0
+                sourceVersion: 2.2.0
                 settings: { defaultLanguage: fr, maxTransferBytes: 21474836480 }
                 network: { internalCidrs: [10.30.0.0/16], internalDomains: [entity-c.example.com] }
       responses:
@@ -8150,7 +8150,7 @@ paths:
                 updateAvailable:
                   summary: A newer release exists
                   value:
-                    version: 2.1.0
+                    version: 2.2.0
                     commit: 3f9c2ab
                     updateCheck:
                       enabled: true
@@ -8162,7 +8162,7 @@ paths:
                 disabled:
                   summary: Check disabled (TT_UPDATE_CHECK=false)
                   value:
-                    version: 2.1.0
+                    version: 2.2.0
                     commit: 3f9c2ab
                     updateCheck:
                       enabled: false
@@ -8198,24 +8198,24 @@ paths:
                 upToDate:
                   summary: Already the latest release
                   value:
-                    version: 2.1.0
+                    version: 2.2.0
                     commit: 3f9c2ab
                     updateCheck:
                       enabled: true
-                      latestVersion: 2.1.0
-                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.1.0
+                      latestVersion: 2.2.0
+                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.2.0
                       updateAvailable: false
                       checkedAt: '2026-10-31T10:15:00Z'
                       lastError: none
                 networkError:
                   summary: GitHub unreachable; the last good result is kept
                   value:
-                    version: 2.1.0
+                    version: 2.2.0
                     commit: 3f9c2ab
                     updateCheck:
                       enabled: true
-                      latestVersion: 2.1.0
-                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.1.0
+                      latestVersion: 2.2.0
+                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.2.0
                       updateAvailable: false
                       checkedAt: '2026-10-30T06:00:00Z'
                       lastError: network
