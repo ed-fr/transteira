@@ -2,7 +2,7 @@
 
 > Document de cadrage destiné au développement (Claude Code). Il décrit le besoin fonctionnel, les contraintes techniques, les exigences de qualité et les règles de travail de **TransTeira**, un outil de transfert de fichiers multi-tenant open source. Toutes les valeurs indiquées sont validées.
 >
-> Le périmètre est découpé en quatre versions (section 2). Les fonctionnalités marquées **[V1.1]**, **[V1.2]**, **[V2]** ou **[V2.1]** ne sont pas à implémenter en V1, mais **l'architecture de la V1 doit les anticiper** pour éviter toute refonte ultérieure.
+> Le périmètre est découpé en versions successives (section 2). Les fonctionnalités marquées **[V1.1]**, **[V1.2]**, **[V2]**, **[V2.1]** ou **[V2.3]** ne sont pas à implémenter en V1, mais **l'architecture de la V1 doit les anticiper** pour éviter toute refonte ultérieure.
 
 ---
 
@@ -27,6 +27,8 @@ TransTeira est un outil de transfert de fichiers de type WeTransfer / SwissTrans
 | **V1.2, la mise en service** | Favicon généré depuis le logo de l'entité, assistant de création d'entité (textes proposés pour les modèles de mails et les mentions légales), bibliothèque d'images de fond libres de droits, choix de l'image de fond par le super admin à la création, désignation d'un admin délégué invité par mail pour configurer son entité via l'assistant, API de provisionnement d'entités pour les ESN (jeton d'instance restreint, TLS automatique via Caddy on-demand TLS), entité « en cours de configuration » jusqu'à la fin de l'assistant, affichage de la version et vérification des mises à jour dans l'administration du super admin. |
 | **V2, l'entreprise** | SSO OpenID Connect (Entra ID), rôle auditeur, preuve de dépôt et de remise en PDF, export / import de configuration d'entité, lien de dépôt permanent, image Docker signée avec SBOM, kit de conformité, client en ligne de commande, option lien seul sans mail, chiffrement de bout en bout en option. |
 | **V2.1, le partage de secrets** | Module de partage de secrets à usage unique, chiffrés dans le navigateur (section 22.1). |
+| **V2.2, l'installation** | Script d'installation sur un serveur Debian vierge (TransTeira, Caddy, ClamAV, pare-feu, fail2ban). |
+| **V2.3, l'interface et le secret express** | Refonte visuelle de l'interface publique et de l'administration (section 13.2), partage de secret texte sans authentification (section 22.2). |
 
 ---
 
@@ -343,6 +345,36 @@ Sans créer de compte, l'expéditeur peut demander par mail un **lien d'accès t
 - Le **voile posé sur l'image de fond s'adapte au thème** actif.
 - L'architecture CSS de la V1 repose déjà sur des variables de thème, pour que l'ajout du mode sombre ne demande pas de refonte.
 
+### 13.2 [V2.3] Refonte de l'interface
+
+Objectif : une interface plus moderne et plus aérée, sans rien perdre des exigences existantes (RGAA, CSP stricte, couleurs d'entité, mode sombre, aide contextuelle). La maquette validée couvre le dépôt (clair et sombre), le téléchargement et l'accueil de l'administration.
+
+- **Contraintes inchangées** : polices système uniquement (aucune police web, aucun CDN), toutes les couleurs passent par les variables de thème, contraste RGAA vérifié par les tests sur les deux thèmes, couleurs de statut jamais remplacées par celles de l'entité, zones cliquables d'au moins 44 px, vrais éléments `button`, `a`, `input` et `label`.
+- **Pages publiques** :
+  - en-tête : logo de l'entité dans un cartouche clair, boutons translucides pour « Mes envois », le secret, la langue, le thème et l'aide ;
+  - carte centrée aux coins très arrondis, ombre portée marquée, posée sur l'image de fond et son voile ;
+  - pied de page discret : mentions légales, confidentialité, aide, « Propulsé par TransTeira ».
+- **Dépôt** : carte en **deux colonnes** (une seule sur mobile).
+  - À gauche : grande zone de glisser-déposer (boutons « Choisir des fichiers » et « Choisir un dossier »), liste des fichiers en cartes (badge d'extension, nom, taille, bouton de retrait), jauge du volume par rapport à la limite de l'envoi.
+  - À droite : expéditeur vérifié affiché dans un bandeau de succès avec lien « Changer », destinataires sous forme d'**étiquettes** supprimables, message, **sélecteurs segmentés** pour la durée et le niveau de confidentialité (à la place des boutons radio empilés).
+  - Options de sécurité (mot de passe, vérification des destinataires, suppression après le premier téléchargement, nombre maximal de téléchargements, chiffrement de bout en bout) regroupées dans un **bloc repliable** avec des **interrupteurs** et le nombre d'options actives.
+  - Bouton d'envoi pleine largeur indiquant le volume total.
+- **Téléchargement** :
+  - en-tête « N fichiers pour vous » avec l'initiale et l'adresse de l'expéditeur ;
+  - **pastilles** d'information : expiration relative, niveau de confidentialité, téléchargements restants, taille totale ;
+  - message de l'expéditeur en bulle, avertissements antivirus en bandeau ;
+  - bouton ZIP mis en avant ;
+  - une ligne par fichier (au lieu d'un tableau) : badge d'extension, nom, badge « Analysé » ou « Non analysé », taille, empreinte SHA-256 abrégée avec bouton « Copier » (empreinte complète lisible par les lecteurs d'écran et au survol), bouton de téléchargement ;
+  - liens « Répondre avec des fichiers » et « Signaler un abus » en bas de carte.
+- **Administration** :
+  - **barre latérale** de navigation aux couleurs TransTeira (icône et libellé), repliée au-dessus du contenu sur mobile, avec l'utilisateur connecté et la déconnexion en bas ;
+  - en-tête de page avec recherche (adresse, transfert) et action principale (ex. « Nouvelle entité ») ;
+  - **tuiles d'indicateurs** (transferts, volume, virus bloqués, disque avec le seuil d'alerte matérialisé sur la jauge) ;
+  - tableaux en cartes, avec pastilles de statut et jauges de stockage ;
+  - encadré « État du système » (application, base, antivirus, maintenance, version).
+  - Tous les écrans d'administration adoptent ces composants.
+- Les **captures de la documentation** sont régénérées par Playwright, et le README est mis à jour.
+
 ---
 
 ## 14. Langues
@@ -520,6 +552,31 @@ Pour chacun, les réglages critiques sont expliqués :
 - Mêmes règles que les transferts : cloisonnement par entité, accès interne et externe sur invitation, journaux d'audit.
 - S'appuie sur la brique de chiffrement de bout en bout de la V2.
 - L'architecture V1 et V2 ne doit pas empêcher l'ajout de ce module.
+
+### 22.2 [V2.3] Secret express sans authentification
+
+Partage de secret **ultra simple**, dans l'esprit de Cryptgeon : une page, une zone de texte, un lien.
+
+- **Texte uniquement** : ni fichier, ni phrase secrète, ni accusé de lecture, ni envoi par mail. Le lien est affiché à l'écran, l'auteur le copie et le transmet lui-même.
+- **Aucune authentification** : ni vérification d'adresse, ni plage IP, ni invitation. Toute personne qui atteint le FQDN de l'entité peut créer un secret.
+- **Même chiffrement que la V2.1** : chiffré dans le navigateur, clé dans le fragment `#` du lien, le serveur ne voit jamais le texte en clair.
+- **Lecture unique** : le secret est détruit à la première lecture ou à expiration. Durées proposées : **1 heure, 1 jour, 7 jours**.
+- **Taille maximale** du texte : **10 000 caractères**.
+- **Option activable par entité, désactivée par défaut** : un service ouvert à tous peut être détourné. Le super admin peut aussi l'interdire pour toute l'instance par variable d'environnement.
+- **Protections contre les abus** :
+  - limitation de débit par IP (par défaut **10 secrets par heure**, réglable par entité) ;
+  - nombre maximal de secrets express en attente par entité (par défaut **1 000**) ;
+  - refus et dépassements écrits dans le journal de sécurité (fail2ban et CrowdSec), créations et lectures dans le journal d'audit (IP, horodatage, jamais de contenu) ;
+  - mode maintenance respecté.
+- Cloisonnement par entité comme pour tous les secrets.
+- **Accessible par l'API**, pour l'intégration dans d'autres outils (gestion de tickets, coffres de mots de passe, scripts d'exploitation) :
+  - mêmes endpoints que la page web, décrits dans la spécification OpenAPI avec exemples : création (texte chiffré et durée, réponse : identifiant et lien sans la clé), lecture unique, consultation de l'état (en attente, lu, expiré) ;
+  - **utilisable sans jeton**, avec les mêmes limites que la page web ;
+  - **avec un jeton d'API de l'entité** (section 16.4) : limitation de débit par jeton au lieu de l'IP, utilisable même si le secret express est désactivé pour l'accès anonyme, création tracée avec le jeton dans le journal d'audit ;
+  - le **chiffrement reste côté client** : le serveur ne reçoit jamais le texte en clair ni la clé, et le client construit lui-même le lien avec la clé dans le fragment `#`. Le format chiffré est documenté (`docs/architecture/e2e-format.md`) ;
+  - le **client en ligne de commande** gagne une commande de création et de lecture de secret express ;
+  - le guide d'intégration (`docs/api/`) donne des exemples complets en **PowerShell**, **Python** et **Go**. curl seul ne sait pas chiffrer : il passe par le client en ligne de commande.
+- Le modèle de menaces est mis à jour (service anonyme, déni de service par remplissage, usage comme relais de contenu illicite).
 
 ---
 
