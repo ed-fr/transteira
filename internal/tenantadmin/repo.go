@@ -27,7 +27,9 @@ type repo interface {
 	// updateTenantParts writes the parts of t selected by parts in one
 	// transaction (store.Tenants.UpdateWithPolicies).
 	updateTenantParts(ctx context.Context, t *tenant.Tenant, parts store.TenantParts) (*tenant.Tenant, error)
-	setSecretSettings(ctx context.Context, tid tenant.ID, s tenant.SecretSettings) (*tenant.Tenant, error)
+	// setSecretSettings writes the settings of the secrets and the
+	// members of the express settings e sets in one transaction.
+	setSecretSettings(ctx context.Context, tid tenant.ID, s tenant.SecretSettings, e store.ExpressPatch) (*tenant.Tenant, error)
 	usedBytes(ctx context.Context, tid tenant.ID) (int64, error)
 	networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error)
 	// replaceNetworkRules also records the review of the rules
@@ -145,8 +147,9 @@ func (r *storeRepo) updateTenantParts(ctx context.Context, t *tenant.Tenant, par
 	return r.db.Tenants().UpdateWithPolicies(ctx, t, parts)
 }
 
-func (r *storeRepo) setSecretSettings(ctx context.Context, tid tenant.ID, s tenant.SecretSettings) (*tenant.Tenant, error) {
-	return r.db.Tenants().SetSecretSettings(ctx, tid, s)
+func (r *storeRepo) setSecretSettings(ctx context.Context, tid tenant.ID, s tenant.SecretSettings, e store.ExpressPatch) (*tenant.Tenant, error) {
+	return r.db.Tenants().UpdateWithPolicies(ctx, &tenant.Tenant{ID: tid, Secrets: s},
+		store.TenantParts{Secrets: true, ExpressPatch: &e})
 }
 
 func (r *storeRepo) setTenantStatus(ctx context.Context, tid tenant.ID, status tenant.Status) error {

@@ -22,6 +22,9 @@ type Principal struct {
 	Name string
 	// AllowedCIDRs are the ranges the token may be used from.
 	AllowedCIDRs []netip.Prefix
+	// ExpressAllowed tells whether the token may create express secrets
+	// (since 2.3, threat model P91).
+	ExpressAllowed bool
 }
 
 // Authenticate checks the Authorization header of a request served on the
@@ -59,7 +62,7 @@ func (s *Service) Authenticate(ctx context.Context, tid tenant.ID, header string
 	if subtle.ConstantTimeCompare(tok.TokenHash, hash) != 1 || !tok.Usable(now) {
 		return Principal{}, ErrInvalid
 	}
-	p := Principal{TokenID: tok.ID, Name: tok.Name, AllowedCIDRs: tok.AllowedCIDRs}
+	p := Principal{TokenID: tok.ID, Name: tok.Name, AllowedCIDRs: tok.AllowedCIDRs, ExpressAllowed: tok.ExpressAllowed}
 	if !netpolicy.Contains(tok.AllowedCIDRs, clientIP) {
 		return p, ErrIPNotAllowed
 	}

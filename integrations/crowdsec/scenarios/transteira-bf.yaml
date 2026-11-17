@@ -9,14 +9,17 @@ description: "Detect brute force against TransTeira (codes, passwords, admin log
 # and of the hourly deposit cap of a drop link (scope drop_link: a limit of
 # the link, not of the client, so a third party filling a link must not get
 # its legitimate depositors banned) are excluded: recipients behind one NAT, or a download manager opening
-# parallel connections, hit them without any attack. The exclusion matches
+# parallel connections, hit them without any attack. The same goes for the
+# hourly creation limit of an API token on express secrets (scope
+# express_token, since 2.3). The express_refused event is not in the list on
+# purpose; the express_ip scope still counts. The exclusion matches
 # the whole fields part of the exact line TransTeira writes for them (the
 # truncated object ID in the transfer field, trf_ for a transfer or sec_
 # for the file of a one-time secret, then the scope, nothing after): a
 # scope="download_streams" smuggled into another value is quoted and escaped
 # and never matches. Checked by internal/securitylog/crowdsec_test.go: keep
 # the filter on a single line.
-filter: "evt.Meta.log_type == 'transteira_security' && evt.Meta.transteira_event in ['verification_code_invalid', 'transfer_password_invalid', 'admin_login_failed', 'api_token_invalid', 'deposit_refused', 'rate_limited', 'metrics_token_invalid', 'access_link_invalid', 'provisioning_token_invalid', 'drop_link_invalid', 'secret_invalid', 'secret_proof_invalid'] && !(evt.Meta.transteira_event == 'rate_limited' && evt.Parsed.fields matches '^(transfer=\"(?:trf|sec)_[0-9A-Z]{10}\" scope=\"download_streams\"|scope=\"drop_link\")$')"
+filter: "evt.Meta.log_type == 'transteira_security' && evt.Meta.transteira_event in ['verification_code_invalid', 'transfer_password_invalid', 'admin_login_failed', 'api_token_invalid', 'deposit_refused', 'rate_limited', 'metrics_token_invalid', 'access_link_invalid', 'provisioning_token_invalid', 'drop_link_invalid', 'secret_invalid', 'secret_proof_invalid'] && !(evt.Meta.transteira_event == 'rate_limited' && evt.Parsed.fields matches '^(transfer=\"(?:trf|sec)_[0-9A-Z]{10}\" scope=\"download_streams\"|scope=\"(?:drop_link|express_token)\")$')"
 groupby: evt.Meta.source_ip
 capacity: 9
 leakspeed: 1m

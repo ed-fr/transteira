@@ -99,7 +99,7 @@ func TestInstanceStateSecrets(t *testing.T) {
 		// created two days ago (not in the last 24 hours).
 		p := newSecretProofs()
 		read := create(a.ID, p.input(now.Add(-time.Hour)))
-		if _, err := repo.Reveal(ctx, a.ID, read.Token, p.key, p.proof, now.Add(-time.Minute)); err != nil {
+		if _, err := repo.Reveal(ctx, a.ID, read.Token, store.ExpressGate{}, p.key, p.proof, now.Add(-time.Minute)); err != nil {
 			t.Fatal(err)
 		}
 		in := p.input(now.Add(-time.Hour))
@@ -108,7 +108,7 @@ func TestInstanceStateSecrets(t *testing.T) {
 		wrong := p.proof
 		wrong[0] ^= 1
 		for range store.SecretMaxFailedProofs {
-			_, _ = repo.Reveal(ctx, a.ID, locked.Token, p.key, wrong, now.Add(-time.Minute))
+			_, _ = repo.Reveal(ctx, a.ID, locked.Token, store.ExpressGate{}, p.key, wrong, now.Add(-time.Minute))
 		}
 		if s, err := repo.Get(ctx, a.ID, locked.Secret.ID); err != nil || s.State != store.SecretLocked {
 			t.Fatalf("locked = %+v, %v", s, err)

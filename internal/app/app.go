@@ -566,11 +566,20 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// storage quota (alerts as for a transfer). Their link and receipt
 	// mails go through the retrier of the tenant queue (in memory only,
 	// threat model T-363), and their file downloads hold the stream slots
-	// of the transfer downloads (T-55).
+	// of the transfer downloads (T-55). The express secrets (since 2.3)
+	// share the service: the instance kill switch closes their creation
+	// and their reading, and their abuse reports alert the delegated admins
+	// through the abuse detector, as the transfer reports do.
+	if cfg.ExpressSecretsDisabled {
+		logger.InfoContext(ctx, "express secrets disabled for the whole instance (TT_EXPRESS_SECRETS_DISABLED=true)")
+	}
 	secrets, err = secret.New(secret.Deps{
 		Secrets: db.Secrets(vault), Creators: transfers, Scrubber: vault, Files: files, SecurityLog: secLog,
 		Directory: secret.StoreDirectory{DB: db}, Notifier: notifier, Mailer: opsMails,
-	}, secret.Options{Audit: auditLog, Usage: usageCounts, OnQuota: quotas.Check, Abuse: detector, Streams: downloads, Logger: logger})
+	}, secret.Options{
+		Audit: auditLog, Usage: usageCounts, OnQuota: quotas.Check, Abuse: detector, Streams: downloads, Logger: logger,
+		ExpressKillSwitch: cfg.ExpressSecretsDisabled, AbuseReports: db.AbuseReports(), AbuseNotifier: detector,
+	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -726,7 +735,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		API: public.NewServer(public.WithDeposit(deposits), public.WithTransfers(transfers),
 			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads}),
 			public.WithTenantService(tenants), public.WithMaintenance(maint), public.WithMyTransfers(senders),
-			public.WithProofs(proofs), public.WithSecrets(secrets)),
+			public.WithProofs(proofs), public.WithSecrets(secrets),
+			public.WithExpressKillSwitch(cfg.ExpressSecretsDisabled)),
 		Sessions:    deposits,
 		MyTransfers: senders,
 		APITokens:   apiTokens,
@@ -738,7 +748,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations),
 			admin.WithWebhookService(busOut.hooks), admin.WithAntivirusTest(selfTests),
 			admin.WithUpdateCheck(updates), admin.WithProvisioningService(provisioner),
-			admin.WithSecurityEventsService(securityEventsService), admin.WithProofService(proofs)),
+			admin.WithSecurityEventsService(securityEventsService), admin.WithProofService(proofs),
+			admin.WithExpressSecretService(secrets)),
 		AdminSessions:       admins,
 		Provisioning:        httpserver.NewProvisioningAuthenticator(provisioner),
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,

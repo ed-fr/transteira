@@ -54,7 +54,12 @@
 //     tokenAuth.middleware), otherwise deposit session cookie (401) and
 //     CSRF protection of unsafe methods (403), "my transfers" session
 //     cookie (401) and its CSRF protection (403), body limit (413) and
-//     JSON media type (415).
+//     JSON media type (415). Since API 2.3 the express secret creation
+//     takes an optional API token (anonymous without Bearer header, 401
+//     with an invalid one) and, without token, the Origin and
+//     Sec-Fetch-Site checks; its raw body is kept for its handler
+//     (public.CaptureRawBody), which parses it after the switches of the
+//     service.
 //     The admin router has its own chain: deadlines, per-IP limit of the
 //     login steps (429), admin session cookie (401), CSRF and Origin
 //     checks (403), body limit and JSON media type.
@@ -158,6 +163,11 @@ const (
 	SecretFileDeadline = 10 * time.Minute
 )
 
+// ExpressBodyLimit is the body limit of an express secret creation (since
+// API 2.3): the largest valid body is about 53 600 bytes (a sealed text of
+// 53 372 characters, two verifiers of 64 and the duration).
+const ExpressBodyLimit int64 = 64 << 10
+
 // Route prefixes.
 const (
 	// APIBaseURL is the prefix of the versioned, tenant-scoped API.
@@ -206,7 +216,10 @@ type routePolicy struct {
 	// apiToken accepts an API token as the alternative of the deposit
 	// session (OpenAPI security scheme apiToken): a request carrying a
 	// Bearer Authorization header is authenticated by the token only,
-	// without session nor CSRF checks (tokenAuth.middleware).
+	// without session nor CSRF checks (tokenAuth.middleware). Without
+	// depositSession (since 2.3, OpenAPI security [{}, {apiToken: []}]),
+	// the token is optional: a request without Bearer header is anonymous,
+	// one with an invalid token is refused (401), never downgraded.
 	apiToken bool
 	// tus applies the tus protocol rules (tusMiddleware): Tus-Resumable on
 	// every response, 412 and 415 checks, bodyless error responses.
@@ -263,6 +276,16 @@ func mePolicy(csrf bool) routePolicy {
 func sameOriginPolicy() routePolicy {
 	p := defaultPolicy
 	p.sameOrigin = true
+	return p
+}
+
+// optionalTokenPolicy is defaultPolicy, with the body limit limit, for an
+// operation served without credential that also accepts an API token
+// (since 2.3): a request without token gets the Origin and Sec-Fetch-Site
+// checks, a request with a valid token none of them.
+func optionalTokenPolicy(limit int64) routePolicy {
+	p := sameOriginPolicy()
+	p.apiToken, p.bodyLimit = true, limit
 	return p
 }
 
@@ -389,6 +412,16 @@ var routePolicies = map[string]routePolicy{
 	http.MethodGet + " " + APIBaseURL + "/deposit-sessions/current":        sessionPolicy(false),
 	http.MethodDelete + " " + APIBaseURL + "/deposit-sessions/current":     sessionPolicy(true),
 	http.MethodPost + " " + APIBaseURL + "/invitations":                    sessionPolicy(true),
+
+	// The express secrets (since API 2.3): created without credential or
+	// with an API token, never with a session. Without token, the creation
+	// must not be triggered cross-site (a third-party page would spread the
+	// filling of the tenant cap over the IPs of its visitors, T-395), and
+	// neither may an abuse report, which needs no credential either. The
+	// creation body holds at most a sealed text of 53 372 characters and two
+	// verifiers: ExpressBodyLimit leaves room for any formatting.
+	http.MethodPost + " " + APIBaseURL + "/express-secrets":                          optionalTokenPolicy(ExpressBodyLimit),
+	http.MethodPost + " " + APIBaseURL + "/secret-links/{secretToken}/abuse-reports": sameOriginPolicy(),
 }
 
 // policyOf returns the policy of the operation matched for r.
@@ -648,6 +681,10 @@ func New(deps Deps, opts ...Option) http.Handler {
 		// decoded. The idle read timeout of the tus PATCH is set even
 		// earlier, around the router (idleBodyHandler).
 		Middlewares: []gen.MiddlewareFunc{
+			// Innermost: the raw body of the express secret creation (since
+			// API 2.3), which its handler parses after the switches of the
+			// service, the members outside the schema included.
+			public.CaptureRawBody,
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
 			middleware.BodyLimitFunc(bodyLimitOf),
 			middleware.CSRF(sessions, func(r *http.Request) bool { return policyOf(r).csrf && !tokenAuthenticated(r) }),

@@ -21,6 +21,8 @@ type apiTokenView struct {
 	AllowedCidrs []string `json:"allowedCidrs"`
 	RevokedAt    *string  `json:"revokedAt"`
 	Token        string   `json:"token"`
+	// ExpressAllowed is the opt-in of the express secrets (since 2.3).
+	ExpressAllowed bool `json:"expressAllowed"`
 }
 
 // adminAPIToken is the isolation case of an API token operation: served on
@@ -71,14 +73,15 @@ func (h *harness) tokensOf(t *testing.T, op operation, sess adminSession, tid st
 }
 
 // tokenOfBIntact asserts that tenant B's token tokB is still listed for B
-// unchanged: same name and ranges, not revoked.
+// unchanged: same name and ranges, not revoked, without the express
+// opt-in.
 func (h *harness) tokenOfBIntact(t *testing.T, op operation, tokB apiTokenView) {
 	t.Helper()
 	for _, tok := range h.tokensOf(t, op, h.superSession(t), string(h.tenantB.ID)) {
 		if tok.ID != tokB.ID {
 			continue
 		}
-		if tok.Name != tokenNameB || strings.Join(tok.AllowedCidrs, ",") != "198.51.100.0/24" || tok.RevokedAt != nil {
+		if tok.Name != tokenNameB || strings.Join(tok.AllowedCidrs, ",") != "198.51.100.0/24" || tok.RevokedAt != nil || tok.ExpressAllowed {
 			t.Errorf("%s: tenant B's token was changed: %+v", op, tok)
 		}
 		return
@@ -125,13 +128,15 @@ func checkCreateToken(t *testing.T, h *harness, op operation, sess adminSession,
 }
 
 // checkUpdateToken: B's token under A's path answers like a missing token
-// and stays unchanged.
+// and stays unchanged, its express opt-in included (since 2.3); the
+// express opt-in alone is refused the same way.
 func checkUpdateToken(t *testing.T, h *harness, op operation, sess adminSession, tokB apiTokenView) {
-	body := `{"name":"Renamed by A","allowedCidrs":["0.0.0.0/0"]}`
-	foreign := h.adminCall(t, sess, http.MethodPatch, tenantPath(h.tenantA.ID, "/api-tokens/"+tokB.ID), body)
-	missing := h.adminCall(t, sess, http.MethodPatch, tenantPath(h.tenantA.ID, "/api-tokens/"+id.New(id.APIToken)), body)
-	h.sameAsMissing(t, op, foreign, missing, tokB.ID, tokB.Token, tokenNameB)
-	h.tokenOfBIntact(t, op, tokB)
+	for _, body := range []string{`{"name":"Renamed by A","allowedCidrs":["0.0.0.0/0"],"expressAllowed":true}`, `{"expressAllowed":true}`} {
+		foreign := h.adminCall(t, sess, http.MethodPatch, tenantPath(h.tenantA.ID, "/api-tokens/"+tokB.ID), body)
+		missing := h.adminCall(t, sess, http.MethodPatch, tenantPath(h.tenantA.ID, "/api-tokens/"+id.New(id.APIToken)), body)
+		h.sameAsMissing(t, op, foreign, missing, tokB.ID, tokB.Token, tokenNameB)
+		h.tokenOfBIntact(t, op, tokB)
+	}
 }
 
 // checkRevokeToken: B's token under A's path answers like a missing token

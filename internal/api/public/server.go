@@ -49,6 +49,10 @@ type Server struct {
 	// maintenance reports the maintenance mode; nil (off) until
 	// WithMaintenance.
 	maintenance MaintenanceMode
+	// expressDisabled is the instance kill switch of the express secrets
+	// (since 2.3), reported in the public configuration; off until
+	// WithExpressKillSwitch.
+	expressDisabled bool
 	// now is the clock deriving the Max-Age of the session cookie from the
 	// session expiry (replaceable in tests).
 	now func() time.Time

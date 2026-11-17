@@ -18,8 +18,8 @@ import (
 	"github.com/ed-fr/transteira/internal/transfer"
 )
 
-// SecretService serves the one-time secrets (since 2.1). *secret.Service
-// implements it.
+// SecretService serves the one-time secrets (since 2.1) and the express
+// secrets (since 2.3). *secret.Service implements it.
 type SecretService interface {
 	Create(ctx context.Context, t *tenant.Tenant, sender transfer.Sender, req secret.CreateRequest) (secret.Created, error)
 	Status(ctx context.Context, t *tenant.Tenant, ip netip.Addr, token string) (secret.Status, error)
@@ -29,7 +29,13 @@ type SecretService interface {
 	UploadFile(ctx context.Context, t *tenant.Tenant, sender transfer.Sender, secID string, body io.Reader) (store.Secret, error)
 	DownloadFile(ctx context.Context, t *tenant.Tenant, ip netip.Addr, token, grant string) (secret.FileStream, error)
 	Send(ctx context.Context, t *tenant.Tenant, sender transfer.Sender, secID, secretToken, fragmentKey string) (store.Secret, error)
+	// The express secrets (since 2.3).
+	CreateExpress(ctx context.Context, t *tenant.Tenant, creator secret.ExpressCreator, req secret.ExpressCreateRequest) (secret.Created, error)
+	ReportAbuse(ctx context.Context, t *tenant.Tenant, ip netip.Addr, token string, req secret.AbuseReportRequest) error
 }
+
+// Compile-time check that the secret service fits.
+var _ SecretService = (*secret.Service)(nil)
 
 // WithSecrets serves the one-time secret operations with svc. Without it
 // they answer 500.
@@ -120,6 +126,11 @@ func (s *Server) GetSecretLink(ctx context.Context, req gen.GetSecretLinkRequest
 		resp.Body.File = &struct {
 			Size int64 `json:"size"`
 		}{Size: st.FileSize}
+	}
+	// An express secret (since 2.3) is third-party content: the read page
+	// says so, and whether a credential created it.
+	if st.Express {
+		resp.Body.Express, resp.Body.Anonymous = new(true), new(st.Anonymous)
 	}
 	return resp, nil
 }
@@ -366,6 +377,18 @@ func secretError(err error) error {
 			problem.WithFieldErrors(problem.FieldError{Field: secret.FieldRecipient, Code: secret.CodeDomainDenied}))
 	case errors.Is(err, secret.ErrMailUnavailable):
 		return problem.New(problem.CodeMailUnavailable)
+	// The express secrets (since 2.3). The tenant-in-setup refusal is the
+	// store's backstop of the setup middleware.
+	case errors.Is(err, secret.ErrExpressDisabled):
+		return problem.New(problem.CodeExpressSecretsDisabled)
+	case errors.Is(err, secret.ErrExpressTokenNotAllowed):
+		return problem.New(problem.CodeExpressTokenNotAllowed)
+	case errors.Is(err, secret.ErrTokenInvalid): // revoked or expired since the token middleware
+		return problem.New(problem.CodeInvalidCredentials)
+	case errors.Is(err, secret.ErrExpressLimit): // no Retry-After: no predictable time
+		return problem.New(problem.CodeExpressSecretLimitReached)
+	case errors.Is(err, secret.ErrTenantInSetup):
+		return problem.New(problem.CodeTenantInSetup)
 	default:
 		return err
 	}

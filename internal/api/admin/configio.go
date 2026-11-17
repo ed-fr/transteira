@@ -419,8 +419,11 @@ var importSchema = func() *strictjson.Schema {
 				"weekdays": arr(s(), importDaysPerWeek),
 			})).OrNull(),
 		})),
+		// The express members (since 2.3) are optional: an import takes
+		// the default of a limit it lacks and never the anonymous mode.
 		"secretSettings": obj(with(scalars("enabled", "defaultDuration", "fileAllowed", "fileMaxBytes", "emailAllowed",
-			"emailRequiresPassphrase"), map[string]*strictjson.Schema{
+			"emailRequiresPassphrase", "expressEnabled", "expressPerHourPerIp", "expressPerHourPerToken",
+			"expressMaxPending"), map[string]*strictjson.Schema{
 			"durations": arr(s(), importMaxSecretDurations),
 		})).Require("enabled", "durations", "fileAllowed", "fileMaxBytes", "emailAllowed"),
 		"emailTemplates": arr(strict(scalars("key", "language", "subject", "bodyHtml", "bodyText")), importMaxTemplates),

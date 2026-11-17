@@ -102,6 +102,17 @@ type keyDef struct {
 	// the value prepended (see [compiled.render]). A security warning
 	// belongs here, such as reply_notice (T-223).
 	forced []string
+	// requiredFor, when not nil, returns for some data the variables of
+	// which a customized template must show at least one in each body
+	// (HTML and text) to render that data: a customization saved before
+	// such a variable existed would otherwise send a mail without the
+	// object it is about. Such a customization is ignored for that data
+	// and the default template renders it (see [Templates.RenderOverride]).
+	requiredFor func(data any) []string
+	// otherSamples are the samples shown for the variables that sample
+	// leaves empty, because they belong to another case of the template
+	// (secret_id of abuse_report, whose sample is a transfer report).
+	otherSamples map[string]string
 }
 
 // Common variable declarations.
@@ -313,12 +324,17 @@ var keyDefs = map[string]keyDef{
 			tenantVar,
 			{"transfer_id", VarText, false, "Identifier of the reported transfer."},
 			{"sender_email", VarText, false, "Address of the sender of the transfer."},
+			{"report_intro", VarText, false, "First sentence: a transfer or a one-time secret of the entity was reported."},
+			{"report_object", VarBlock, false, "The reported object: the transfer and its sender, or the express secret."},
+			{"secret_id", VarText, false, "Identifier of the reported express secret (sec_...); empty for a transfer report."},
 			{"category", VarText, true, "Category chosen by the reporter."},
 			{"reporter_notice", VarText, false, "Who reported: the verified address, or the recipient number of the link, unverified."},
 			{"reporter_message", VarBlock, false, "Message of the reporter, quoted; empty when there is none."},
 			adminLinkVar,
 		},
-		values: abuseReportValues,
+		values:       abuseReportValues,
+		requiredFor:  abuseReportRequired,
+		otherSamples: map[string]string{"secret_id": "sec_01JABCS3T4V5W6X7Y8Z9A0B1C2"}, //nolint:gosec // G101: sample identifier, not a credential
 		sample: AbuseReportData{
 			TenantName: sampleTenant, TransferID: "tr_sample", SenderEmail: sampleSender,
 			Category: AbuseCategoryPhishing, Message: "This message asks for my password.",
@@ -524,7 +540,11 @@ func Variables(key string) ([]Variable, error) {
 	vals, _ := def.values(labelsFor(i18n.English), i18n.English, def.sample) // sample has the right type
 	out := make([]Variable, len(def.vars))
 	for i, v := range def.vars {
-		out[i] = Variable{Name: v.name, Kind: v.kind, Required: v.required, Description: v.description, Sample: vals[v.name].text}
+		sample := vals[v.name].text
+		if sample == "" {
+			sample = def.otherSamples[v.name]
+		}
+		out[i] = Variable{Name: v.name, Kind: v.kind, Required: v.required, Description: v.description, Sample: sample}
 	}
 	return out, nil
 }

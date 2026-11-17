@@ -116,6 +116,7 @@ func (s *Server) CreateApiToken(ctx context.Context, req gen.CreateApiTokenReque
 		if req.Body.AllowedSenders != nil {
 			in.AllowedSenders = *req.Body.AllowedSenders
 		}
+		in.ExpressAllowed = deref(req.Body.ExpressAllowed)
 	}
 	c, err := svc.Create(ctx, p, tenant.ID(req.TenantId), in, middleware.ClientIP(ctx))
 	if err != nil {
@@ -125,7 +126,7 @@ func (s *Server) CreateApiToken(ctx context.Context, req gen.CreateApiTokenReque
 	return gen.CreateApiToken201JSONResponse{
 		Id: t.Id, Name: t.Name, Prefix: t.Prefix, AllowedCidrs: t.AllowedCidrs, AllowedSenders: t.AllowedSenders,
 		CreatedBy: t.CreatedBy, CreatedAt: t.CreatedAt, LastUsedAt: t.LastUsedAt, ExpiresAt: t.ExpiresAt,
-		RevokedAt: t.RevokedAt, Token: c.Secret,
+		RevokedAt: t.RevokedAt, ExpressAllowed: t.ExpressAllowed, Token: c.Secret,
 	}, nil
 }
 
@@ -173,11 +174,12 @@ type apiTokenPatch struct {
 	Name           *string  `json:"name"`
 	AllowedCIDRs   []string `json:"allowedCidrs"`
 	AllowedSenders []string `json:"allowedSenders"`
+	ExpressAllowed *bool    `json:"expressAllowed"`
 }
 
 // apiTokenPatchFields lists the members of a token merge patch, in the
 // order their errors are reported.
-var apiTokenPatchFields = []string{"name", "allowedCidrs", "allowedSenders"}
+var apiTokenPatchFields = []string{"name", "allowedCidrs", "allowedSenders", "expressAllowed"}
 
 // decodeAPITokenUpdate decodes a token merge patch: a JSON object whose
 // members are absent (unchanged) or set, never null. A body that is not an
@@ -216,7 +218,7 @@ func decodeAPITokenUpdate(raw []byte) (apitoken.UpdateInput, error) {
 		}
 		return apitoken.UpdateInput{}, validationFailed(field, fieldInvalidFormat)
 	}
-	return apitoken.UpdateInput{Name: b.Name, AllowedCIDRs: b.AllowedCIDRs, AllowedSenders: b.AllowedSenders}, nil
+	return apitoken.UpdateInput{Name: b.Name, AllowedCIDRs: b.AllowedCIDRs, AllowedSenders: b.AllowedSenders, ExpressAllowed: b.ExpressAllowed}, nil
 }
 
 // rejectUnknownMembers returns a 400 validation-failed Problem when
@@ -269,9 +271,11 @@ func apiTokenBody(t store.APIToken) gen.ApiToken {
 	if senders == nil {
 		senders = []string{}
 	}
+	express := t.ExpressAllowed
 	return gen.ApiToken{
 		Id: t.ID, Name: t.Name, Prefix: t.Prefix, AllowedCidrs: cidrs, AllowedSenders: senders,
 		CreatedBy: t.CreatedBy, CreatedAt: t.CreatedAt,
-		LastUsedAt: optionalTime(t.LastUsedAt), ExpiresAt: optionalTime(t.ExpiresAt), RevokedAt: optionalTime(t.RevokedAt),
+		ExpressAllowed: &express,
+		LastUsedAt:     optionalTime(t.LastUsedAt), ExpiresAt: optionalTime(t.ExpiresAt), RevokedAt: optionalTime(t.RevokedAt),
 	}
 }

@@ -145,6 +145,10 @@ type Server struct {
 	// proofSvc serves the proofs and their keys; nil until
 	// WithProofService.
 	proofSvc ProofService
+	// expressSvc looks up the secrets from their links and purges the
+	// anonymous express secrets (since 2.3); nil until
+	// WithExpressSecretService.
+	expressSvc ExpressSecretService
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the

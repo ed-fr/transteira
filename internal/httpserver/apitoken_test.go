@@ -26,6 +26,8 @@ import (
 type fakeToken struct {
 	id      string
 	allowed netip.Prefix
+	// express is the opt-in of the token for the express secrets.
+	express bool
 }
 
 // fakeTokens authenticates the tokens of tenant ten_a it knows, like
@@ -47,7 +49,7 @@ func (f fakeTokens) Authenticate(_ context.Context, tid tenant.ID, header string
 	if !ok || tid != "ten_a" {
 		return apitoken.Principal{}, apitoken.ErrInvalid
 	}
-	p := apitoken.Principal{TokenID: tok.id, Name: "nightly export", AllowedCIDRs: []netip.Prefix{tok.allowed}}
+	p := apitoken.Principal{TokenID: tok.id, Name: "nightly export", AllowedCIDRs: []netip.Prefix{tok.allowed}, ExpressAllowed: tok.express}
 	if !tok.allowed.Contains(ip) {
 		return p, apitoken.ErrIPNotAllowed
 	}

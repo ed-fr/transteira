@@ -4,12 +4,12 @@ package adminauth
 // session may call (P55, T-281): its own account (logout, profile,
 // password, TOTP), the tenant list and summary, and the reads of its
 // tenants: audit events, security events, statistics, transfers and their
-// proof, and the drop links. The HTTP layer refuses every other operation of an auditor
-// session with 403 read-only-role before its handler runs; the services
-// check again on their side ([RequireTenantAuditRead]). The login steps
-// served without a session (setup status, login, second factor,
-// activation, single sign-on, version) never carry an auditor session and
-// need no entry.
+// proof, the drop links, and the secret list and lookup. The HTTP layer
+// refuses every other operation of an auditor session with 403
+// read-only-role before its handler runs; the services check again on
+// their side ([RequireTenantAuditRead]). The login steps served without a
+// session (setup status, login, second factor, activation, single
+// sign-on, version) never carry an auditor session and need no entry.
 //
 // Opening an operation to the auditor takes both an entry here and a
 // [RequireTenantAuditRead] call in its service. The map must not be
@@ -42,4 +42,8 @@ var AuditorOperations = map[string]bool{
 	// The one-time secrets of an attached tenant (metadata only, never the
 	// content; the creator filter is refused to the auditor; since 2.1).
 	"listTenantSecrets": true,
+	// The lookup of a secret of an attached tenant from its link (metadata
+	// only, never the content nor the token; a read despite its POST;
+	// since 2.3). The purge of the express secrets stays refused.
+	"lookupTenantSecret": true,
 }

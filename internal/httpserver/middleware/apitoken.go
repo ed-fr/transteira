@@ -12,6 +12,9 @@ type TokenPrincipal struct {
 	TokenID string
 	// Name is the label of the token.
 	Name string
+	// ExpressAllowed is the opt-in of the token for the express secrets
+	// (since 2.3, OpenAPI ApiToken.expressAllowed).
+	ExpressAllowed bool
 }
 
 // apiTokenKey is the context key of the API token principal.

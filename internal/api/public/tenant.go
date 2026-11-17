@@ -175,6 +175,7 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 		LinkOnly:              &t.LinkOnlyAllowed,
 		E2ePolicy:             e2eFeature(t.E2EPolicy),
 		Secrets:               secretFeatures(t),
+		ExpressSecrets:        s.expressFeatures(t),
 	}
 	return gen.GetPublicTenant200JSONResponse{
 		Body: body, Headers: gen.GetPublicTenant200ResponseHeaders{ContentLanguage: &lang},

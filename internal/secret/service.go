@@ -58,8 +58,8 @@ const linkActor = "link"
 // implements it.
 type Repo interface {
 	Create(ctx context.Context, tid tenant.ID, c store.CreateSecret) (store.CreatedSecret, error)
-	StatusByToken(ctx context.Context, tid tenant.ID, token string, now time.Time) (store.Secret, error)
-	Reveal(ctx context.Context, tid tenant.ID, token string, keyProof, proof [32]byte, now time.Time) (store.RevealedSecret, error)
+	StatusByToken(ctx context.Context, tid tenant.ID, token string, gate store.ExpressGate, now time.Time) (store.Secret, error)
+	Reveal(ctx context.Context, tid tenant.ID, token string, gate store.ExpressGate, keyProof, proof [32]byte, now time.Time) (store.RevealedSecret, error)
 	DeleteByCreator(ctx context.Context, tid tenant.ID, secID string, actor store.SecretActor, now time.Time) (store.EndedSecret, error)
 	ListBySender(ctx context.Context, tid tenant.ID, email string, opts store.SecretListOptions) (store.Page[store.Secret], error)
 	UploadFile(ctx context.Context, tid tenant.ID, secID string, actor store.SecretActor, files store.SecretFiles,
@@ -69,6 +69,10 @@ type Repo interface {
 	Get(ctx context.Context, tid tenant.ID, secID string) (store.Secret, error)
 	ActivateForSend(ctx context.Context, tid tenant.ID, secID string, actor store.SecretActor, token string, now time.Time) (store.Secret, error)
 	MarkReceiptSent(ctx context.Context, tid tenant.ID, secID string, now time.Time) (bool, error)
+	// The express secrets (since 2.3).
+	CreateExpress(ctx context.Context, tid tenant.ID, c store.CreateExpressSecret) (store.CreatedSecret, error)
+	LookupByToken(ctx context.Context, tid tenant.ID, token string) (store.Secret, error)
+	PurgeAnonymousExpress(ctx context.Context, tid tenant.ID, now time.Time) (int, error)
 }
 
 // Notifier builds the mails of the secrets. *notify.Notifier implements
@@ -189,8 +193,36 @@ type Options struct {
 	Usage UsageRecorder
 	// Abuse is told of every secret that becomes active (link: at the
 	// creation without file or after the upload; e-mail: after the send),
-	// alert only; nil tells nobody.
+	// alert only; nil tells nobody. The express secrets, which have no
+	// creator address, are never told.
 	Abuse AbuseAlerter
+	// ExpressKillSwitch is the instance kill switch of the express secrets
+	// (TT_EXPRESS_SECRETS_DISABLED, since 2.3): every express creation is
+	// refused, with or without an API token, and every express secret is
+	// closed to the recipient operations (ErrExpressDisabled).
+	ExpressKillSwitch bool
+	// ExpressPerIP counts the anonymous express creations per tenant and
+	// client over a sliding ExpressIPWindow, with the limit of the tenant
+	// (by default an in-memory window of at most ExpressIPMaxKeys clients
+	// per tenant).
+	ExpressPerIP ExpressLimiter
+	// ReportsPerIP counts the abuse reports on the express secrets per
+	// tenant and client (IPv4 address or IPv6 /64) over a sliding
+	// store.AbuseReportIPWindow, store.DefaultAbuseReportsPerIP at most
+	// (by default an in-memory window of at most ExpressIPMaxKeys clients
+	// per tenant), on top of the per-address count of the store.
+	ReportsPerIP ExpressLimiter
+	// EventThrottle lets through at most one security event of the express
+	// secrets (express_refused, and rate_limited of express_ip,
+	// express_token, abuse_report_link and abuse_report_ip) per key, event
+	// and reason or scope (by default one per ExpressEventInterval).
+	EventThrottle Limiter
+	// AbuseReports stores the abuse reports on the express secrets
+	// (*store.AbuseReports); nil makes [Service.ReportAbuse] fail (500).
+	AbuseReports AbuseReportStore
+	// AbuseNotifier alerts the administrators of a tenant of a stored
+	// abuse report on an express secret; nil alerts nobody.
+	AbuseNotifier AbuseNotifier
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 	// Logger receives the failures that do not fail a request (audit,
@@ -222,6 +254,13 @@ type Service struct {
 	onQuota  func(tid tenant.ID, refused bool)
 	now      func() time.Time
 	logger   *slog.Logger
+	// The express secrets (since 2.3).
+	killSwitch   bool
+	perIP        ExpressLimiter
+	reportsPerIP ExpressLimiter
+	throttle     Limiter
+	reports      AbuseReportStore
+	reportAlerts AbuseNotifier
 }
 
 // New returns a Service. Every member of deps is required.
@@ -234,6 +273,8 @@ func New(deps Deps, opts Options) (*Service, error) {
 		repo: deps.Secrets, creators: deps.Creators, scrubber: deps.Scrubber, files: deps.Files,
 		seclog: deps.SecurityLog, dir: deps.Directory, notifier: deps.Notifier, mailer: deps.Mailer, audit: opts.Audit, requests: opts.Requests, failures: opts.Failures,
 		onQuota: opts.OnQuota, usage: opts.Usage, abuse: opts.Abuse, streams: opts.Streams, now: opts.Now, logger: opts.Logger,
+		killSwitch: opts.ExpressKillSwitch, perIP: opts.ExpressPerIP, reportsPerIP: opts.ReportsPerIP, throttle: opts.EventThrottle,
+		reports: opts.AbuseReports, reportAlerts: opts.AbuseNotifier,
 	}
 	if s.onQuota == nil {
 		s.onQuota = func(tenant.ID, bool) {}
@@ -254,6 +295,18 @@ func New(deps Deps, opts Options) (*Service, error) {
 	if s.failures == nil {
 		s.failures = ratelimit.NewWindow(LinkFailureLimit, LinkFailureWindow,
 			ratelimit.WithLockout(LinkLockout), ratelimit.WithClock(s.now))
+	}
+	if s.perIP == nil {
+		s.perIP = NewExpressWindow(ExpressIPWindow, ExpressIPMaxKeys, s.now)
+	}
+	if s.reportsPerIP == nil {
+		s.reportsPerIP = NewExpressWindow(store.AbuseReportIPWindow, ExpressIPMaxKeys, s.now)
+	}
+	if s.throttle == nil {
+		s.throttle = ratelimit.New(rate.Every(ExpressEventInterval), 1, ratelimit.WithClock(s.now))
+	}
+	if s.reportAlerts == nil {
+		s.reportAlerts = noAbuseNotifier{}
 	}
 	return s, nil
 }

@@ -49,9 +49,18 @@ func TestAuthenticate(t *testing.T) {
 
 		for _, ip := range []netip.Addr{inside, inside6, netip.MustParseAddr("::ffff:192.0.2.51")} {
 			p, err := svc.Authenticate(ctx, ev.a.ID, header, ip)
-			if err != nil || p.TokenID != c.Token.ID || p.Name != "Script" || len(p.AllowedCIDRs) != 2 {
+			if err != nil || p.TokenID != c.Token.ID || p.Name != "Script" || len(p.AllowedCIDRs) != 2 || p.ExpressAllowed {
 				t.Errorf("Authenticate from %s = %+v, %v", ip, p, err)
 			}
+		}
+		// The express secret opt-in of the token reaches the principal
+		// (since 2.3).
+		allowed := true
+		if _, err := ev.db.APITokens().Update(ctx, ev.a.ID, c.Token.ID, store.APITokenUpdate{ExpressAllowed: &allowed}); err != nil {
+			t.Fatal(err)
+		}
+		if p, err := svc.Authenticate(ctx, ev.a.ID, header, inside); err != nil || !p.ExpressAllowed {
+			t.Errorf("Authenticate of an express token = %+v, %v", p, err)
 		}
 		if _, err := svc.Authenticate(ctx, ev.a.ID, "bearer "+c.Secret, inside); err != nil {
 			t.Errorf("Authenticate(lowercase scheme) = %v", err)

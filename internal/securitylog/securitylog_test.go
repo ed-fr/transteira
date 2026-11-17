@@ -30,7 +30,7 @@ var allEvents = []EventType{
 	VerificationCodeInvalid, TransferPasswordInvalid, AdminLoginFailed,
 	APITokenInvalid, UnknownFQDN, DepositRefused, RateLimited, MetricsTokenInvalid,
 	AccessLinkInvalid, ProvisioningTokenInvalid, SSOFailed, DropLinkInvalid,
-	SecretInvalid, SecretProofInvalid,
+	SecretInvalid, SecretProofInvalid, ExpressRefused,
 }
 
 // ownFilterEvents are the events counted by integrations of their own,
@@ -38,6 +38,12 @@ var allEvents = []EventType{
 // CrowdSec brute force scenario: sso_failed (transteira-sso.conf,
 // transteira-sso-bf.yaml; a state_invalid can come from a stale tab).
 var ownFilterEvents = []EventType{SSOFailed}
+
+// uncountedEvents are events no ban integration counts: express_refused is
+// a state of the tenant (kill switch, tenant cap, token opt-in), not a
+// client fault; the flood of one client is caught by rate_limited with
+// scope express_ip.
+var uncountedEvents = []EventType{ExpressRefused}
 
 type goldenCase struct {
 	name  string
@@ -134,6 +140,24 @@ var goldenCases = []goldenCase{
 		ev:    Event{Type: SecretProofInvalid, IP: netip.MustParseAddr("192.0.2.18"), Tenant: tenantA, Fields: []Field{{KeyReason, ReasonPassphrase}}},
 		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.18 tenant=transfer.entity-a.example.com event=secret_proof_invalid reason="passphrase"`,
 		banIP: "192.0.2.18",
+	},
+	{
+		name:  "express refused",
+		ev:    Event{Type: ExpressRefused, IP: netip.MustParseAddr("192.0.2.21"), Tenant: tenantA, Fields: []Field{{KeyReason, ReasonExpressLimit}}},
+		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.21 tenant=transfer.entity-a.example.com event=express_refused reason="limit"`,
+		banIP: "",
+	},
+	{
+		name:  "express ip rate limited",
+		ev:    Event{Type: RateLimited, IP: netip.MustParseAddr("203.0.113.20"), Tenant: tenantA, Fields: []Field{{KeyScope, "express_ip"}}},
+		line:  `2026-10-20T07:41:00.123Z ip=203.0.113.20 tenant=transfer.entity-a.example.com event=rate_limited scope="express_ip"`,
+		banIP: "203.0.113.20",
+	},
+	{
+		name:  "express token rate limited",
+		ev:    Event{Type: RateLimited, IP: netip.MustParseAddr("192.0.2.40"), Tenant: tenantA, Fields: []Field{{KeyScope, "express_token"}}},
+		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.40 tenant=transfer.entity-a.example.com event=rate_limited scope="express_token"`,
+		banIP: "",
 	},
 	{
 		// Counted by its own filter and scenario only (ownFilterEvents):

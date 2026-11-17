@@ -3,6 +3,7 @@ package secret
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -77,13 +78,16 @@ func sealBrowser(t *testing.T, text, pass string) browserSecret {
 
 // TestNoSecretMaterialInLogs runs the full flow of an e-mail secret with a
 // passphrase and a file (creation, file upload, e-mail send, wrong proofs,
-// unknown link, reveal, file download) and of a link secret, on the real
-// store, audit writer, security log and file storage, on every engine
-// (threat model T-375). The application log (debug level), the security
-// log, every audit row and every table must then hold none of the link
-// tokens, the fragment key, the passphrase, the proofs (right or wrong),
-// the file grant or the plaintext; once the secrets ended, the database no
-// longer holds their verifiers nor their sealed text either.
+// unknown link, reveal, file download), of a link secret, and since 2.3 of
+// express secrets (anonymous and API token creations, refusals, a wrong
+// key proof, the lookup of a pasted link, an abuse report, the reveal and
+// the purge), on the real store, audit writer, abuse reports, security log
+// and file storage, on every engine (threat model T-375, T-402). The
+// application log (debug level), the security log, every audit row and
+// every table must then hold none of the link tokens, the fragment keys,
+// the pasted link, the passphrase, the proofs (right or wrong), the file
+// grant or the plaintexts; once the secrets ended, the database no longer
+// holds their verifiers nor their sealed text either.
 func TestNoSecretMaterialInLogs(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ctx := context.Background()
@@ -108,6 +112,19 @@ func TestNoSecretMaterialInLogs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		express := tenant.DefaultExpressSettings()
+		express.Enabled, express.PerHourPerToken = true, 1
+		if tn, err = db.Tenants().SetExpressSettings(ctx, tn.ID, express); err != nil {
+			t.Fatal(err)
+		}
+		tokID := id.New(id.APIToken)
+		tokHash := sha256.Sum256([]byte("tt_bearer secret of the token"))
+		if _, err := db.APITokens().Create(ctx, tn.ID, store.APIToken{
+			ID: tokID, Name: "vault", Prefix: "tt_Va", TokenHash: tokHash[:], CreatedBy: "root",
+			AllowedCIDRs: []netip.Prefix{netip.MustParsePrefix("0.0.0.0/0")}, ExpressAllowed: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
 		if err := db.SMTPSettings().Put(ctx, tn.ID, store.SMTPConfig{
 			Host: "smtp-relay", Port: 25, Security: store.SMTPSecurityNone, FromAddress: "noreply@entity-a.example.com",
 		}); err != nil {
@@ -126,7 +143,10 @@ func TestNoSecretMaterialInLogs(t *testing.T) {
 			SecurityLog: securitylog.New(secLog), Directory: StoreDirectory{DB: db},
 			Notifier: notify.New(vault, db.SMTPSettings(), nil, notify.Options{Logger: logger, Now: func() time.Time { return now }}),
 			Mailer:   mailer,
-		}, Options{Audit: audit.New(db), Now: func() time.Time { return now }, Logger: logger})
+		}, Options{
+			Audit: audit.New(db), Now: func() time.Time { return now }, Logger: logger,
+			AbuseReports: db.AbuseReports(), AbuseNotifier: &fakeAlerts{},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -199,6 +219,48 @@ func TestNoSecretMaterialInLogs(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// Express secrets: anonymous and by token, a refusal of each kind
+		// of limit, a wrong key proof, the lookup of the pasted link, a
+		// report, then the reveal of one and the purge of the other.
+		toExpress := func(b browserSecret) ExpressCreateRequest {
+			return ExpressCreateRequest{EncryptedText: b.req.EncryptedText, Verifier: b.req.Verifier, KeyVerifier: b.req.KeyVerifier, ExpiresIn: "1d"}
+		}
+		anonymous, byToken := sealBrowser(t, "the anonymous tip", ""), sealBrowser(t, "the vault entry", "")
+		anonCreator := ExpressCreator{ClientIP: ip}
+		tokCreator := ExpressCreator{ClientIP: ip, APITokenID: tokID, ExpressAllowed: true}
+		ac, err := svc.CreateExpress(ctx, tn, anonCreator, toExpress(anonymous))
+		if err != nil {
+			t.Fatal(err)
+		}
+		tc, err := svc.CreateExpress(ctx, tn, tokCreator, toExpress(byToken))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.CreateExpress(ctx, tn, tokCreator, toExpress(byToken)); err == nil {
+			t.Fatal("token over its limit")
+		}
+		if _, err := svc.CreateExpress(ctx, tn, ExpressCreator{ClientIP: ip, APITokenID: tokID}, toExpress(byToken)); err == nil {
+			t.Fatal("token without the opt-in")
+		}
+		wrongExpressKey := bytes.Clone(anonymous.keyProof)
+		wrongExpressKey[0] ^= 1
+		if _, err := svc.Reveal(ctx, tn, ip, ac.Token, tte2.EncodeProof(wrongExpressKey), tte2.EncodeProof(anonymous.proof)); err == nil {
+			t.Fatal("wrong express key proof accepted")
+		}
+		pasted := "https://" + tn.FQDN + "/s/" + ac.Token + "#k=" + anonymous.fragment
+		if found, err := svc.Lookup(ctx, tn, AdminActor{Username: "delegate", IP: ip}, pasted); err != nil || found.ID != ac.ID {
+			t.Fatalf("lookup = %+v, %v", found, err)
+		}
+		if err := svc.ReportAbuse(ctx, tn, ip, ac.Token, AbuseReportRequest{Category: "phishing", Message: "asks for my bank login"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.Reveal(ctx, tn, ip, tc.Token, tte2.EncodeProof(byToken.keyProof), tte2.EncodeProof(byToken.proof)); err != nil {
+			t.Fatal(err)
+		}
+		if n, err := svc.PurgeExpress(ctx, tn, AdminActor{Username: "delegate", IP: ip}); err != nil || n != 1 {
+			t.Fatalf("purge = %d, %v", n, err)
+		}
+
 		// The flow left its traces: audit rows and security events.
 		page, err := db.AuditEvents().List(ctx, store.AuditFilter{TenantID: tn.ID, Limit: store.MaxPageSize})
 		if err != nil {
@@ -207,12 +269,13 @@ func TestNoSecretMaterialInLogs(t *testing.T) {
 		auditRows := fmt.Sprintf("%+v", page.Items)
 		for _, action := range []audit.Action{
 			audit.ActionSecretCreated, audit.ActionSecretSent, audit.ActionSecretRevealed, audit.ActionSecretFileDownloaded,
+			audit.ActionSecretLookedUp, audit.ActionAbuseReported, audit.ActionSecretExpressPurged, audit.ActionAPITokenUsed,
 		} {
 			if !strings.Contains(auditRows, string(action)) {
 				t.Errorf("audit misses %s: %s", action, auditRows)
 			}
 		}
-		for _, ev := range []string{"secret_invalid", "secret_proof_invalid"} {
+		for _, ev := range []string{"secret_invalid", "secret_proof_invalid", "express_refused", "express_token"} {
 			if !strings.Contains(secLog.String(), ev) {
 				t.Errorf("security log misses %s: %s", ev, secLog.String())
 			}
@@ -238,13 +301,14 @@ func TestNoSecretMaterialInLogs(t *testing.T) {
 			name string
 			b    browserSecret
 			tok  string
-		}{{"mailed", mailed, created.Token}, {"linked", linked, lc.Token}} {
+		}{{"mailed", mailed, created.Token}, {"linked", linked, lc.Token}, {"anonymous", anonymous, ac.Token}, {"by token", byToken, tc.Token}} {
 			needles = append(needles, needle{s.name + " token", []byte(s.tok)}, needle{s.name + " fragment", []byte(s.b.fragment)})
 			add(s.name+" key", s.b.key)
 			add(s.name+" key proof", s.b.keyProof)
 			add(s.name+" proof", s.b.proof)
 		}
 		add("wrong key proof", wrongKey)
+		add("wrong express key proof", wrongExpressKey)
 		add("wrong proof", wrongProof)
 		needles = append(needles,
 			needle{"unknown token", []byte(unknown)},
@@ -253,6 +317,10 @@ func TestNoSecretMaterialInLogs(t *testing.T) {
 			needle{"mailed plaintext", []byte("the launch codes")},
 			needle{"linked plaintext", []byte("the wifi password")},
 			needle{"file plaintext", []byte("plain file bytes")},
+			needle{"pasted link", []byte(pasted)},
+			needle{"anonymous plaintext", []byte("the anonymous tip")},
+			needle{"token plaintext", []byte("the vault entry")},
+			needle{"bearer token", []byte("tt_bearer secret of the token")},
 		)
 		// Ended secrets: no verifier and no sealed text left in the
 		// database (the tombstones are empty).
@@ -260,15 +328,24 @@ func TestNoSecretMaterialInLogs(t *testing.T) {
 			{"mailed verifier", []byte(mailed.req.Verifier)},
 			{"mailed key verifier", []byte(mailed.req.KeyVerifier)},
 			{"linked verifier", []byte(linked.req.Verifier)},
+			{"anonymous verifier", []byte(anonymous.req.Verifier)},
+			{"anonymous key verifier", []byte(anonymous.req.KeyVerifier)},
+			{"token verifier", []byte(byToken.req.Verifier)},
+			{"anonymous sealed text", []byte(anonymous.req.EncryptedText)},
+			{"token sealed text", []byte(byToken.req.EncryptedText)},
 			{"mailed sealed text", []byte(mailed.req.EncryptedText)},
 			{"linked sealed text", []byte(linked.req.EncryptedText)},
 		}
-		for _, v := range [][]byte{tte2.SecretVerifier(mailed.proof), tte2.SecretVerifier(mailed.keyProof), tte2.SecretVerifier(linked.proof)} {
+		for _, v := range [][]byte{
+			tte2.SecretVerifier(mailed.proof), tte2.SecretVerifier(mailed.keyProof), tte2.SecretVerifier(linked.proof),
+			tte2.SecretVerifier(anonymous.proof), tte2.SecretVerifier(byToken.keyProof),
+		} {
 			ended = append(ended, needle{"raw verifier", v})
 		}
 
 		dump := dumpTables(t, e)
-		if !bytes.Contains(dump, []byte(created.ID)) || !bytes.Contains(dump, []byte(lc.ID)) {
+		if !bytes.Contains(dump, []byte(created.ID)) || !bytes.Contains(dump, []byte(lc.ID)) || !bytes.Contains(dump, []byte(ac.ID)) ||
+			!bytes.Contains(dump, []byte(tc.ID)) {
 			t.Fatal("the dump misses the secrets")
 		}
 		haystacks := map[string][]byte{

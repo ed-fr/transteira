@@ -28,6 +28,7 @@ const (
 	EnvAdminSessionIdleTimeout  = "TT_ADMIN_SESSION_IDLE_TIMEOUT"
 	EnvAdminSessionMaxAge       = "TT_ADMIN_SESSION_MAX_AGE"
 	EnvAPIDocsPublic            = "TT_API_DOCS_PUBLIC"
+	EnvExpressSecretsDisabled   = "TT_EXPRESS_SECRETS_DISABLED" //nolint:gosec // G101: variable name, not a credential
 	EnvUpdateCheck              = "TT_UPDATE_CHECK"
 	EnvSetupToken               = "TT_SETUP_TOKEN"      //nolint:gosec // G101: variable name, not a credential
 	EnvSetupTokenFile           = "TT_SETUP_TOKEN_FILE" //nolint:gosec // G101: variable name, not a credential
@@ -517,6 +518,12 @@ func Variables() []Var {
 			Name: EnvMaintenance, Group: "Operations", Default: "false",
 			Description: "Start in maintenance mode (true/false/1/0): new deposits are refused, " +
 				"the health check keeps answering.",
+		},
+		{
+			Name: EnvExpressSecretsDisabled, Group: "Operations", Default: "false",
+			Description: "Kill switch of the express secrets (true/false/1/0): when true, no express " +
+				"secret can be created (anonymously or with an API token) and none can be read, " +
+				"whatever the settings of the entities. Secrets of the one-time secret module are not affected.",
 		},
 		{
 			Name: EnvAPIDocsPublic, Group: "Operations", Default: "false",

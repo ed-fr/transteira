@@ -143,7 +143,7 @@ func TestFail2banEventsMatchCatalogue(t *testing.T) {
 	got := slices.Clone(sim.event)
 	want := make([]string, 0, len(allEvents))
 	for _, e := range allEvents {
-		if !slices.Contains(ownFilterEvents, e) {
+		if !slices.Contains(ownFilterEvents, e) && !slices.Contains(uncountedEvents, e) {
 			want = append(want, string(e))
 		}
 	}
@@ -243,6 +243,26 @@ var downloadStreamsLines = []struct {
 		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.41"),
 		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "drop_link"}},
 	}, true},
+	{"express_token", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.50"), Tenant: "transfer.entity-a.example.com",
+		Fields: []Field{{KeyScope, "express_token"}},
+	}, false},
+	{"express_token with an extra field", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.51"),
+		Fields: []Field{{KeyScope, "express_token"}, {"x", "y"}},
+	}, true},
+	{"express_token smuggled in the scope", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.52"),
+		Fields: []Field{{KeyScope, `x" scope="express_token`}},
+	}, true},
+	{"express_ip", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.53"), Tenant: "transfer.entity-a.example.com",
+		Fields: []Field{{KeyScope, "express_ip"}},
+	}, true},
+	{"express_refused", Event{
+		Type: ExpressRefused, IP: netip.MustParseAddr("198.51.100.54"), Tenant: "transfer.entity-a.example.com",
+		Fields: []Field{{KeyReason, ReasonExpressDisabled}},
+	}, false},
 	{"transfer_password", Event{
 		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.31"), Tenant: "transfer.entity-a.example.com",
 		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "transfer_password"}},

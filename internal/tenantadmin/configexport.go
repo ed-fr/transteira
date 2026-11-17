@@ -65,6 +65,16 @@ type ExportedSecretSettings struct {
 	// EmailRequiresPassphrase refuses an e-mail secret without passphrase;
 	// absent on import means false.
 	EmailRequiresPassphrase bool `json:"emailRequiresPassphrase"`
+	// ExpressEnabled is the anonymous mode of the express secrets (since
+	// 2.3), exported as stored; an import always stores it off (threat
+	// model P92), whatever it says.
+	ExpressEnabled *bool `json:"expressEnabled,omitempty"`
+	// ExpressPerHourPerIP, ExpressPerHourPerToken and ExpressMaxPending are
+	// the limits of the express secrets (since 2.3), always exported; an
+	// import takes the default of a limit it lacks (a 2.1 or 2.2 export).
+	ExpressPerHourPerIP    *int `json:"expressPerHourPerIp,omitempty"`
+	ExpressPerHourPerToken *int `json:"expressPerHourPerToken,omitempty"`
+	ExpressMaxPending      *int `json:"expressMaxPending,omitempty"`
 }
 
 // ExportedSettings are the general settings of a tenant, without its
@@ -250,7 +260,7 @@ func (s *Service) ExportConfig(ctx context.Context, p adminauth.Principal, tid t
 	if out.Branding, err = s.exportBranding(t, includeBranding); err != nil {
 		return ConfigExport{}, err
 	}
-	out.SecretSettings = exportSecretSettings(t.Secrets)
+	out.SecretSettings = exportSecretSettings(t)
 	for _, step := range []func(context.Context, tenant.ID, *ConfigExport) error{
 		s.exportRules, s.exportSMTP, s.exportTemplates, s.exportLegal, s.exportWebhooks, s.exportBlocklist,
 	} {
@@ -262,13 +272,16 @@ func (s *Service) ExportConfig(ctx context.Context, p adminauth.Principal, tid t
 	return out, nil
 }
 
-// exportSecretSettings returns the one-time secrets settings of a tenant;
-// the default duration only when one was chosen.
-func exportSecretSettings(s tenant.SecretSettings) *ExportedSecretSettings {
-	in := SecretSettingsOf(s)
+// exportSecretSettings returns the one-time secrets settings of t, the
+// settings of its express secrets included (since 2.3); the default
+// duration only when one was chosen.
+func exportSecretSettings(t *tenant.Tenant) *ExportedSecretSettings {
+	in := secretSettingsOfTenant(t)
 	out := &ExportedSecretSettings{
 		Enabled: in.Enabled, Durations: in.Durations, FileAllowed: in.FileAllowed, FileMaxBytes: in.FileMaxBytes,
 		EmailAllowed: in.EmailAllowed, EmailRequiresPassphrase: in.EmailRequiresPassphrase,
+		ExpressEnabled: in.ExpressEnabled, ExpressPerHourPerIP: in.ExpressPerHourPerIP,
+		ExpressPerHourPerToken: in.ExpressPerHourPerToken, ExpressMaxPending: in.ExpressMaxPending,
 	}
 	if in.DefaultDuration != "" {
 		out.DefaultDuration = ptrTo(in.DefaultDuration)

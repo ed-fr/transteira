@@ -50,6 +50,8 @@ var adminSecretChecks = map[string]func(t *testing.T, h *harness, op operation, 
 	"deleteTenantSecret":   checkDeleteForeignSecret,
 	"getSecretSettings":    checkGetSecretSettings,
 	"updateSecretSettings": checkUpdateSecretSettings,
+	"lookupTenantSecret":   checkLookupForeignSecret,
+	"purgeExpressSecrets":  checkPurgeForeignExpress,
 }
 
 // secretListOf lists the secrets of tenant tid with sess and returns the
@@ -141,13 +143,16 @@ func checkGetSecretSettings(t *testing.T, h *harness, op operation, sess adminSe
 	}
 }
 
-// checkUpdateSecretSettings: A's admin changes A's settings, B's stay as
-// they were, and A's are restored afterwards.
+// checkUpdateSecretSettings: A's admin changes A's settings, the express
+// members included (since 2.3), B's stay as they were, and A's are
+// restored afterwards.
 func checkUpdateSecretSettings(t *testing.T, h *harness, op operation, sess adminSession) {
 	t.Helper()
 	const body = `{"enabled":true,"durations":["1h","1d"],"defaultDuration":"1d","fileAllowed":true,"fileMaxBytes":2097152,` +
-		`"emailAllowed":true,"emailRequiresPassphrase":false}`
-	const restore = `{"enabled":true,"durations":["1h","1d","7d"],"fileAllowed":true,"fileMaxBytes":10485760,"emailAllowed":true}`
+		`"emailAllowed":true,"emailRequiresPassphrase":false,` +
+		`"expressEnabled":true,"expressPerHourPerIp":3,"expressPerHourPerToken":30,"expressMaxPending":300}`
+	const restore = `{"enabled":true,"durations":["1h","1d","7d"],"fileAllowed":true,"fileMaxBytes":10485760,"emailAllowed":true,` +
+		`"expressEnabled":false,"expressPerHourPerIp":10,"expressPerHourPerToken":100,"expressMaxPending":1000}`
 	beforeB := h.secretSettingsOf(t, op, h.superSession(t), h.tenantB.ID)
 	if resp := h.adminCall(t, sess, http.MethodPut, tenantPath(h.tenantA.ID, "/secret-settings"), body); resp.status != http.StatusOK {
 		t.Fatalf("%s: A's admin updating A: %d %s", op, resp.status, resp.body)
@@ -157,16 +162,21 @@ func checkUpdateSecretSettings(t *testing.T, h *harness, op operation, sess admi
 			t.Errorf("%s: restoring A's settings: %d %s", op, resp.status, resp.body)
 		}
 	}()
-	if got := h.secretSettingsOf(t, op, sess, h.tenantA.ID); got["fileMaxBytes"] != float64(2097152) {
+	if got := h.secretSettingsOf(t, op, sess, h.tenantA.ID); got["fileMaxBytes"] != float64(2097152) || got["expressEnabled"] != true ||
+		got["expressPerHourPerIp"] != float64(3) || got["expressMaxPending"] != float64(300) {
 		t.Errorf("%s: A's settings after the update = %v", op, got)
 	}
 	afterB := h.secretSettingsOf(t, op, h.superSession(t), h.tenantB.ID)
 	if mustJSON(t, afterB) != mustJSON(t, beforeB) {
 		t.Errorf("%s: B's settings changed: %v, was %v", op, afterB, beforeB)
 	}
+	if afterB["expressEnabled"] != false {
+		t.Errorf("%s: B's express mode opened by A's update: %v", op, afterB)
+	}
 	// With an invalid body for B, A's admin still gets the answer of an
-	// unknown tenant.
+	// unknown tenant, an express member out of range included.
 	h.invalidInputOfB(t, op, sess, http.MethodPut, "/secret-settings", `{"durations":[]}`)
+	h.invalidInputOfB(t, op, sess, http.MethodPut, "/secret-settings", `{"expressMaxPending":0}`)
 }
 
 // mustJSON returns v as JSON.

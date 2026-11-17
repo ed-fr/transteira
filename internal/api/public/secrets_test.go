@@ -58,6 +58,23 @@ type fakeSecrets struct {
 
 	sent        store.Secret
 	fragmentKey string
+
+	// The express secrets (since 2.3).
+	creator    secret.ExpressCreator
+	expressReq secret.ExpressCreateRequest
+	report     secret.AbuseReportRequest
+}
+
+func (f *fakeSecrets) CreateExpress(_ context.Context, _ *tenant.Tenant, creator secret.ExpressCreator, req secret.ExpressCreateRequest) (secret.Created, error) {
+	f.callCount++
+	f.creator, f.expressReq = creator, req
+	return f.created, f.err
+}
+
+func (f *fakeSecrets) ReportAbuse(_ context.Context, _ *tenant.Tenant, ip netip.Addr, token string, req secret.AbuseReportRequest) error {
+	f.callCount++
+	f.ip, f.token, f.report = ip, token, req
+	return f.err
 }
 
 func (f *fakeSecrets) Send(_ context.Context, _ *tenant.Tenant, sender transfer.Sender, secID, secretToken, fragmentKey string) (store.Secret, error) {
@@ -160,6 +177,14 @@ func secretCalls(t *testing.T) map[string]func(*Server, context.Context) error {
 		},
 		"download": func(s *Server, ctx context.Context) error {
 			_, err := s.DownloadSecretFile(ctx, gen.DownloadSecretFileRequestObject{SecretToken: "tts_x"})
+			return err
+		},
+		"express": func(s *Server, ctx context.Context) error {
+			_, err := s.CreateExpressSecret(context.WithValue(ctx, rawBodyKey{}, []byte(`{}`)), gen.CreateExpressSecretRequestObject{})
+			return err
+		},
+		"report": func(s *Server, ctx context.Context) error {
+			_, err := s.ReportSecretAbuse(ctx, gen.ReportSecretAbuseRequestObject{SecretToken: "tts_x"})
 			return err
 		},
 	}
@@ -562,6 +587,13 @@ func TestSecretErrors(t *testing.T) {
 			return p.Status == 403 && len(p.Errors) == 1 && p.Errors[0].Field == "/recipient" && p.Errors[0].Code == "domain-denied"
 		}},
 		{secret.ErrMailUnavailable, problem.CodeMailUnavailable, func(p *problem.Problem) bool { return p.Status == 503 }},
+		// The express secrets (since 2.3).
+		{secret.ErrExpressDisabled, problem.CodeExpressSecretsDisabled, func(p *problem.Problem) bool { return p.Status == 403 }},
+		{secret.ErrExpressTokenNotAllowed, problem.CodeExpressTokenNotAllowed, func(p *problem.Problem) bool { return p.Status == 403 }},
+		{secret.ErrExpressLimit, problem.CodeExpressSecretLimitReached, func(p *problem.Problem) bool {
+			return p.Status == 429 && p.RetryAfterSeconds == nil
+		}},
+		{secret.ErrTenantInSetup, problem.CodeTenantInSetup, func(p *problem.Problem) bool { return p.Status == 503 }},
 	}
 	for _, tt := range tests {
 		p := problemOf(t, secretError(tt.err), tt.code)
@@ -616,6 +648,9 @@ func TestSecretAnswersHoldNothingSealed(t *testing.T) {
 		"createSecret": "/secrets", "listMySecrets": "/me/secrets", "deleteMySecret": "/me/secrets/{secretId}",
 		"downloadSecretFile": "/secret-links/{secretToken}/file", "uploadSecretFile": "/secrets/{secretId}/file",
 		"sendSecret": "/secrets/{secretId}/send",
+		// Since 2.3: the express creation (its answer carries the token, its
+		// purpose) and the abuse report.
+		"createExpressSecret": "/express-secrets", "reportSecretAbuse": "/secret-links/{secretToken}/abuse-reports",
 	}
 	for opID, path := range ops {
 		item := doc.Paths.Value(path)

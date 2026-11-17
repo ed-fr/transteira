@@ -47,7 +47,8 @@
     "admin": "Administrateur",
     "api_token": "Jeton d’API",
     "system": "Système",
-    "provisioning_token": "Jeton de provisionnement"
+    "provisioning_token": "Jeton de provisionnement",
+    "anonymous": "Anonyme"
   },
   "objectKinds": {
     "transfer": "Transfert",
@@ -241,7 +242,9 @@
       "expired": "Secret expiré sans lecture",
       "deleted": "Secret supprimé",
       "locked": "Secret verrouillé après des preuves erronées",
-      "settings_updated": "Réglages des secrets modifiés"
+      "settings_updated": "Réglages des secrets modifiés",
+      "looked_up": "Secret recherché à partir d’un lien",
+      "express_purged": "Secrets express anonymes supprimés en masse"
     }
   }
 }

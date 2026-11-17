@@ -163,6 +163,12 @@ var isolationCases = map[string]isolationCase{
 	"uploadSecretFile":   uploadForeignSecretFile,
 	"downloadSecretFile": downloadForeignSecretFile,
 	"sendSecret":         sendForeignSecret,
+	// Express secrets (express_test.go, since 2.3): an API token of A is
+	// invalid under B, an express secret of A is unknown under B (status
+	// and report, nothing recorded), and the anonymous mode of a tenant
+	// never opens nor closes another's.
+	"createExpressSecret": createForeignExpress,
+	"reportSecretAbuse":   reportForeignSecretAbuse,
 	// Administration (admin_test.go): served on the admin host only, where
 	// no tenant is resolved; under tenant A's and B's hosts every one
 	// answers 404 before any admin logic. The cross-tenant checks of the
@@ -311,6 +317,10 @@ var isolationCases = map[string]isolationCase{
 	"deleteTenantSecret":   adminSecret,
 	"getSecretSettings":    adminSecret,
 	"updateSecretSettings": adminSecret,
+	// Since 2.3, a lookup under A's path never finds B's secret, and A's
+	// purge never ends B's express secrets.
+	"lookupTenantSecret":  adminSecret,
+	"purgeExpressSecrets": adminSecret,
 	// System operations (system_test.go): instance-wide, served on the
 	// admin host only. The maintenance state holds no tenant data and is
 	// readable by every administrator; the other operations are reserved

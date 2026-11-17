@@ -207,6 +207,15 @@ type Tenant struct {
 	// (whatever this field holds at creation), and writes them only with
 	// store.Tenants.SetSecretSettings or UpdateWithPolicies.
 	Secrets SecretSettings
+	// Express are the settings of the express secrets (since 2.3),
+	// managed by the delegated admin and the super admin, independent of
+	// Secrets.Enabled. The store reads them with the tenant, writes them
+	// only with store.Tenants.SetExpressSettings or UpdateWithPolicies, and
+	// gives a new tenant the limits of this field (each zero limit taking
+	// its default, [ExpressSettings.WithDefaults]) with Enabled always
+	// false, whatever this field holds at creation (an imported
+	// configuration never opens the anonymous service, threat model P92).
+	Express ExpressSettings
 	// ProvisionedBy is the identifier ("prv_" + ULID) of the provisioning
 	// token that created the tenant, "" for a tenant created by a super
 	// admin (V1.2). It is set at creation only, by the store.

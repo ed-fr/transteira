@@ -788,6 +788,7 @@ func TestMaintenanceOperationsExist(t *testing.T) {
 		http.MethodPost + " " + APIBaseURL + "/secrets":                         "CreateSecret",
 		http.MethodPut + " " + APIBaseURL + "/secrets/{secretId}/file":          "UploadSecretFile",
 		http.MethodPost + " " + APIBaseURL + "/secrets/{secretId}/send":         "SendSecret",
+		http.MethodPost + " " + APIBaseURL + "/express-secrets":                 "CreateExpressSecret",
 	}
 	if len(ops) != len(maintenanceBlocked) {
 		t.Fatalf("%d blocked patterns, %d expected operations", len(maintenanceBlocked), len(ops))
@@ -958,7 +959,14 @@ func TestRoutePolicies(t *testing.T) {
 			depositSession: true, csrf: true, apiToken: true,
 		},
 		"GET /api/v1/secret-links/{secretToken}/file": {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
-		"": defaultPolicy,
+		"POST /api/v1/express-secrets": {
+			bodyLimit: ExpressBodyLimit, deadline: RequestDeadline, sameOrigin: true, apiToken: true,
+		},
+		"POST /api/v1/secret-links/{secretToken}/abuse-reports": {
+			bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
+		},
+		"GET /api/v1/secret-links/{secretToken}": defaultPolicy,
+		"":                                       defaultPolicy,
 	}
 	for pattern, want := range cases {
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -1301,6 +1309,21 @@ func TestResponseErrorProvisioningChallenge(t *testing.T) {
 	h.responseError(rec, httptest.NewRequest(http.MethodPost, "/", nil), problem.New(problem.CodeNotFound))
 	if got := rec.Header().Get("WWW-Authenticate"); got != "" {
 		t.Errorf("challenge on another problem: %q", got)
+	}
+	// An API token refused by the operation (an express secret creation
+	// whose token was revoked since the middleware) gets the challenge; a
+	// wrong password without token does not.
+	tokenReq := httptest.NewRequest(http.MethodPost, "/", nil)
+	tokenReq = tokenReq.WithContext(middleware.WithAPIToken(tokenReq.Context(), middleware.TokenPrincipal{TokenID: "tok_x"}))
+	rec = httptest.NewRecorder()
+	h.responseError(rec, tokenReq, problem.New(problem.CodeInvalidCredentials))
+	if rec.Code != http.StatusUnauthorized || rec.Header().Get("WWW-Authenticate") != challengeInvalidToken {
+		t.Errorf("api token: status %d, challenge %q", rec.Code, rec.Header().Get("WWW-Authenticate"))
+	}
+	rec = httptest.NewRecorder()
+	h.responseError(rec, httptest.NewRequest(http.MethodPost, "/", nil), problem.New(problem.CodeInvalidCredentials))
+	if got := rec.Header().Get("WWW-Authenticate"); got != "" {
+		t.Errorf("challenge on a password failure: %q", got)
 	}
 }
 

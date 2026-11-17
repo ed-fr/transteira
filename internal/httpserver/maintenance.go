@@ -57,6 +57,10 @@ var maintenanceBlocked = map[string]struct{}{
 	http.MethodPost + " " + APIBaseURL + "/secrets":                 {},
 	http.MethodPut + " " + APIBaseURL + "/secrets/{secretId}/file":  {},
 	http.MethodPost + " " + APIBaseURL + "/secrets/{secretId}/send": {},
+	// So is the creation of an express secret (since 2.3), with or without
+	// API token; its reading and its abuse reports stay available, as for
+	// the 2.1 secrets.
+	http.MethodPost + " " + APIBaseURL + "/express-secrets": {},
 }
 
 // maintenanceMiddleware refuses the deposit operations with 503 and a

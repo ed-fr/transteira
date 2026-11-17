@@ -72,6 +72,8 @@ var setupDecisions = map[string]setupDecision{
 	"getSecretLink":                setupRefused,
 	"revealSecret":                 setupRefused,
 	"downloadSecretFile":           setupRefused,
+	"createExpressSecret":          setupRefused,
+	"reportSecretAbuse":            setupRefused,
 	"listMySecrets":                setupRefused,
 	"deleteMySecret":               setupRefused,
 	"getMyTransferProof":           setupRefused,

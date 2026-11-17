@@ -26,10 +26,16 @@ type abuseLabels struct {
 	reporterVerif  string // %s: address
 	reporterLink   string // %d: recipient number
 	reporterShared string
+	// reportIntro is the first sentence of the abuse_report mail, by kind
+	// of reported object; %s is the entity name.
+	reportIntroTransfer string
+	reportIntroSecret   string
+	// reportedTransfer is the transfer paragraph: %[1]s transfer, %[2]s sender.
+	transferWord, senderWord, secretWord string
 }
 
 var allAbuseLabels = map[string]*abuseLabels{
-	i18n.English: {
+	i18n.English: { //nolint:gosec // G101: labels of the reported object, not a credential
 		rules: map[string]string{
 			AbuseRuleDailyBytes:     "Daily volume threshold exceeded: %[1]s sent, threshold %[2]s.",
 			AbuseRuleDailyTransfers: "Daily transfer threshold exceeded: %[1]s transfers, threshold %[2]s.",
@@ -57,8 +63,12 @@ var allAbuseLabels = map[string]*abuseLabels{
 		reporterVerif:  "Reported by %s, whose address was verified by a code.",
 		reporterLink:   "Reported via the link of recipient #%d, unverified.",
 		reporterShared: "Reported via the shared link of the transfer, unverified.",
+
+		reportIntroTransfer: "A transfer of %s was reported as abusive.",
+		reportIntroSecret:   "A one-time secret of %s was reported as abusive.",
+		transferWord:        "Transfer", senderWord: "Sender", secretWord: "Secret",
 	},
-	i18n.French: {
+	i18n.French: { //nolint:gosec // G101: labels of the reported object, not a credential
 		rules: map[string]string{
 			AbuseRuleDailyBytes:     "Seuil de volume quotidien dépassé : %[1]s envoyés, seuil %[2]s.",
 			AbuseRuleDailyTransfers: "Seuil quotidien de transferts dépassé : %[1]s transferts, seuil %[2]s.", //nolint:misspell // French text
@@ -86,6 +96,10 @@ var allAbuseLabels = map[string]*abuseLabels{
 		reporterVerif:  "Signalé par %s, dont l'adresse a été vérifiée par un code.",
 		reporterLink:   "Signalé via le lien du destinataire n° %d, non vérifié.",
 		reporterShared: "Signalé via le lien partagé du transfert, non vérifié.",
+
+		reportIntroTransfer: "Un transfert de %s a été signalé comme abusif.",
+		reportIntroSecret:   "Un secret à usage unique de %s a été signalé comme abusif.",
+		transferWord:        "Transfert", senderWord: "Expéditeur", secretWord: "Secret",
 	},
 }
 
@@ -188,6 +202,10 @@ func abuseReportValues(lb *labels, lang string, data any) (map[string]value, boo
 	if !known {
 		category = l.categories[AbuseCategoryOther]
 	}
+	intro := fmt.Sprintf(l.reportIntroTransfer, d.TenantName)
+	if d.SecretID != "" {
+		intro = fmt.Sprintf(l.reportIntroSecret, d.TenantName)
+	}
 	var reporter string
 	switch {
 	case d.ReporterEmail != "":
@@ -201,9 +219,42 @@ func abuseReportValues(lb *labels, lang string, data any) (map[string]value, boo
 		"tenant_name":      textValue(d.TenantName),
 		"transfer_id":      textValue(d.TransferID),
 		"sender_email":     textValue(d.SenderEmail),
+		"report_intro":     textValue(intro),
+		"report_object":    reportObjectBlock(lang, l, d),
+		"secret_id":        textValue(d.SecretID),
 		"category":         textValue(category),
 		"reporter_notice":  textValue(reporter),
 		"reporter_message": messageBlock(lb, d.Message),
 		"admin_link":       urlValue(d.AdminLink),
 	}, true
+}
+
+// abuseReportRequired returns the variables of which a customized
+// abuse_report template must show one in each body to render a report on
+// an express secret (since 2.3): a customization saved before only names
+// the transfer and its sender, empty for a secret, so the administrators
+// would not learn which secret was reported (threat model T-407). None for
+// a transfer report.
+func abuseReportRequired(data any) []string {
+	if d, ok := data.(AbuseReportData); ok && d.SecretID != "" {
+		return []string{"report_object", "secret_id"}
+	}
+	return nil
+}
+
+// reportObjectBlock describes the reported object of an abuse report: the
+// transfer and its sender, or the express secret (its sec_ identifier,
+// never its link or content).
+func reportObjectBlock(lang string, l *abuseLabels, d AbuseReportData) value {
+	colon := ": "
+	if lang == i18n.French {
+		colon = " : "
+	}
+	if d.SecretID != "" {
+		return blockValue(trustedHTML(esc(l.secretWord)+colon+"<strong>"+esc(d.SecretID)+"</strong>"),
+			l.secretWord+colon+d.SecretID)
+	}
+	h := esc(l.transferWord) + colon + "<strong>" + esc(d.TransferID) + "</strong><br>" +
+		esc(l.senderWord) + colon + "<strong>" + esc(d.SenderEmail) + "</strong>"
+	return blockValue(trustedHTML(h), l.transferWord+colon+d.TransferID+"\n"+l.senderWord+colon+d.SenderEmail)
 }

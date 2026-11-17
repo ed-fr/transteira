@@ -44,6 +44,7 @@
     "reporter": "Signalé par",
     "sender": "Expéditeur",
     "transfer": "Transfert",
+    "secret": "Secret express",
     "transferGone": "n’est plus disponible",
     "message": "Message du signalement",
     "noMessage": "Aucun message.",

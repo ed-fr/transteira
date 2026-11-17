@@ -175,7 +175,7 @@
 {/snippet}
 
 {#snippet creatorCell(row: AdminSecret)}
-  <span class="tt-break">{row.senderEmail}</span>
+  {#if row.senderEmail !== undefined}<span class="tt-break">{row.senderEmail}</span>{/if}
   <span class="tt-secretlist__sub">{creatorKindLabel(row.creatorKind, t)}</span>
 {/snippet}
 
@@ -208,7 +208,9 @@
   {#if canDeleteSecret(row.state)}
     <Button
       variant="secondary"
-      aria-label={t('adminSecrets.delete.buttonFor', { creator: row.senderEmail })}
+      aria-label={t('adminSecrets.delete.buttonFor', {
+        creator: row.senderEmail ?? creatorKindLabel(row.creatorKind, t),
+      })}
       onclick={() => askDelete(row)}
     >
       {t('adminSecrets.delete.button')}
@@ -294,7 +296,9 @@
 <ConfirmDialog
   bind:open={confirmOpen}
   title={t('adminSecrets.delete.title')}
-  text={t('adminSecrets.delete.text', { creator: target?.senderEmail ?? '' })}
+  text={t('adminSecrets.delete.text', {
+    creator: target === undefined ? '' : (target.senderEmail ?? creatorKindLabel(target.creatorKind, t)),
+  })}
   confirmLabel={t('adminSecrets.delete.confirm')}
   busyLabel={t('adminSecrets.delete.busy')}
   danger

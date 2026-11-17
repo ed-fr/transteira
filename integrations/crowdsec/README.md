@@ -73,7 +73,12 @@ value forged elsewhere on the line cannot use it to escape a ban. The same
 goes for `scope="drop_link"` (the hourly deposit cap of a permanent drop
 link): it is a limit of the link, not of the client, and counting it would
 let a third party who fills a link get its legitimate depositors banned.
-Every other `rate_limited` scope still counts.
+The same goes for `scope="express_token"` (the hourly creation limit of an
+API token on express secrets, since 2.3): an authenticated integration over
+its quota would otherwise get its server banned. The `express_refused` event
+is never counted either (a state of the tenant, not a client fault), while
+`scope="express_ip"` (anonymous flood from one client) still counts. Every
+other `rate_limited` scope still counts.
 
 ## Never ban your own users
 

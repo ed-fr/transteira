@@ -657,6 +657,30 @@ func TestReported(t *testing.T) {
 	})
 }
 
+func TestSecretAbuseReported(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ev := newEnv(t, e)
+		a := ev.tenant(settings(nil))
+		ev.admin(store.RoleDelegatedAdmin, "admin-a@entity-a.example.com", a.ID)
+		rep := store.AbuseReport{ID: "abr_3", SecretID: "sec_01JABCU7W8X9Y0Z1A2B3C4D5E6", Category: "spam", Message: "junk"}
+		ev.det.SecretAbuseReported(context.Background(), a, rep)
+		reps := ev.notifier.reports
+		if len(reps) != 1 || ev.mailer.count() != 1 {
+			t.Fatalf("reports = %d", len(reps))
+		}
+		if r := reps[0]; r.SecretID != rep.SecretID || r.TransferID != "" || r.SenderEmail != "" || r.ReporterEmail != "" || r.RecipientIndex != 0 {
+			t.Fatalf("report = %+v", r)
+		}
+		evs := ev.events.all()
+		if len(evs) != 1 || evs[0].Type != events.AbuseReported || evs[0].TenantID != string(a.ID) ||
+			evs[0].AdminPath != events.AdminPathTenantAbuseReports(string(a.ID)) {
+			t.Fatalf("events = %+v", evs)
+		}
+	})
+}
+
 // TestCheckCreateTxReplies counts the replies of section 10 in the external
 // quota of their address, together with its invited deposits, and never in
 // the per-sender daily rules of an internal address.

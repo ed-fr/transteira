@@ -13,7 +13,7 @@ key are in [Proofs](proofs.md).
 - Variables: `TT_ADMIN_HOSTS` (required), `TT_ADMIN_SESSION_IDLE_TIMEOUT`,
   `TT_ADMIN_SESSION_MAX_AGE`, `TT_SETUP_TOKEN` / `TT_SETUP_TOKEN_FILE`,
   `TT_API_DOCS_PUBLIC`, `TT_MAX_OPEN_TRANSFERS` (per API token),
-  `TT_MAINTENANCE`, `TT_SYSTEM_SMTP_*`, `TT_UPDATE_CHECK`, see `.env.example`.
+  `TT_MAINTENANCE`, `TT_EXPRESS_SECRETS_DISABLED` (kill switch of the express secrets, since 2.3: refuses their creation and reading on every entity), `TT_SYSTEM_SMTP_*`, `TT_UPDATE_CHECK`, see `.env.example`.
 - Commands: `transteira admin list`, `transteira admin reset-totp <username>`,
   `transteira admin reset-password <username>`.
 - Implementation: `internal/adminauth`, `internal/audit`,

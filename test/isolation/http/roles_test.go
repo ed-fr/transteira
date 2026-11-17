@@ -85,6 +85,10 @@ var auditorExpect = map[string]auditorClass{
 	// creator filter is refused to an auditor, the settings and the deletion
 	// stay refused).
 	"listTenantSecrets": tenantRead,
+	// Since 2.3 the lookup of a secret from its link (metadata only, a
+	// read despite its POST); the purge of the express secrets is a write.
+	"lookupTenantSecret":  tenantRead,
+	"purgeExpressSecrets": refused,
 
 	// Accounts (super admin only).
 	"createAdmin":           refused,
@@ -349,6 +353,7 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 		linkB := h.dropLinkOfB(t, operation{id: "seed"})
 		params := map[string]string{"transferId": trA.ID, "dropLinkId": linkA.ID}
 		proofParams := map[string]string{"transferId": h.availableTransferWithProof(t)}
+		secretA := h.createSecretA(t)
 		a, b := string(h.tenantA.ID), string(h.tenantB.ID)
 		var logout *operation
 		sort.Slice(adminOps, func(i, j int) bool { return adminOps[i].id < adminOps[j].id })
@@ -374,6 +379,15 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 					}
 					own := h.sendRole(t, auditor, op, a, opParams)
 					foreign := h.sendRole(t, auditor, op, b, opParams)
+					if op.id == "lookupTenantSecret" {
+						// The link of a secret of A, which A's auditor finds.
+						body := lookupBody(hostA, secretA.Token)
+						own = h.adminCall(t, auditor, http.MethodPost, tenantPath(h.tenantA.ID, "/secrets/lookup"), body)
+						foreign = h.adminCall(t, auditor, http.MethodPost, tenantPath(h.tenantB.ID, "/secrets/lookup"), body)
+						if !strings.Contains(string(own.body), secretA.ID) || strings.Contains(string(own.body), secretA.Token) {
+							t.Errorf("%s by the auditor of A: %s, want A's secret without its token", op, own.body)
+						}
+					}
 					if isStub(t, op) {
 						wantCode(t, op, hostAdmin, own, http.StatusNotFound, "not-found")
 					} else if own.status < 200 || own.status > 299 {

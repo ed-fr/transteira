@@ -203,6 +203,10 @@ type Config struct {
 	LogLevel slog.Level
 	// Maintenance is true when the instance starts in maintenance mode.
 	Maintenance bool
+	// ExpressSecretsDisabled is the instance kill switch of the express
+	// secrets (TT_EXPRESS_SECRETS_DISABLED, since 2.3): creation and reading
+	// of every express secret are refused.
+	ExpressSecretsDisabled bool
 	// APIDocsPublic is true when the interactive API documentation is served
 	// to anonymous visitors on the tenant FQDNs, in addition to the admin
 	// sessions on the admin host.
@@ -793,6 +797,7 @@ func (l *loader) loadOperations(c *Config) {
 	}
 	c.Maintenance = l.boolVar(EnvMaintenance)
 	c.APIDocsPublic = l.boolVar(EnvAPIDocsPublic)
+	c.ExpressSecretsDisabled = l.boolVar(EnvExpressSecretsDisabled)
 	c.UpdateCheck = l.boolVarDefault(EnvUpdateCheck, true)
 
 	token, ok := l.secret(EnvSetupToken, EnvSetupTokenFile)

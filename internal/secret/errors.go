@@ -25,6 +25,13 @@ const (
 	FieldFragmentKey          = "/fragmentKey"
 	FieldKeyProof             = "/keyProof"
 	FieldProof                = "/proof"
+	// FieldLink is the pasted link of a lookup (OpenAPI SecretLookup, since
+	// 2.3).
+	FieldLink = "/link"
+	// FieldCategory and FieldMessage are the members of an abuse report
+	// (OpenAPI AbuseReportCreate, since 2.3 on the express secrets).
+	FieldCategory = "/category"
+	FieldMessage  = "/message"
 	// FieldGrant is the header carrying the one-time file grant of a
 	// download.
 	FieldGrant = "TransTeira-Secret-Grant"
@@ -83,6 +90,33 @@ var (
 	// ErrMailUnavailable reports a send call while the tenant has no SMTP
 	// settings (mail-unavailable): the secret stays pending.
 	ErrMailUnavailable = errors.New("secret: mail unavailable")
+	// ErrExpressDisabled reports an express secret creation or reading
+	// while the express service is closed (since 2.3, 403
+	// express-secrets-disabled): the instance kill switch
+	// (Options.ExpressKillSwitch) for every express secret, or the
+	// anonymous mode of the tenant off (tenant.ExpressSettings.Enabled)
+	// for an anonymous creation and the reading of an anonymous express
+	// secret.
+	ErrExpressDisabled = errors.New("secret: express secrets are disabled")
+	// ErrExpressLimit reports an anonymous express secret creation while
+	// the tenant holds its maximum of live express secrets
+	// (tenant.ExpressSettings.MaxPending; since 2.3, 429
+	// express-secret-limit-reached, without Retry-After).
+	ErrExpressLimit = errors.New("secret: too many live express secrets")
+	// ErrExpressTokenNotAllowed reports an express secret creation with an
+	// API token that is not allowed for them (store.APIToken.ExpressAllowed;
+	// since 2.3, 403 express-token-not-allowed).
+	ErrExpressTokenNotAllowed = errors.New("secret: api token not allowed for express secrets")
+	// ErrTokenInvalid reports an express secret creation whose API token
+	// was revoked or expired between its authentication and the creation
+	// transaction (since 2.3, 401 invalid-credentials, as the token
+	// middleware answers such a token; written as api_token_invalid).
+	ErrTokenInvalid = errors.New("secret: api token unknown, revoked or expired")
+	// ErrTenantInSetup reports an express secret creation on a tenant still
+	// being configured (since 2.3, 503 tenant-in-setup). The HTTP layer
+	// refuses such a request first; the store checks the setup state again
+	// in its creation transaction.
+	ErrTenantInSetup = errors.New("secret: tenant in setup")
 )
 
 // FieldError is one invalid field of a request.

@@ -38,7 +38,8 @@ const (
 
 // Errors of [AbuseReports.Create]. Nothing is recorded.
 var (
-	// ErrAbuseReportLinkLimit reports a link that already carried
+	// ErrAbuseReportLinkLimit reports a link (or, for a report on an
+	// express secret, the secret) that already carried
 	// [AbuseReportLimits.PerLinkPerDay] reports over the last
 	// AbuseReportLinkWindow.
 	ErrAbuseReportLinkLimit = errors.New("store: too many abuse reports for this link")
@@ -89,22 +90,29 @@ func (s AbuseReportStatus) Valid() bool { return s == AbuseReportOpen || s == Ab
 
 // abuseReportColumns is the column list read by the abuse report queries.
 const abuseReportColumns = `id, transfer_id, recipient_link_id, sender_email, recipient_position, reporter_email, ` +
-	`reporter_verified, reporter_ip, category, message, status, closed_at, closed_by, note, created_at`
+	`reporter_verified, reporter_ip, category, message, status, closed_at, closed_by, note, created_at, secret_id`
 
 // Statements of the AbuseReports repository. All of them are single-table
 // tenant queries.
 var (
 	qAbuseReportInsert = tenantQuery(
 		`INSERT INTO abuse_reports (tenant_id, id, transfer_id, recipient_link_id, sender_email, recipient_position,
-		reporter_email, reporter_verified, reporter_ip, category, message, status, note, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', '', ?)`)
+		reporter_email, reporter_verified, reporter_ip, category, message, status, note, created_at, secret_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', '', ?, ?)`)
 	// The rate counts use abuse_reports_link_rate_idx,
-	// abuse_reports_shared_rate_idx and abuse_reports_ip_rate_idx.
+	// abuse_reports_shared_rate_idx, abuse_reports_secret_rate_idx and
+	// abuse_reports_ip_rate_idx.
 	qAbuseReportCountLink = tenantQuery(
 		`SELECT count(*) FROM abuse_reports WHERE tenant_id = ? AND recipient_link_id = ? AND created_at >= ?`)
 	qAbuseReportCountShared = tenantQuery(
 		`SELECT count(*) FROM abuse_reports
 		WHERE tenant_id = ? AND recipient_link_id IS NULL AND transfer_id = ? AND created_at >= ?`)
+	qAbuseReportCountSecret = tenantQuery(
+		`SELECT count(*) FROM abuse_reports WHERE tenant_id = ? AND secret_id = ? AND created_at >= ?`)
+	// qAbuseReportSecretExists checks that the reported secret is an
+	// express secret of the tenant (since 2.3).
+	qAbuseReportSecretExists = tenantQuery(
+		`SELECT count(*) FROM secrets WHERE tenant_id = ? AND id = ? AND express`)
 	qAbuseReportCountIP = tenantQuery(
 		`SELECT count(*) FROM abuse_reports WHERE tenant_id = ? AND reporter_ip = ? AND created_at >= ?`)
 	qAbuseReportGet = tenantQuery(
@@ -153,12 +161,18 @@ var (
 )
 
 // AbuseReport is a report filed from a download page (spec 10, OpenAPI
-// AbuseReport). It is a snapshot: it outlives the transfer it reports.
+// AbuseReport), or since 2.3 from the read page of an express secret
+// (reportSecretAbuse). It is a snapshot: it outlives the transfer or the
+// secret it reports. It names exactly one of TransferID and SecretID.
 type AbuseReport struct {
 	// ID is the identifier ("abr_" + ULID), assigned by the store when "".
 	ID string
-	// TransferID is the reported transfer.
+	// TransferID is the reported transfer, "" for a report on a secret.
 	TransferID string
+	// SecretID is the reported express secret ("sec_" + ULID, since 2.3),
+	// "" for a report on a transfer. A report on a secret has no
+	// SenderEmail, no RecipientLinkID and an unverified reporter.
+	SecretID string
 	// RecipientLinkID is the recipient link used ("rcl_" + ULID), "" for a
 	// shared link (transfers created before 1.1).
 	RecipientLinkID string
@@ -167,7 +181,8 @@ type AbuseReport struct {
 	// unverified hint ("via the link of recipient #n").
 	RecipientPosition *int
 	// SenderEmail is the sender of the transfer, normalized by the store;
-	// the erasure pseudonym after a GDPR erasure.
+	// the erasure pseudonym after a GDPR erasure. "" for a report on a
+	// secret (an express secret has no address).
 	SenderEmail string
 	// ReporterEmail is the address of the reporter, set only when a valid
 	// recipient verification of the link proved it (ReporterVerified),
@@ -201,7 +216,8 @@ type AbuseReport struct {
 // A limit of 0 or less disables its check.
 type AbuseReportLimits struct {
 	// PerLinkPerDay bounds the reports through one link (a recipient link,
-	// or the shared link of a transfer) over AbuseReportLinkWindow.
+	// or the shared link of a transfer) or on one secret over
+	// AbuseReportLinkWindow.
 	PerLinkPerDay int
 	// PerIPPerHour bounds the reports of one client IP over
 	// AbuseReportIPWindow.
@@ -231,11 +247,9 @@ func validNote(s string) bool { return validBody(s, MaxAbuseReportTextLen) }
 // open, created at now, with its ID assigned when empty, and its IP in
 // text form.
 func (r *AbuseReports) normalizeAbuseReport(rep AbuseReport, now time.Time) (AbuseReport, string, error) {
-	sender, err := NormalizeEmail(rep.SenderEmail)
-	if err != nil {
+	if err := checkAbuseTarget(&rep); err != nil {
 		return AbuseReport{}, "", err
 	}
-	rep.SenderEmail = sender
 	if rep.ReporterEmail != "" {
 		reporter, err := NormalizeEmail(rep.ReporterEmail)
 		if err != nil {
@@ -250,8 +264,6 @@ func (r *AbuseReports) normalizeAbuseReport(rep AbuseReport, now time.Time) (Abu
 	switch {
 	case rep.ID != "" && !id.Valid(id.AbuseReport, rep.ID):
 		return AbuseReport{}, "", invalid("malformed abuse report id")
-	case !id.Valid(id.Transfer, rep.TransferID):
-		return AbuseReport{}, "", invalid("malformed transfer id")
 	case rep.RecipientLinkID != "" && !validLinkID(rep.RecipientLinkID):
 		return AbuseReport{}, "", invalid("malformed recipient link id")
 	case (rep.RecipientLinkID == "") != (rep.RecipientPosition == nil):
@@ -282,6 +294,32 @@ func (r *AbuseReports) normalizeAbuseReport(rep AbuseReport, now time.Time) (Abu
 	return rep, ip, nil
 }
 
+// checkAbuseTarget checks the target of a new report: a transfer with its
+// sender (normalized in place), or an express secret without sender,
+// recipient link nor verified reporter.
+func checkAbuseTarget(rep *AbuseReport) error {
+	if rep.SecretID == "" {
+		if !id.Valid(id.Transfer, rep.TransferID) {
+			return invalid("malformed transfer id")
+		}
+		sender, err := NormalizeEmail(rep.SenderEmail)
+		if err != nil {
+			return err
+		}
+		rep.SenderEmail = sender
+		return nil
+	}
+	switch {
+	case !id.Valid(id.Secret, rep.SecretID):
+		return invalid("malformed secret id")
+	case rep.TransferID != "":
+		return invalid("a report names a transfer or a secret, not both")
+	case rep.SenderEmail != "" || rep.RecipientLinkID != "" || rep.ReporterVerified:
+		return invalid("a report on a secret has no sender, recipient link nor verified reporter")
+	}
+	return nil
+}
+
 // Create records the report rep for tenant tid at now (the store's clock
 // when zero) in its own transaction and returns the stored report (see
 // [AbuseReports.CreateTx]).
@@ -304,17 +342,21 @@ func (r *AbuseReports) Create(ctx context.Context, tid tenant.ID, rep AbuseRepor
 // CreateTx records the report rep inside tx, for the tenant tx is bound
 // to, at now (the store's clock when zero), and returns the stored report:
 // open, without note, its addresses normalized and its ID assigned when
-// empty. Under the tenant lock, it first counts the reports of the same
-// link (rep.RecipientLinkID, or the shared link of rep.TransferID when it
-// is "") created over the last AbuseReportLinkWindow and those of the same
-// reporter IP over the last AbuseReportIPWindow, and returns
-// ErrAbuseReportLinkLimit or ErrAbuseReportIPLimit (link first),
+// empty. A report on a secret (rep.SecretID, since 2.3) names an express
+// secret of the tenant, any state (the caller checks which states may be
+// reported), else ErrNotFound. Under the tenant lock, it first counts the
+// reports of the same link (rep.RecipientLinkID, the shared link of
+// rep.TransferID when it is "", or the secret rep.SecretID) created over
+// the last AbuseReportLinkWindow and those of the same reporter IP over the
+// last AbuseReportIPWindow (transfer and secret reports together), and
+// returns ErrAbuseReportLinkLimit or ErrAbuseReportIPLimit (link first),
 // recording nothing, when a count reached its limit. It returns
 // ErrInvalid for a malformed field (see [AbuseReport]: unknown category, a
 // message too long, a reporter address without verification or a verified
-// reporter without a recipient link...), ErrNotFound when the tenant does
-// not exist and ErrConflict when the ID is already used. After an error,
-// the caller must abort the transaction.
+// reporter without a recipient link, both or neither target, a secret
+// report with a sender...), ErrNotFound when the tenant does not exist
+// and ErrConflict when the ID is already used. After an error, the caller
+// must abort the transaction.
 func (r *AbuseReports) CreateTx(ctx context.Context, tx *ScopedTx, rep AbuseReport, limits AbuseReportLimits, now time.Time) (AbuseReport, error) {
 	out, err := r.create(ctx, tx, rep, limits, now)
 	if err != nil {
@@ -330,9 +372,21 @@ func (r *AbuseReports) create(ctx context.Context, tx *ScopedTx, rep AbuseReport
 	if err != nil {
 		return AbuseReport{}, err
 	}
+	if rep.SecretID != "" {
+		var n int
+		if err := tx.QueryRow(ctx, qAbuseReportSecretExists, rep.SecretID).Scan(&n); err != nil {
+			return AbuseReport{}, err
+		}
+		if n == 0 {
+			return AbuseReport{}, ErrNotFound
+		}
+	}
 	if limits.PerLinkPerDay > 0 {
 		q, key := qAbuseReportCountLink, rep.RecipientLinkID
-		if key == "" {
+		switch {
+		case rep.SecretID != "":
+			q, key = qAbuseReportCountSecret, rep.SecretID
+		case key == "":
 			q, key = qAbuseReportCountShared, rep.TransferID
 		}
 		n, err := countTx(ctx, tx, q, key, now.Add(-AbuseReportLinkWindow), "count abuse reports")
@@ -352,9 +406,9 @@ func (r *AbuseReports) create(ctx context.Context, tx *ScopedTx, rep AbuseReport
 			return AbuseReport{}, ErrAbuseReportIPLimit
 		}
 	}
-	_, err = tx.Exec(ctx, qAbuseReportInsert, rep.ID, rep.TransferID, nullText(rep.RecipientLinkID), rep.SenderEmail,
-		nullInt(rep.RecipientPosition), nullText(rep.ReporterEmail), rep.ReporterVerified, ip, string(rep.Category),
-		rep.Message, toMillis(rep.CreatedAt))
+	_, err = tx.Exec(ctx, qAbuseReportInsert, rep.ID, nullText(rep.TransferID), nullText(rep.RecipientLinkID),
+		nullText(rep.SenderEmail), nullInt(rep.RecipientPosition), nullText(rep.ReporterEmail), rep.ReporterVerified, ip,
+		string(rep.Category), rep.Message, toMillis(rep.CreatedAt), nullText(rep.SecretID))
 	if err != nil {
 		return AbuseReport{}, err
 	}
@@ -365,16 +419,20 @@ func (r *AbuseReports) create(ctx context.Context, tx *ScopedTx, rep AbuseReport
 func scanAbuseReport(sc interface{ Scan(...any) error }) (AbuseReport, error) {
 	var (
 		rep                     AbuseReport
+		transfer, sender, sec   sql.NullString
 		link, reporter, closeBy sql.NullString
 		pos, closed             sql.NullInt64
 		ip, category, status    string
 		created                 int64
 	)
-	err := sc.Scan(&rep.ID, &rep.TransferID, &link, &rep.SenderEmail, &pos, &reporter, &rep.ReporterVerified, &ip,
-		&category, &rep.Message, &status, &closed, &closeBy, &rep.Note, &created)
+	err := sc.Scan(&rep.ID, &transfer, &link, &sender, &pos, &reporter, &rep.ReporterVerified, &ip,
+		&category, &rep.Message, &status, &closed, &closeBy, &rep.Note, &created, &sec)
 	if err != nil {
 		return AbuseReport{}, err
 	}
+	// NULL for a report on a secret (transfer, sender) or on a transfer
+	// (secret).
+	rep.TransferID, rep.SenderEmail, rep.SecretID = transfer.String, sender.String, sec.String
 	rep.RecipientLinkID, rep.RecipientPosition, rep.ReporterEmail = link.String, intPtr(pos), reporter.String
 	rep.ReporterIP, rep.Category, rep.Status = parseIP(ip), AbuseCategory(category), AbuseReportStatus(status)
 	rep.ClosedAt, rep.ClosedBy, rep.CreatedAt = nullMillis(closed), closeBy.String, fromMillis(created)
@@ -535,9 +593,9 @@ func (r *AbuseReports) PseudonymiseTx(ctx context.Context, tx *ScopedTx, email, 
 // abuseReportText is a report whose message or note is not empty, as read
 // by pseudonymiseTexts.
 type abuseReportText struct {
-	id, sender    string
-	reporter      sql.NullString
-	message, note string
+	id               string
+	sender, reporter sql.NullString // NULL sender: a report on a secret
+	message, note    string
 }
 
 // pseudonymiseTexts replaces the address email (normalized) by pseudonym
@@ -573,7 +631,7 @@ func pseudonymiseTexts(ctx context.Context, tx *ScopedTx, email, pseudonym strin
 			if _, err := tx.Exec(ctx, qAbuseReportPseudonymiseText, msg, note, t.id); err != nil {
 				return 0, err
 			}
-			if t.sender != email && t.reporter.String != email {
+			if t.sender.String != email && t.reporter.String != email {
 				changed++
 			}
 		}

@@ -117,8 +117,12 @@ Consequences, together with the unchanged 0033 checks:
 
 ```sql
 CREATE INDEX secrets_express_live_idx ON secrets (tenant_id, expires_at)
-    WHERE express = 1 AND state = 'active';       -- PG: WHERE express AND state = 'active'
+    WHERE express AND state = 'active';           -- the same text on both engines
 ```
+
+The condition is written `express AND ...` on SQLite too, as in the store queries: SQLite
+matches the terms of a partial index literally, so an index on `express = 1` would not serve a
+query on `express` (the portable form, since PostgreSQL refuses `boolean = integer`).
 
 #### SQLite: rebuild of `secrets`
 
@@ -229,7 +233,9 @@ CREATE INDEX abuse_reports_secret_rate_idx ON abuse_reports (tenant_id, secret_i
   holds an address (no sender, unverified reporter), only the reporter IP (`reporter_ip`, as
   for transfers, purged with the report).
 - Rate limits: 3 reports per secret per day through `abuse_reports_secret_rate_idx`, 5 per IP
-  per hour through the existing `abuse_reports_ip_rate_idx` (shared with transfer reports).
+  per hour through the existing `abuse_reports_ip_rate_idx` (shared with transfer reports), and,
+  in memory, 5 per hour per tenant and client key (IPv4 address or IPv6 /64), since anyone can
+  create express secrets to report: rotating addresses within a /64 does not multiply the alerts.
   `abuse_reports_shared_rate_idx` (`WHERE recipient_link_id IS NULL`) also indexes the secret
   rows with a NULL `transfer_id`; harmless, kept unchanged for parity.
 - **SQLite**: `transfer_id` and `sender_email` lose `NOT NULL`, so the table is rebuilt exactly
@@ -254,10 +260,10 @@ the tenant lock already used by the 2.1 creation limits:
 
    ```sql
    SELECT count(*) FROM secrets
-   WHERE tenant_id = ? AND express = 1 AND state = 'active' AND expires_at > ?   -- now; PG: express
+   WHERE tenant_id = ? AND express AND state = 'active' AND expires_at > ?   -- now
    ```
 
-   served by `secrets_express_live_idx` (an index-only range scan on `(tenant_id, expires_at)`
+   served by `secrets_express_live_idx` (a range scan on `(tenant_id, expires_at)`
    restricted to live express rows; at most `express_max_pending` entries per tenant plus those
    not yet swept). An active row past `expires_at` is not counted: it is already answered as
    expired. The count covers **all** express secrets of the tenant (anonymous and token), but
@@ -274,7 +280,13 @@ the tenant lock already used by the 2.1 creation limits:
    per (tenant, client key), the client key being the IPv4 address or the IPv6 /64, as the
    other limiters. Not in the database: storing client IPs on secret rows would be personal
    data kept 30 days for a one-hour limit (minimization). Reset at a restart (single instance;
-   at worst one extra hour of quota, accepted).
+   at worst one extra hour of quota, accepted). Charged after the body checks (a malformed call
+   counts against no limit). One table per tenant, at most 100 000 clients each: a new client
+   replaces a client without event in the window, else the least recently seen client below the
+   limit; a client at its limit is never forgotten, so a tenant whose least recently seen
+   clients are all at their limit refuses a new client (`429 express-secret-limit-reached`,
+   `express_refused` reason `limit`, never `express_ip` against that client) without effect on
+   the other tenants.
 4. Insert: `express = 1`, `creator_kind` `anonymous` (`api_token_id` NULL) or `api_token`
    (`api_token_id` set), `sender_email` NULL, `delivery = 'link'`, `read_receipt = 0`,
    `kdf_*` NULL, `file_*` NULL, `state = 'active'`, `activated_at = created_at = now`,
@@ -282,7 +294,9 @@ the tenant lock already used by the 2.1 creation limits:
    key (`Vault.NewDEKTx`), exactly as a 2.1 link secret without file.
 
 The token opt-in (`api_tokens.express_allowed = 1`) is checked by the service before the
-transaction, with the token already authenticated (`403 express-token-not-allowed`).
+transaction, with the token already authenticated (`403 express-token-not-allowed`), and again
+in the transaction with the token row: a token revoked or expired since its authentication is
+`401 invalid-credentials` (`api_token_invalid`), as the token middleware answers it.
 
 The 2.1 per-creator limits (50 open, 200 per 24 hours, `secrets_sender_created_idx` /
 `secrets_token_created_idx`) are not checked for express secrets, and the 2.1 counts exclude
@@ -310,8 +324,10 @@ token.
   then its text key destroyed with `Vault.DestroyTx`: cryptographic erasure, threat model
   T-369), in batches of at most 500 rows per write transaction so that the SQLite writer is
   never held long; the total is returned and audited once (`secret.express_purged`,
-  `details.count`). A failure midway leaves the already ended batches ended: calling again
-  finishes the work.
+  `details.count`). A listed row ended meanwhile by a reveal, the expiry task or a deletion (the
+  list takes no row lock; PostgreSQL reads at READ COMMITTED) is skipped, its key left to that
+  operation, and not counted. A failure midway leaves the already ended batches ended: calling
+  again finishes the work.
 
 ## 3. PostgreSQL RLS summary
 

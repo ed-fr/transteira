@@ -217,13 +217,14 @@ func TestCreateAPIToken(t *testing.T) {
 	senders := gen.AllowedSenders{"reporting@entity-a.example.com"}
 	resp, err := s.CreateApiToken(ctx, gen.CreateApiTokenRequestObject{TenantId: "ten_a", Body: &gen.ApiTokenCreate{
 		Name: "Nightly ERP export", AllowedCidrs: []string{"10.10.20.15/32", "2001:db8::/32"}, ExpiresAt: &expires,
-		AllowedSenders: &senders,
+		AllowedSenders: &senders, ExpressAllowed: ptr(true),
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := apitoken.CreateInput{
-		Name: "Nightly ERP export", AllowedCIDRs: []string{"10.10.20.15/32", "2001:db8::/32"}, ExpiresAt: expires,
+		ExpressAllowed: true,
+		Name:           "Nightly ERP export", AllowedCIDRs: []string{"10.10.20.15/32", "2001:db8::/32"}, ExpiresAt: expires,
 		AllowedSenders: []string{"reporting@entity-a.example.com"},
 	}
 	if got := f.args["Create"]; !reflect.DeepEqual(got[2], want) || got[3] != clientIP {
@@ -233,6 +234,9 @@ func TestCreateAPIToken(t *testing.T) {
 	if code != http.StatusCreated || body["token"] != secret || body["id"] != "tok_01" || body["prefix"] != "tt_9fK2" ||
 		body["createdBy"] != "admin.entity-a" || body["expiresAt"] != tok.ExpiresAt.Format(time.RFC3339) {
 		t.Errorf("create = %d %v", code, body)
+	}
+	if _, ok := body["expressAllowed"].(bool); !ok {
+		t.Errorf("expressAllowed = %v", body["expressAllowed"])
 	}
 	if cidrs, ok := body["allowedCidrs"].([]any); !ok || len(cidrs) != 2 || cidrs[1] != "2001:db8::/32" {
 		t.Errorf("allowedCidrs = %v", body["allowedCidrs"])
@@ -277,6 +281,8 @@ func TestUpdateAPIToken(t *testing.T) {
 		{`{"allowedSenders":["ops@entity-a.example.com"]}`, apitoken.UpdateInput{AllowedSenders: []string{"ops@entity-a.example.com"}}},
 		{`{"allowedSenders":[]}`, apitoken.UpdateInput{AllowedSenders: []string{}}},
 		{`{"name":"x","allowedCidrs":["::/0"]}`, apitoken.UpdateInput{Name: ptr("x"), AllowedCIDRs: []string{"::/0"}}},
+		{`{"expressAllowed":true}`, apitoken.UpdateInput{ExpressAllowed: ptr(true)}},
+		{`{"expressAllowed":false}`, apitoken.UpdateInput{ExpressAllowed: ptr(false)}},
 		{`{}`, apitoken.UpdateInput{}},
 	}
 	for _, c := range cases {

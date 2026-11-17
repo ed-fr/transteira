@@ -191,6 +191,9 @@ var validBodies = map[string]string{
 	"deleteTenantTransfer": `{"reason":"isolation check"}`,
 	"searchDataSubject":    `{"email":"` + insiderB + `"}`,
 	"eraseDataSubject":     `{"email":"` + insiderB + `"}`,
+	// A well-formed link (since 2.3): a broken check would answer 404 for
+	// the token rather than for the tenant.
+	"lookupTenantSecret": `{"link":"tts_Xp4kQ7mZr2Lw9TfB3nHc8VyJd5Gs1KqA6eWu0RtNb7M"}`,
 }
 
 // sendAs performs op on the admin host with the session sess, tenantID in

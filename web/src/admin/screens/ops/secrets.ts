@@ -95,7 +95,7 @@ export function deliveryText(secret: Pick<AdminSecret, 'delivery' | 'recipient'>
 
 /** Label of the creator kind (internal, from outside, external, API token); raw when unknown. */
 export function creatorKindLabel(kind: string, t: Translate): string {
-  return ['internal', 'internal_remote', 'external', 'api_token'].includes(kind)
+  return ['internal', 'internal_remote', 'external', 'api_token', 'anonymous'].includes(kind)
     ? t(`adminSecrets.creatorKind.${kind}`)
     : kind;
 }

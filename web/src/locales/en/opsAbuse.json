@@ -45,6 +45,7 @@
     "sender": "Sender",
     "transfer": "Transfer",
     "transferGone": "no longer available",
+    "secret": "Express secret",
     "message": "Message of the report",
     "noMessage": "No message.",
     "closedAt": "Closed on",

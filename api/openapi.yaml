@@ -2522,7 +2522,8 @@ paths:
         these headers (scripts, API clients) are not affected.
 
         **Switches**, checked after the maintenance mode and the setup state (`503`) and
-        before the body:
+        before the body is validated (a body that is not JSON is refused earlier, `400` or
+        `415`):
         - the instance kill switch `TT_EXPRESS_SECRETS_DISABLED=true` refuses every express
           creation, with or without a token: `403 express-secrets-disabled`;
         - otherwise an anonymous call on a tenant whose `expressEnabled` is off (the default)
@@ -2551,7 +2552,12 @@ paths:
         - Anonymous: at most `expressPerHourPerIp` creations (10 by default) per client
           (IPv4 address or IPv6 /64) and per tenant in the sliding last hour; beyond,
           `429 rate-limited` with `Retry-After` (security log `rate_limited`,
-          `scope="express_ip"`).
+          `scope="express_ip"`). A malformed call (`400`) counts against no limit. The
+          counters are kept in memory, one table per tenant; when that table is saturated
+          by clients at their limit, a new client is refused with
+          `429 express-secret-limit-reached` (security log `express_refused`,
+          `reason=limit`, never `express_ip` against that client) and the other tenants are
+          not affected.
         - With a token: at most `expressPerHourPerToken` creations (100 by default) per token
           in the sliding last hour instead of the per-IP limit; beyond, `429 rate-limited` with
           `Retry-After` (`scope="express_token"`). The 2.1 per-creator limits of `createSecret`

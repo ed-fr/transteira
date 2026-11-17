@@ -192,7 +192,7 @@ func TestSecretsCreateAndReveal(t *testing.T) {
 		if err != nil || got.ID != s.ID {
 			t.Fatalf("Get = %+v, %v", got, err)
 		}
-		st, err := f.repo.StatusByToken(ctx, f.a, cs.Token, f.now)
+		st, err := f.repo.StatusByToken(ctx, f.a, cs.Token, ExpressGate{}, f.now)
 		if err != nil || st.State != SecretActive || st.ID != s.ID {
 			t.Fatalf("StatusByToken = %+v, %v", st, err)
 		}
@@ -200,13 +200,13 @@ func TestSecretsCreateAndReveal(t *testing.T) {
 		// Wrong key proof: refused, not counted.
 		wrongKey := p
 		wrongKey.key[0] ^= 1
-		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, wrongKey.key, p.proof, f.now); !errors.Is(err, ErrSecretKeyProof) {
+		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, wrongKey.key, p.proof, f.now); !errors.Is(err, ErrSecretKeyProof) {
 			t.Fatalf("wrong key proof: %v", err)
 		}
 		// Wrong proof: counted.
 		wrong := p
 		wrong.proof[0] ^= 1
-		_, err = f.repo.Reveal(ctx, f.a, cs.Token, p.key, wrong.proof, f.now)
+		_, err = f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, wrong.proof, f.now)
 		var pe *SecretProofError
 		if !errors.As(err, &pe) || pe.Remaining != 4 || !errors.Is(err, ErrSecretProof) || pe.Error() == "" {
 			t.Fatalf("wrong proof: %v", err)
@@ -215,7 +215,7 @@ func TestSecretsCreateAndReveal(t *testing.T) {
 			t.Fatalf("failed proofs = %d, want 1", got.FailedProofs)
 		}
 		// Right proofs.
-		rev, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now.Add(time.Minute))
+		rev, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now.Add(time.Minute))
 		if err != nil {
 			t.Fatalf("Reveal: %v", err)
 		}
@@ -228,9 +228,9 @@ func TestSecretsCreateAndReveal(t *testing.T) {
 			t.Errorf("%d keys left after the reveal", n)
 		}
 		// Second reveal and status: gone (read).
-		_, err = f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now)
+		_, err = f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now)
 		gone(t, err, SecretEndRead)
-		if st, err := f.repo.StatusByToken(ctx, f.a, cs.Token, f.now); err != nil || st.State != SecretRead {
+		if st, err := f.repo.StatusByToken(ctx, f.a, cs.Token, ExpressGate{}, f.now); err != nil || st.State != SecretRead {
 			t.Fatalf("status after reveal = %+v, %v", st, err)
 		}
 		if g := (&SecretGoneError{Reason: SecretEndRead}); g.Error() == "" {
@@ -256,7 +256,7 @@ func TestSecretsLock(t *testing.T) {
 		wrong := p
 		wrong.proof[3] ^= 1
 		for want := 4; want >= 0; want-- {
-			_, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, wrong.proof, f.now)
+			_, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, wrong.proof, f.now)
 			var pe *SecretProofError
 			if !errors.As(err, &pe) || pe.Remaining != want || pe.RemovedFile != "" {
 				t.Fatalf("attempt for %d left: %v", want, err)
@@ -266,7 +266,7 @@ func TestSecretsLock(t *testing.T) {
 		if err != nil || s.State != SecretLocked || s.FailedProofs != 5 || s.EndReason != SecretEndLocked || s.HasPassphrase() {
 			t.Fatalf("locked secret = %+v, %v", s, err)
 		}
-		_, err = f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now)
+		_, err = f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now)
 		gone(t, err, SecretEndLocked)
 		f.assertNoOrphanKeys(t, "lock")
 		if n := rawInt(ctx, t, f.db, `SELECT count(*) FROM wrapped_keys`); n != 0 {
@@ -302,7 +302,7 @@ func TestSecretsConcurrentReveal(t *testing.T) {
 				if i == 25 {
 					proof = p.proof
 				}
-				_, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, proof, f.now)
+				_, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, proof, f.now)
 				switch {
 				case err == nil:
 					successes.Add(1)
@@ -373,7 +373,7 @@ func TestSecretsConcurrentRightReveals(t *testing.T) {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					rev, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now)
+					rev, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now)
 					var g *SecretGoneError
 					switch {
 					case err == nil:
@@ -426,7 +426,7 @@ func TestSecretsSupervisionCounts(t *testing.T) {
 		}
 		p := newProofs()
 		read := f.create(ctx, t, f.a, f.input(p))
-		if _, err := f.repo.Reveal(ctx, f.a, read.Token, p.key, p.proof, f.now); err != nil {
+		if _, err := f.repo.Reveal(ctx, f.a, read.Token, ExpressGate{}, p.key, p.proof, f.now); err != nil {
 			t.Fatal(err)
 		}
 		in := f.input(p)
@@ -435,7 +435,7 @@ func TestSecretsSupervisionCounts(t *testing.T) {
 		wrong := p.proof
 		wrong[0] ^= 1
 		for range SecretMaxFailedProofs {
-			_, _ = f.repo.Reveal(ctx, f.a, locked.Token, p.key, wrong, f.now)
+			_, _ = f.repo.Reveal(ctx, f.a, locked.Token, ExpressGate{}, p.key, wrong, f.now)
 		}
 		f.create(ctx, t, f.a, withFile(f.input(p), 300))
 		old := f.input(p)
@@ -499,18 +499,18 @@ func TestSecretsStatusAndExpiry(t *testing.T) {
 		in.KDFSalt = bytes.Repeat([]byte{1}, SecretKDFSaltLen)
 		cs := f.create(ctx, t, f.a, in)
 		later := f.now.Add(2 * time.Hour)
-		st, err := f.repo.StatusByToken(ctx, f.a, cs.Token, later)
+		st, err := f.repo.StatusByToken(ctx, f.a, cs.Token, ExpressGate{}, later)
 		if err != nil || st.State != SecretExpired || st.EndReason != SecretEndExpired || st.HasPassphrase() || !st.EndedAt.Equal(cs.Secret.ExpiresAt) {
 			t.Fatalf("status past expiry = %+v, %v", st, err)
 		}
-		_, err = f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, later)
+		_, err = f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, later)
 		gone(t, err, SecretEndExpired)
 		// Unknown, malformed and pending tokens.
 		for _, tok := range []string{"tts_x", "tts_" + strings.Repeat("a", 43)} {
-			if _, err := f.repo.StatusByToken(ctx, f.a, tok, f.now); !errors.Is(err, ErrNotFound) {
+			if _, err := f.repo.StatusByToken(ctx, f.a, tok, ExpressGate{}, f.now); !errors.Is(err, ErrNotFound) {
 				t.Errorf("status %q: %v", tok, err)
 			}
-			if _, err := f.repo.Reveal(ctx, f.a, tok, p.key, p.proof, f.now); !errors.Is(err, ErrNotFound) {
+			if _, err := f.repo.Reveal(ctx, f.a, tok, ExpressGate{}, p.key, p.proof, f.now); !errors.Is(err, ErrNotFound) {
 				t.Errorf("reveal %q: %v", tok, err)
 			}
 		}
@@ -521,10 +521,10 @@ func TestSecretsStatusAndExpiry(t *testing.T) {
 		if pending.Secret.State != SecretPending || !pending.Secret.ExpiresAt.IsZero() || pending.Secret.RecipientEmail != "bob@example.org" {
 			t.Fatalf("e-mail secret = %+v", pending.Secret)
 		}
-		if _, err := f.repo.StatusByToken(ctx, f.a, pending.Token, f.now); !errors.Is(err, ErrSecretPending) {
+		if _, err := f.repo.StatusByToken(ctx, f.a, pending.Token, ExpressGate{}, f.now); !errors.Is(err, ErrSecretPending) {
 			t.Errorf("pending status: %v", err)
 		}
-		if _, err := f.repo.Reveal(ctx, f.a, pending.Token, p.key, p.proof, f.now); !errors.Is(err, ErrSecretPending) {
+		if _, err := f.repo.Reveal(ctx, f.a, pending.Token, ExpressGate{}, p.key, p.proof, f.now); !errors.Is(err, ErrSecretPending) {
 			t.Errorf("pending reveal: %v", err)
 		}
 
@@ -544,7 +544,7 @@ func TestSecretsStatusAndExpiry(t *testing.T) {
 			t.Fatalf("second ExpireDue = %+v, %v", out, err)
 		}
 		f.assertNoOrphanKeys(t, "expiry")
-		_, err = f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now)
+		_, err = f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now)
 		gone(t, err, SecretEndExpired)
 	})
 }
@@ -1020,10 +1020,10 @@ func TestSecretsIsolation(t *testing.T) {
 		if _, err := f.repo.Get(ctx, f.b, cs.Secret.ID); !errors.Is(err, ErrNotFound) {
 			t.Errorf("Get from b: %v", err)
 		}
-		if _, err := f.repo.StatusByToken(ctx, f.b, cs.Token, f.now); !errors.Is(err, ErrNotFound) {
+		if _, err := f.repo.StatusByToken(ctx, f.b, cs.Token, ExpressGate{}, f.now); !errors.Is(err, ErrNotFound) {
 			t.Errorf("StatusByToken from b: %v", err)
 		}
-		if _, err := f.repo.Reveal(ctx, f.b, cs.Token, p.key, p.proof, f.now); !errors.Is(err, ErrNotFound) {
+		if _, err := f.repo.Reveal(ctx, f.b, cs.Token, ExpressGate{}, p.key, p.proof, f.now); !errors.Is(err, ErrNotFound) {
 			t.Errorf("Reveal from b: %v", err)
 		}
 		if _, err := f.repo.DeleteByAdmin(ctx, f.b, cs.Secret.ID, f.now); !errors.Is(err, ErrNotFound) {
@@ -1051,7 +1051,7 @@ func TestSecretsIsolation(t *testing.T) {
 			t.Errorf("PurgeTombstones(b) = %d, %v", n, err)
 		}
 		// Tenant a still reads and reveals it.
-		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now); err != nil {
+		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now); err != nil {
 			t.Fatalf("Reveal from a: %v", err)
 		}
 	})
@@ -1173,7 +1173,7 @@ func TestSecretsWithoutKeys(t *testing.T) {
 	var zero [32]byte
 	checks := map[string]error{}
 	_, checks["Create"] = r.Create(ctx, f.a, f.input(newProofs()))
-	_, checks["Reveal"] = r.Reveal(ctx, f.a, "tts_x", zero, zero, f.now)
+	_, checks["Reveal"] = r.Reveal(ctx, f.a, "tts_x", ExpressGate{}, zero, zero, f.now)
 	_, checks["DeleteByAdmin"] = r.DeleteByAdmin(ctx, f.a, id.New(id.Secret), f.now)
 	_, _, checks["PurgePending"] = r.PurgePending(ctx, f.now, 1)
 	_, checks["DeleteTenant"] = r.DeleteTenant(ctx, f.a)
@@ -1207,11 +1207,11 @@ func TestSecretsFaults(t *testing.T) {
 	p := newProofs()
 	cs := f.create(ctx, t, f.a, f.input(p))
 	f.keys.openErr = errKey
-	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now); !errors.Is(err, errKey) {
+	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now); !errors.Is(err, errKey) {
 		t.Errorf("OpenTx failure: %v", err)
 	}
 	f.keys.openErr, f.keys.dstrErr = nil, errKey
-	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now); !errors.Is(err, errKey) {
+	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now); !errors.Is(err, errKey) {
 		t.Errorf("DestroyTx failure at reveal: %v", err)
 	}
 	if _, err := f.repo.DeleteByAdmin(ctx, f.a, cs.Secret.ID, f.now); !errors.Is(err, errKey) {
@@ -1229,16 +1229,16 @@ func TestSecretsFaults(t *testing.T) {
 	wrong := p
 	wrong.proof[0] ^= 1
 	for range SecretMaxFailedProofs - 1 {
-		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, wrong.proof, f.now); !errors.Is(err, ErrSecretProof) {
+		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, wrong.proof, f.now); !errors.Is(err, ErrSecretProof) {
 			t.Fatalf("wrong proof: %v", err)
 		}
 	}
-	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, wrong.proof, f.now); !errors.Is(err, errKey) {
+	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, wrong.proof, f.now); !errors.Is(err, errKey) {
 		t.Errorf("DestroyTx failure at lock: %v", err)
 	}
 	f.keys.dstrErr = nil
 	// The secret is intact: 4 counted failures, still readable.
-	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now); err != nil {
+	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now); err != nil {
 		t.Fatalf("Reveal after the faults: %v", err)
 	}
 	f.assertNoOrphanKeys(t, "vault faults")
@@ -1275,23 +1275,23 @@ func TestSecretsFaults(t *testing.T) {
 			return err
 		}},
 		{faultQuery, "key_verifier FROM secrets", 0, func() error {
-			_, err := f.repo.Reveal(ctx, f.a, live.Token, p2.key, p2.proof, f.now)
+			_, err := f.repo.Reveal(ctx, f.a, live.Token, ExpressGate{}, p2.key, p2.proof, f.now)
 			return err
 		}},
 		{faultExec, "failed_proofs = failed_proofs + 1", 0, func() error {
-			_, err := f.repo.Reveal(ctx, f.a, live.Token, p2.key, p2.proof, f.now)
+			_, err := f.repo.Reveal(ctx, f.a, live.Token, ExpressGate{}, p2.key, p2.proof, f.now)
 			return err
 		}},
 		{faultQuery, "SELECT failed_proofs, verifier", 0, func() error {
-			_, err := f.repo.Reveal(ctx, f.a, live.Token, p2.key, p2.proof, f.now)
+			_, err := f.repo.Reveal(ctx, f.a, live.Token, ExpressGate{}, p2.key, p2.proof, f.now)
 			return err
 		}},
 		{faultExec, "SET state = 'read'", 0, func() error {
-			_, err := f.repo.Reveal(ctx, f.a, live.Token, p2.key, p2.proof, f.now)
+			_, err := f.repo.Reveal(ctx, f.a, live.Token, ExpressGate{}, p2.key, p2.proof, f.now)
 			return err
 		}},
 		{faultQuery, "FROM secrets WHERE tenant_id = ? AND id = ?", 1, func() error {
-			_, err := f.repo.Reveal(ctx, f.a, live.Token, p2.key, p2.proof, f.now)
+			_, err := f.repo.Reveal(ctx, f.a, live.Token, ExpressGate{}, p2.key, p2.proof, f.now)
 			return err
 		}},
 		{faultQuery, "FROM secrets WHERE tenant_id = ? AND id = ?", 0, func() error {
@@ -1307,7 +1307,7 @@ func TestSecretsFaults(t *testing.T) {
 			return err
 		}},
 		{faultQuery, "FROM secrets WHERE tenant_id = ? AND token_hash = ?", 0, func() error {
-			_, err := f.repo.StatusByToken(ctx, f.a, live.Token, f.now)
+			_, err := f.repo.StatusByToken(ctx, f.a, live.Token, ExpressGate{}, f.now)
 			return err
 		}},
 		{faultQuery, "ORDER BY created_at DESC", 0, func() error {
@@ -1362,7 +1362,7 @@ func TestSecretsFaults(t *testing.T) {
 	if _, err := f.repo.Get(ctx, f.a, pending.Secret.ID); err != nil {
 		t.Errorf("pending secret: %v", err)
 	}
-	if _, err := f.repo.Reveal(ctx, f.a, live.Token, p2.key, p2.proof, f.now); err != nil {
+	if _, err := f.repo.Reveal(ctx, f.a, live.Token, ExpressGate{}, p2.key, p2.proof, f.now); err != nil {
 		t.Errorf("reveal after the faults: %v", err)
 	}
 	f.assertNoOrphanKeys(t, "database faults")
@@ -1409,11 +1409,11 @@ func TestSecretsRevealRace(t *testing.T) {
 				t.Error(err)
 			}
 		})
-		_, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now)
+		_, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now)
 		gone(t, err, SecretEndDeletedByAdmin)
 		// Expired between the two steps: the claim's guard refuses it.
 		cs = f.create(ctx, t, f.a, f.input(p))
-		_, err = f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, cs.Secret.ExpiresAt.Add(-time.Millisecond))
+		_, err = f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, cs.Secret.ExpiresAt.Add(-time.Millisecond))
 		if err != nil {
 			t.Fatalf("Reveal before expiry: %v", err)
 		}
@@ -1454,7 +1454,7 @@ func TestSecretsMoreFaults(t *testing.T) {
 	p := newProofs()
 	cs := f.create(ctx, t, f.a, f.input(p))
 	f.keys.wrongKey = true
-	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now); err == nil {
+	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now); err == nil {
 		t.Error("text opened with the wrong key")
 	}
 	f.keys.wrongKey = false
@@ -1463,7 +1463,7 @@ func TestSecretsMoreFaults(t *testing.T) {
 	claimHooks.Store(cs.Secret.ID, func() {
 		plan.add(faultExec, "failed_proofs = failed_proofs + 1", 0)
 	})
-	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now); !errors.Is(err, errInjected) {
+	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now); !errors.Is(err, errInjected) {
 		t.Errorf("claim failure: %v", err)
 	}
 	plan.reset()
@@ -1473,7 +1473,7 @@ func TestSecretsMoreFaults(t *testing.T) {
 		}
 		plan.add(faultQuery, "FROM secrets WHERE tenant_id = ? AND id = ?", 0)
 	})
-	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now); !errors.Is(err, errInjected) {
+	if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now); !errors.Is(err, errInjected) {
 		t.Errorf("read after a failed claim: %v", err)
 	}
 	plan.reset()
@@ -1485,7 +1485,7 @@ func TestSecretsMoreFaults(t *testing.T) {
 	wrong := p
 	wrong.proof[0] ^= 1
 	for range SecretMaxFailedProofs - 1 {
-		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, wrong.proof, f.now); !errors.Is(err, ErrSecretProof) {
+		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, wrong.proof, f.now); !errors.Is(err, ErrSecretProof) {
 			t.Fatal(err)
 		}
 	}
@@ -1497,7 +1497,7 @@ func TestSecretsMoreFaults(t *testing.T) {
 		{faultExec, "SET state = 'locked'", 0},
 	} {
 		plan.add(s.op, s.match, s.after)
-		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, wrong.proof, f.now); !errors.Is(err, errInjected) {
+		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, wrong.proof, f.now); !errors.Is(err, errInjected) {
 			t.Errorf("lock fault %q: %v", s.match, err)
 		}
 		plan.reset()

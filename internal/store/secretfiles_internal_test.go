@@ -298,10 +298,10 @@ func TestSecretsFileDownload(t *testing.T) {
 		// nothing of the file.
 		wrong := p
 		wrong.key[0] ^= 1
-		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, wrong.key, p.proof, at); !errors.Is(err, ErrSecretKeyProof) {
+		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, wrong.key, p.proof, at); !errors.Is(err, ErrSecretKeyProof) {
 			t.Fatalf("wrong key proof: %v", err)
 		}
-		rv, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, at)
+		rv, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, at)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -382,7 +382,7 @@ func TestSecretsFileDownload(t *testing.T) {
 		if _, err := f.repo.UploadFile(ctx, f.a, cs2.Secret.ID, alice, files, bytes.NewReader(stream), f.clock); err != nil {
 			t.Fatal(err)
 		}
-		rv2, err := f.repo.Reveal(ctx, f.a, cs2.Token, p2.key, p2.proof, at)
+		rv2, err := f.repo.Reveal(ctx, f.a, cs2.Token, ExpressGate{}, p2.key, p2.proof, at)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -476,7 +476,7 @@ func TestSecretsMarkReceiptSent(t *testing.T) {
 		if ok, err := f.repo.MarkReceiptSent(ctx, f.a, cs.Secret.ID, f.now); ok || err != nil {
 			t.Fatalf("active secret = %v, %v", ok, err)
 		}
-		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now); err != nil {
+		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, ExpressGate{}, p.key, p.proof, f.now); err != nil {
 			t.Fatal(err)
 		}
 		if ok, err := f.repo.MarkReceiptSent(ctx, f.b, cs.Secret.ID, f.now); ok || err != nil {
@@ -507,7 +507,7 @@ func TestSecretsMarkReceiptSent(t *testing.T) {
 		// Without receipt, or deleted: never marked.
 		p2 := newProofs()
 		plain := f.create(ctx, t, f.a, f.input(p2))
-		if _, err := f.repo.Reveal(ctx, f.a, plain.Token, p2.key, p2.proof, f.now); err != nil {
+		if _, err := f.repo.Reveal(ctx, f.a, plain.Token, ExpressGate{}, p2.key, p2.proof, f.now); err != nil {
 			t.Fatal(err)
 		}
 		del := f.create(ctx, t, f.a, in)
@@ -714,16 +714,16 @@ func TestSecretsFileFaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.repo.newGrant = func() (string, error) { return "", errKey }
-	if _, err := f.repo.Reveal(ctx, f.a, fs.Token, p.key, p.proof, f.now); !errors.Is(err, errKey) {
+	if _, err := f.repo.Reveal(ctx, f.a, fs.Token, ExpressGate{}, p.key, p.proof, f.now); !errors.Is(err, errKey) {
 		t.Errorf("grant failure: %v", err)
 	}
 	f.repo.newGrant = db.Secrets(nil).newGrant
 	plan.add(faultExec, "file_grant_hash = ?, file_grant_expires_at = ?", 0)
-	if _, err := f.repo.Reveal(ctx, f.a, fs.Token, p.key, p.proof, f.now); !errors.Is(err, errInjected) {
+	if _, err := f.repo.Reveal(ctx, f.a, fs.Token, ExpressGate{}, p.key, p.proof, f.now); !errors.Is(err, errInjected) {
 		t.Errorf("grant update fault: %v", err)
 	}
 	plan.reset()
-	rv, err := f.repo.Reveal(ctx, f.a, fs.Token, p.key, p.proof, f.now)
+	rv, err := f.repo.Reveal(ctx, f.a, fs.Token, ExpressGate{}, p.key, p.proof, f.now)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -107,9 +107,21 @@ type InvalidError struct {
 	Code string
 }
 
+// Fields of the limits of the express secrets (since 2.3, OpenAPI
+// SecretSettings).
+const (
+	FieldExpressPerHourPerIP    = "/expressPerHourPerIp"
+	FieldExpressPerHourPerToken = "/expressPerHourPerToken"
+	FieldExpressMaxPending      = "/expressMaxPending"
+)
+
 // CodeAdminHost is the [InvalidError.Code] of an entity FQDN equal to one of
 // the admin hosts: a well-formed host name that is reserved.
 const CodeAdminHost = "reserved-host"
+
+// CodeOutOfRange is the [InvalidError.Code] of a number outside its bounds:
+// a limit of the express secrets (since 2.3).
+const CodeOutOfRange = "out-of-range"
 
 // Error implements error.
 func (e *InvalidError) Error() string {

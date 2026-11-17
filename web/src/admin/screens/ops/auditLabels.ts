@@ -100,6 +100,8 @@ export const AUDIT_ACTION_GROUPS = [
       'secret.deleted',
       'secret.locked',
       'secret.settings_updated',
+      'secret.looked_up',
+      'secret.express_purged',
     ],
   },
   {

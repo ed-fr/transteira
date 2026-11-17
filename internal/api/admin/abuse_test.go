@@ -367,6 +367,20 @@ func TestAbuseReportHandlers(t *testing.T) {
 	}
 }
 
+// TestAbuseReportBodySecret checks that a report on an express secret names
+// the secret and has neither transfer nor sender.
+func TestAbuseReportBodySecret(t *testing.T) {
+	t.Parallel()
+	body := abuseReportBody(store.AbuseReport{ID: "abr_03", SecretID: "sec_01JABCU7W8X9Y0Z1A2B3C4D5E6", Status: store.AbuseReportOpen})
+	if body.SecretId == nil || *body.SecretId != "sec_01JABCU7W8X9Y0Z1A2B3C4D5E6" || body.TransferId != nil || body.SenderEmail != nil {
+		t.Errorf("secret report body %+v", body)
+	}
+	tr := abuseReportBody(store.AbuseReport{ID: "abr_04", TransferID: "trf_1", SenderEmail: "a@example.com"})
+	if tr.SecretId != nil || tr.TransferId == nil || tr.SenderEmail == nil {
+		t.Errorf("transfer report body %+v", tr)
+	}
+}
+
 // TestAbuseThresholdsThroughTheChain runs the update through the generated
 // strict handler with CaptureRawBody installed, as the admin router
 // does: an absent member is refused, a complete body passes.

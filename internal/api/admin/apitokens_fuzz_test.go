@@ -14,7 +14,7 @@ import (
 func FuzzDecodeAPITokenUpdate(f *testing.F) {
 	for _, s := range []string{
 		`{}`, `{"name":"x"}`, `{"allowedCidrs":["10.0.0.0/8"],"allowedSenders":[]}`, `{"name":null}`,
-		`{"allowedSenders":["a@b.example","b.example"]}`, `{"unknown":1}`, `[1]`, `null`, `{`, `{"name":5}`,
+		`{"allowedSenders":["a@b.example","b.example"]}`, `{"unknown":1}`, `[1]`, `null`, `{`, `{"name":5}`, `{"expressAllowed":true}`, `{"expressAllowed":"yes"}`, `{"expressAllowed":null}`,
 		`{"a/b~c":1}`, `{"allowedSenders":null,"allowedCidrs":null,"name":null}`,
 	} {
 		f.Add([]byte(s))
@@ -34,7 +34,7 @@ func FuzzDecodeAPITokenUpdate(f *testing.F) {
 		}
 		for name := range members {
 			switch name {
-			case "name", "allowedCidrs", "allowedSenders":
+			case "name", "allowedCidrs", "allowedSenders", "expressAllowed":
 			default:
 				t.Fatalf("decodeAPITokenUpdate(%q) accepted the unknown member %q", raw, name)
 			}
@@ -44,6 +44,9 @@ func FuzzDecodeAPITokenUpdate(f *testing.F) {
 		}
 		if _, ok := members["allowedCidrs"]; ok != (in.AllowedCIDRs != nil) {
 			t.Fatalf("decodeAPITokenUpdate(%q): allowedCidrs presence %v, decoded %#v", raw, ok, in.AllowedCIDRs)
+		}
+		if _, ok := members["expressAllowed"]; ok != (in.ExpressAllowed != nil) {
+			t.Fatalf("decodeAPITokenUpdate(%q): expressAllowed presence %v, decoded %v", raw, ok, in.ExpressAllowed)
 		}
 		if _, ok := members["allowedSenders"]; ok != (in.AllowedSenders != nil) {
 			t.Fatalf("decodeAPITokenUpdate(%q): allowedSenders presence %v, decoded %#v", raw, ok, in.AllowedSenders)

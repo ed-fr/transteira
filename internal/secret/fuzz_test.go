@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tte2"
 )
@@ -92,6 +93,79 @@ func FuzzRevealProofs(f *testing.F) {
 		}
 		if len(v.errs) > 1 {
 			t.Fatalf("errors %v", v.errs)
+		}
+	})
+}
+
+// FuzzCreateExpress checks the invariants of the validation of an express
+// creation (threat model T-398): no panic, every refusal is a
+// *ValidationError or a *FormatError with at least one field, and an
+// accepted request holds only what the express profile accepts (a framed,
+// non-empty sealed text within bounds, 32-byte verifiers, 1h, 1d or 7d,
+// no extra member).
+func FuzzCreateExpress(f *testing.F) {
+	text := "AQvm_LNcuMssDUaZI6WQ3iGRK4gIg8iiNhOpsnYu-dMoF2eTMvmbWpRI1yivl-6L03VwgcaRxEruSIQs7Q"
+	verifier := strings.Repeat("ab", 32)
+	f.Add(text, verifier, verifier, "1d", "")
+	f.Add(text, verifier, verifier, "12h", "/passphrase")
+	f.Add("AQ", "AB", "", "7d", "/file")
+	f.Add(strings.Repeat("A", 39), verifier, strings.ToUpper(verifier), "1h", "")
+	f.Fuzz(func(t *testing.T, text, verifier, keyVerifier, expiresIn, extra string) {
+		req := ExpressCreateRequest{EncryptedText: text, Verifier: verifier, KeyVerifier: keyVerifier, ExpiresIn: expiresIn}
+		if extra != "" {
+			req.Extra = []string{extra}
+		}
+		p, err := validateExpress(req)
+		if err == nil {
+			err = checkFraming(CreateRequest{EncryptedText: text})
+		}
+		if err != nil {
+			var (
+				v  *ValidationError
+				fe *FormatError
+			)
+			switch {
+			case errors.As(err, &v) && len(v.Fields) > 0:
+			case errors.As(err, &fe) && len(fe.Fields) > 0:
+			default:
+				t.Fatalf("refusal %v carries no field", err)
+			}
+			return
+		}
+		if len(text) < store.MinSecretSealedTextLen || len(text) > store.MaxSecretSealedTextLen ||
+			tte2.CheckSecretFraming(text) != nil || tte2.SecretTextIsEmpty(text) {
+			t.Fatalf("accepted sealed text %q", text)
+		}
+		if len(p.verifier) != 32 || len(p.keyVerifier) != 32 || !p.duration.ExpressDuration() || extra != "" {
+			t.Fatalf("accepted plan %+v (extra %q)", p, extra)
+		}
+	})
+}
+
+// FuzzLookupLink checks the extraction of the token of a pasted link: no
+// panic, an accepted token is a well-formed token found in the link before
+// its fragment, and a refusal is a single field error on FieldLink that
+// never quotes the link.
+func FuzzLookupLink(f *testing.F) {
+	f.Add("https://transfer.entity-a.example.com/s/tts_Xp4kQ7mZr2Lw9TfB3nHc8VyJd5Gs1KqA6eWu0RtNb7M#k=AAAA")
+	f.Add("tts_Xp4kQ7mZr2Lw9TfB3nHc8VyJd5Gs1KqA6eWu0RtNb7M")
+	f.Add("#tts_Xp4kQ7mZr2Lw9TfB3nHc8VyJd5Gs1KqA6eWu0RtNb7M")
+	f.Add("://a/b/s/s/")
+	f.Fuzz(func(t *testing.T, link string) {
+		token, err := tokenOfLink(link)
+		if err != nil {
+			var v *ValidationError
+			if !errors.As(err, &v) || len(v.Fields) != 1 || v.Fields[0].Pointer != FieldLink {
+				t.Fatalf("refusal %v", err)
+			}
+			if err.Error() != (&ValidationError{}).Error() {
+				t.Fatalf("the error text %q is not fixed", err)
+			}
+			return
+		}
+		before, _, _ := strings.Cut(link, "#")
+		if !id.SecretTokenValid(token) || !strings.Contains(before, token) || len(link) > MaxLookupLinkLen {
+			t.Fatalf("accepted %q from %q", token, link)
 		}
 	})
 }

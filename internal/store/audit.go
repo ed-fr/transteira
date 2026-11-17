@@ -40,12 +40,16 @@ const (
 	// ActorProvisioningToken is a provisioning token (since 1.2; Actor: its
 	// record ID "prv_...").
 	ActorProvisioningToken AuditActorKind = "provisioning_token"
+	// ActorAnonymous is a caller without any credential (since 2.3: the
+	// creator of an anonymous express secret; Actor: "-", the client IP
+	// being the only trace).
+	ActorAnonymous AuditActorKind = "anonymous"
 )
 
 // valid reports whether k is a known actor kind.
 func (k AuditActorKind) valid() bool {
 	switch k {
-	case ActorAdmin, ActorDepositor, ActorRecipient, ActorAPIToken, ActorSystem, ActorProvisioningToken:
+	case ActorAdmin, ActorDepositor, ActorRecipient, ActorAPIToken, ActorSystem, ActorProvisioningToken, ActorAnonymous:
 		return true
 	}
 	return false

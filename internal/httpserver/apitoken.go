@@ -214,7 +214,9 @@ func (a *tokenAuth) middleware(next http.Handler) http.Handler {
 			writeProblem(w, r, problem.New(problem.CodeInternalError))
 			return
 		}
-		r = r.WithContext(middleware.WithAPIToken(ctx, middleware.TokenPrincipal{TokenID: p.TokenID, Name: p.Name}))
+		r = r.WithContext(middleware.WithAPIToken(ctx, middleware.TokenPrincipal{
+			TokenID: p.TokenID, Name: p.Name, ExpressAllowed: p.ExpressAllowed,
+		}))
 		r.Header = r.Header.Clone()
 		r.Header.Del("Cookie")
 		next.ServeHTTP(w, r)

@@ -48,6 +48,9 @@ type CreateInput struct {
 	AllowedSenders []string
 	// ExpiresAt is the optional expiry, zero for none.
 	ExpiresAt time.Time
+	// ExpressAllowed lets the token create express secrets (since 2.3,
+	// off by default).
+	ExpressAllowed bool
 }
 
 // UpdateInput is a change of a token (OpenAPI ApiTokenUpdate, merge
@@ -60,6 +63,8 @@ type UpdateInput struct {
 	// AllowedSenders replace the allowed senders, nil to keep them; an
 	// empty non-nil slice allows any internal address again.
 	AllowedSenders []string
+	// ExpressAllowed replaces the express secret opt-in, nil to keep it.
+	ExpressAllowed *bool
 }
 
 // Created is a token just created, with its secret.
@@ -210,6 +215,7 @@ func (s *Service) Create(ctx context.Context, p adminauth.Principal, tid tenant.
 	tok, err := s.repo.create(ctx, tid, store.APIToken{
 		ID: id.New(id.APIToken), Name: name, Prefix: gen.Prefix, TokenHash: gen.Hash, AllowedCIDRs: cidrs,
 		AllowedSenders: senders, CreatedBy: p.Admin.Username, CreatedAt: now, ExpiresAt: in.ExpiresAt,
+		ExpressAllowed: in.ExpressAllowed,
 	})
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -222,6 +228,9 @@ func (s *Service) Create(ctx context.Context, p adminauth.Principal, tid tenant.
 	details["senderCount"] = len(tok.AllowedSenders)
 	if !tok.ExpiresAt.IsZero() {
 		details["expiresAt"] = tok.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	if tok.ExpressAllowed {
+		details["expressAllowed"] = true
 	}
 	s.record(ctx, p, ip, tid, audit.ActionAPITokenCreated, tok.ID, details)
 	return Created{Token: tok, Secret: gen.Secret}, nil
@@ -271,6 +280,11 @@ func (s *Service) Update(ctx context.Context, p adminauth.Principal, tid tenant.
 		u.AllowedSenders = senders
 		fields = append(fields, "allowedSenders")
 		details["senderCount"] = len(senders)
+	}
+	if in.ExpressAllowed != nil {
+		u.ExpressAllowed = in.ExpressAllowed
+		fields = append(fields, "expressAllowed")
+		details["expressAllowed"] = *in.ExpressAllowed
 	}
 	tok, err := s.repo.update(ctx, tid, tokID, u)
 	switch {

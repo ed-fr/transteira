@@ -253,19 +253,27 @@ func (t *Templates) Render(name, lang string, data any) (Message, error) {
 // override of the tenant instead of the default template when it is not
 // nil. override must be the customization of the language actually used
 // (lang when the default template exists in lang). An invalid override is
-// an error wrapping [ErrInvalidTemplate].
+// an error wrapping [ErrInvalidTemplate]. A valid override that cannot
+// render data because it shows none of the variables the key requires for
+// it in one of its bodies (an abuse report on an express secret with a
+// customization older than 2.3) is set aside for the default template.
 func (t *Templates) RenderOverride(name, lang string, data any, override *TemplateSource) (Message, error) {
 	name, set, lang, err := t.set(name, lang)
 	if err != nil {
 		return Message{}, err
 	}
+	def := keyDefs[name]
 	c := set.c
 	if override != nil {
 		if c, err = compileTemplate(name, *override); err != nil {
 			return Message{}, err
 		}
+		if def.requiredFor != nil {
+			if names := def.requiredFor(data); len(names) > 0 && !c.showsAny(names) {
+				c = set.c
+			}
+		}
 	}
-	def := keyDefs[name]
 	vals, ok := def.values(labelsFor(lang), lang, data)
 	if !ok {
 		return Message{}, fmt.Errorf("mail: render %s: unexpected data type %T", name, data)
@@ -391,6 +399,17 @@ func (c *compiled) render(lang string, vals map[string]value, forced []string) M
 		HTML:     page,
 		Language: lang,
 	}
+}
+
+// showsAny reports whether the text body and the HTML body of c each
+// hold a placeholder for at least one of names.
+func (c *compiled) showsAny(names []string) bool {
+	text, html := false, false
+	for _, name := range names {
+		text = text || hasPiece(c.text, name)
+		html = html || hasSegment(c.html, name)
+	}
+	return text && html
 }
 
 // hasPiece reports whether pieces holds a placeholder for name.

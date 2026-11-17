@@ -78,6 +78,7 @@ func TestLoadDefaults(t *testing.T) {
 		{"LogLevel", c.LogLevel, slog.LevelInfo},
 		{"Maintenance", c.Maintenance, false},
 		{"APIDocsPublic", c.APIDocsPublic, false},
+		{"ExpressSecretsDisabled", c.ExpressSecretsDisabled, false},
 		{"UpdateCheck", c.UpdateCheck, true},
 		{"SetupToken", c.SetupToken.IsSet(), false},
 		{"UploadTTL", c.UploadTTL, 24 * time.Hour},
@@ -270,12 +271,12 @@ func TestLoadValid(t *testing.T) {
 		{
 			name: "operations",
 			vars: map[string]string{
-				EnvLogLevel: "DEBUG", EnvMaintenance: "TRUE", EnvAPIDocsPublic: "1", EnvUpdateCheck: "1",
+				EnvLogLevel: "DEBUG", EnvMaintenance: "TRUE", EnvAPIDocsPublic: "1", EnvUpdateCheck: "1", EnvExpressSecretsDisabled: "true",
 				EnvSetupToken: "  " + fakeToken + "  ",
 			},
 			check: func(t *testing.T, c *Config) {
 				t.Helper()
-				if c.LogLevel != slog.LevelDebug || !c.Maintenance || !c.APIDocsPublic || !c.UpdateCheck {
+				if c.LogLevel != slog.LevelDebug || !c.Maintenance || !c.APIDocsPublic || !c.UpdateCheck || !c.ExpressSecretsDisabled {
 					t.Errorf("got level %v maintenance %v docs %v", c.LogLevel, c.Maintenance, c.APIDocsPublic)
 				}
 				if c.SetupToken.Reveal() != fakeToken {
@@ -285,10 +286,10 @@ func TestLoadValid(t *testing.T) {
 		},
 		{
 			name: "explicit false flags and other levels",
-			vars: map[string]string{EnvLogLevel: "error", EnvMaintenance: "0", EnvAPIDocsPublic: "False", EnvUpdateCheck: "false"},
+			vars: map[string]string{EnvLogLevel: "error", EnvMaintenance: "0", EnvAPIDocsPublic: "False", EnvUpdateCheck: "false", EnvExpressSecretsDisabled: "0"},
 			check: func(t *testing.T, c *Config) {
 				t.Helper()
-				if c.LogLevel != slog.LevelError || c.Maintenance || c.APIDocsPublic || c.UpdateCheck {
+				if c.LogLevel != slog.LevelError || c.Maintenance || c.APIDocsPublic || c.UpdateCheck || c.ExpressSecretsDisabled {
 					t.Errorf("unexpected %+v", c)
 				}
 			},
@@ -585,6 +586,7 @@ func TestLoadInvalid(t *testing.T) {
 		{"log level", map[string]string{EnvLogLevel: "verbose"}, []string{EnvLogLevel}},
 		{"maintenance", map[string]string{EnvMaintenance: "yes"}, []string{EnvMaintenance}},
 		{"api docs", map[string]string{EnvAPIDocsPublic: "on"}, []string{EnvAPIDocsPublic}},
+		{"express kill switch", map[string]string{EnvExpressSecretsDisabled: "on"}, []string{EnvExpressSecretsDisabled}},
 		{"update check", map[string]string{EnvUpdateCheck: "yes"}, []string{EnvUpdateCheck}},
 		{"setup token short", map[string]string{EnvSetupToken: "short"}, []string{EnvSetupToken}},
 		{"setup token long", map[string]string{EnvSetupToken: strings.Repeat("a", 129)}, []string{EnvSetupToken}},

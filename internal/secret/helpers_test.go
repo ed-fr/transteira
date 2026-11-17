@@ -130,6 +130,50 @@ type fakeRepo struct {
 	marked      bool
 	markErr     error
 	marks       int
+
+	gotGate      store.ExpressGate
+	expressErr   error
+	gotExpress   store.CreateExpressSecret
+	expressCalls int
+	lookup       store.Secret
+	lookupErr    error
+	gotLookup    string
+	purged       int
+	purgeErr     error
+	purges       int
+}
+
+func (r *fakeRepo) CreateExpress(_ context.Context, _ tenant.ID, c store.CreateExpressSecret) (store.CreatedSecret, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.expressCalls++
+	r.gotExpress = c
+	if r.expressErr != nil {
+		return store.CreatedSecret{}, r.expressErr
+	}
+	kind := store.SecretCreatorAnonymous
+	if c.APITokenID != "" {
+		kind = store.SecretCreatorAPIToken
+	}
+	return store.CreatedSecret{Token: "tts_express", Secret: store.Secret{
+		ID: id.New(id.Secret), State: store.SecretActive, CreatorKind: kind, Delivery: store.SecretDeliveryLink,
+		Duration: c.Duration, CreatedAt: c.Now, ActivatedAt: c.Now, ExpiresAt: c.Now.Add(c.Duration.Duration()),
+		APITokenID: c.APITokenID, Express: true,
+	}}, nil
+}
+
+func (r *fakeRepo) LookupByToken(_ context.Context, _ tenant.ID, token string) (store.Secret, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.gotLookup = token
+	return r.lookup, r.lookupErr
+}
+
+func (r *fakeRepo) PurgeAnonymousExpress(context.Context, tenant.ID, time.Time) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.purges++
+	return r.purged, r.purgeErr
 }
 
 func (r *fakeRepo) Get(_ context.Context, _ tenant.ID, secID string) (store.Secret, error) {
@@ -283,12 +327,13 @@ func (r *fakeRepo) Create(_ context.Context, _ tenant.ID, c store.CreateSecret) 
 	return out, nil
 }
 
-func (r *fakeRepo) StatusByToken(_ context.Context, _ tenant.ID, _ string, _ time.Time) (store.Secret, error) {
+func (r *fakeRepo) StatusByToken(_ context.Context, _ tenant.ID, _ string, gate store.ExpressGate, _ time.Time) (store.Secret, error) {
+	r.gotGate = gate
 	return r.status, r.statusErr
 }
 
-func (r *fakeRepo) Reveal(_ context.Context, _ tenant.ID, _ string, keyProof, proof [32]byte, _ time.Time) (store.RevealedSecret, error) {
-	r.gotKey, r.gotProof = keyProof, proof
+func (r *fakeRepo) Reveal(_ context.Context, _ tenant.ID, _ string, gate store.ExpressGate, keyProof, proof [32]byte, _ time.Time) (store.RevealedSecret, error) {
+	r.gotKey, r.gotProof, r.gotGate = keyProof, proof, gate
 	return r.revealed, r.revealErr
 }
 
@@ -402,6 +447,55 @@ func (l *fakeLimiter) Allow(string) (bool, time.Duration) {
 	return true, 0
 }
 
+// fakeExpressLimiter allows while neither refuse nor saturated and
+// records the keys ("tenant client") and limits.
+type fakeExpressLimiter struct {
+	refuse    bool
+	saturated bool
+	keys      []string
+	limits    []int
+}
+
+func (l *fakeExpressLimiter) Allow(tid, client string, limit int) (bool, time.Duration, bool) {
+	l.keys, l.limits = append(l.keys, tid+" "+client), append(l.limits, limit)
+	switch {
+	case l.saturated:
+		return false, 9 * time.Second, true
+	case l.refuse:
+		return false, 7 * time.Second, false
+	}
+	return true, 0, false
+}
+
+// fakeReports records the reports, answering err when set.
+type fakeReports struct {
+	err       error
+	got       []store.AbuseReport
+	gotLimits store.AbuseReportLimits
+	gotNow    time.Time
+}
+
+func (f *fakeReports) Create(_ context.Context, _ tenant.ID, rep store.AbuseReport, limits store.AbuseReportLimits, now time.Time) (store.AbuseReport, error) {
+	f.got, f.gotLimits, f.gotNow = append(f.got, rep), limits, now
+	if f.err != nil {
+		return store.AbuseReport{}, f.err
+	}
+	rep.ID, rep.Status, rep.CreatedAt = id.New(id.AbuseReport), store.AbuseReportOpen, now
+	return rep, nil
+}
+
+// fakeAlerts records the alerted reports.
+type fakeAlerts struct {
+	mu      sync.Mutex
+	reports []store.AbuseReport
+}
+
+func (a *fakeAlerts) SecretAbuseReported(_ context.Context, _ *tenant.Tenant, r store.AbuseReport) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.reports = append(a.reports, r)
+}
+
 // fakeFailures counts the failures and reports locked while lock.
 type fakeFailures struct {
 	lock  bool
@@ -437,20 +531,25 @@ func (f *fakeStreams) AcquireStream(_ context.Context, _ *tenant.Tenant, objectI
 
 // env is a service over fakes.
 type env struct {
-	svc      *Service
-	repo     *fakeRepo
-	creators *fakeCreators
-	scrubber *fakeScrubber
-	files    *fakeFiles
-	seclog   *fakeSeclog
-	audit    *fakeAudit
-	requests *fakeLimiter
-	failures *fakeFailures
-	dir      *fakeDirectory
-	notifier *fakeNotifier
-	mailer   *fakeMailer
-	abuse    *fakeAbuse
-	streams  *fakeStreams
+	svc       *Service
+	repo      *fakeRepo
+	creators  *fakeCreators
+	scrubber  *fakeScrubber
+	files     *fakeFiles
+	seclog    *fakeSeclog
+	audit     *fakeAudit
+	requests  *fakeLimiter
+	failures  *fakeFailures
+	dir       *fakeDirectory
+	notifier  *fakeNotifier
+	mailer    *fakeMailer
+	abuse     *fakeAbuse
+	streams   *fakeStreams
+	perIP     *fakeExpressLimiter
+	reportsIP *fakeExpressLimiter
+	throttle  *fakeLimiter
+	reports   *fakeReports
+	alerts    *fakeAlerts
 }
 
 func newEnv(t *testing.T) *env {
@@ -459,12 +558,18 @@ func newEnv(t *testing.T) *env {
 		repo: &fakeRepo{}, creators: &fakeCreators{}, scrubber: &fakeScrubber{}, files: &fakeFiles{},
 		seclog: &fakeSeclog{}, audit: &fakeAudit{}, requests: &fakeLimiter{}, failures: &fakeFailures{},
 		dir: &fakeDirectory{tenant: testTenant}, notifier: &fakeNotifier{}, mailer: &fakeMailer{}, abuse: &fakeAbuse{},
-		streams: &fakeStreams{},
+		streams: &fakeStreams{}, perIP: &fakeExpressLimiter{}, reportsIP: &fakeExpressLimiter{}, throttle: &fakeLimiter{},
+		reports: &fakeReports{}, alerts: &fakeAlerts{},
 	}
 	svc, err := New(Deps{
 		Secrets: e.repo, Creators: e.creators, Scrubber: e.scrubber, Files: e.files, SecurityLog: e.seclog,
 		Directory: e.dir, Notifier: e.notifier, Mailer: e.mailer,
-	}, Options{Audit: e.audit, Abuse: e.abuse, Streams: e.streams, Requests: e.requests, Failures: e.failures, Now: func() time.Time { return testNow }})
+	}, Options{
+		Audit: e.audit, Abuse: e.abuse, Streams: e.streams, Requests: e.requests, Failures: e.failures,
+		ExpressPerIP: e.perIP, ReportsPerIP: e.reportsIP, EventThrottle: e.throttle, AbuseReports: e.reports,
+		AbuseNotifier: e.alerts,
+		Now:           func() time.Time { return testNow },
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

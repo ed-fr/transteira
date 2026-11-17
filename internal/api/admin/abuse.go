@@ -321,7 +321,7 @@ func (s *Server) UpdateAbuseReport(ctx context.Context, req gen.UpdateAbuseRepor
 func abuseReportBody(r store.AbuseReport) gen.AbuseReport {
 	msg := r.Message
 	out := gen.AbuseReport{
-		Id: r.ID, TransferId: r.TransferID, SenderEmail: r.SenderEmail, ReporterVerified: r.ReporterVerified,
+		Id: r.ID, TransferId: optional(r.TransferID), SenderEmail: optional(r.SenderEmail), SecretId: optional(r.SecretID), ReporterVerified: r.ReporterVerified,
 		Category: gen.AbuseReportCategory(r.Category), Message: &msg, Status: gen.AbuseReportStatus(r.Status),
 		ReportedAt: r.CreatedAt, ReportedBy: optional(r.ReporterEmail), Note: optional(r.Note),
 		ClosedBy: optional(r.ClosedBy), ClosedAt: optionalTime(r.ClosedAt),

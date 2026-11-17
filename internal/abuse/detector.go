@@ -213,11 +213,24 @@ func (d *Detector) InvitationLimitReached(ctx context.Context, t *tenant.Tenant,
 // (the reports are rate limited when filed). The caller records the audit
 // event. It is best effort.
 func (d *Detector) Reported(ctx context.Context, t *tenant.Tenant, r store.AbuseReport) {
+	d.reported(ctx, t, r)
+}
+
+// SecretAbuseReported alerts the administrators of tenant t of the new abuse
+// report r on an express secret (r.SecretID; no transfer, no sender): event
+// abuse.reported (whose admin link leads to the report) and mail abuse_report naming the sec_ id. Never the
+// token, link or content of the secret. It is best effort.
+func (d *Detector) SecretAbuseReported(ctx context.Context, t *tenant.Tenant, r store.AbuseReport) {
+	d.reported(ctx, t, r)
+}
+
+// reported implements Reported and SecretAbuseReported.
+func (d *Detector) reported(ctx context.Context, t *tenant.Tenant, r store.AbuseReport) {
 	ctx = context.WithoutCancel(ctx)
 	path := events.AdminPathTenantAbuseReports(string(t.ID))
 	addrs := &events.Addresses{Sender: r.SenderEmail}
 	data := mail.AbuseReportData{
-		TenantName: t.Name, TransferID: r.TransferID, SenderEmail: r.SenderEmail, Category: string(r.Category),
+		TenantName: t.Name, TransferID: r.TransferID, SenderEmail: r.SenderEmail, SecretID: r.SecretID, Category: string(r.Category),
 		Message: r.Message, AdminLink: d.adminBase + path,
 	}
 	if r.ReporterVerified {

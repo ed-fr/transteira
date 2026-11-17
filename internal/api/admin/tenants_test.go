@@ -33,6 +33,8 @@ type fakeTenantService struct {
 	body []byte
 	// invited is the delegated admin answered by CreateTenant.
 	invited *tenantadmin.InvitedAdmin
+	// secretSettings, when set, is the answer of GetSecretSettings.
+	secretSettings *tenantadmin.SecretSettingsInput
 }
 
 func (f *fakeTenantService) record(name string, args ...any) error {
@@ -171,6 +173,9 @@ func (f *fakeTenantService) UpdateRecipientRules(_ context.Context, p adminauth.
 }
 
 func (f *fakeTenantService) GetSecretSettings(_ context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.SecretSettingsInput, error) {
+	if f.secretSettings != nil {
+		return *f.secretSettings, f.record("GetSecretSettings", p.SessionID, tid)
+	}
 	return tenantadmin.SecretSettingsOf(tenant.DefaultSecretSettings()), f.record("GetSecretSettings", p.SessionID, tid)
 }
 

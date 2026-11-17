@@ -295,7 +295,7 @@ func (ev *env) revealedFileSecret(tn *tenant.Tenant) (store.CreatedSecret, store
 	if _, err := repo.UploadFile(ctx, tn.ID, cs.Secret.ID, actor, ev.files, &buf, nil); err != nil {
 		ev.t.Fatal(err)
 	}
-	rv, err := repo.Reveal(ctx, tn.ID, cs.Token, kp, p, ev.clock.Now())
+	rv, err := repo.Reveal(ctx, tn.ID, cs.Token, store.ExpressGate{}, kp, p, ev.clock.Now())
 	if err != nil {
 		ev.t.Fatal(err)
 	}

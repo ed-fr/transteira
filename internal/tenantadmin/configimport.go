@@ -300,8 +300,19 @@ func (s *Service) planImport(ctx context.Context, p adminauth.Principal, in Impo
 		if err != nil {
 			return nil, atPointer(ptrSecrets, err)
 		}
+		// The limits of the express secrets (since 2.3) given are checked,
+		// the others take their default; the anonymous mode is never
+		// imported (threat model P92): store.Tenants.Create stores it off
+		// whatever it is given, and it is not given.
+		express, err := expressSettings(tenant.DefaultExpressSettings(), SecretSettingsInput{
+			ExpressPerHourPerIP: ss.ExpressPerHourPerIP, ExpressPerHourPerToken: ss.ExpressPerHourPerToken,
+			ExpressMaxPending: ss.ExpressMaxPending,
+		})
+		if err != nil {
+			return nil, atPointer(ptrSecrets, err)
+		}
 		// Stored with the tenant row (store.Tenants.Create).
-		nt.Secrets = st
+		nt.Secrets, nt.Express = st, express
 		plan.secrets = true
 	}
 	if err := s.planBranding(ctx, c.Branding, plan); err != nil {

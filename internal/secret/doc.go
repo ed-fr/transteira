@@ -3,7 +3,8 @@
 // docs/architecture/e2e-format.md sections 3.3 and 4.1, threat model
 // sections 6.56 to 6.63): the creation by a depositor or an API token, the
 // status and the one-time reveal of a link, and the "my transfers" list and
-// deletion of the creator, the optional file and its one-time download.
+// deletion of the creator, the optional file and its one-time download;
+// and the express secrets of V2.3 (CLAUDE.md section 22.2, see below).
 //
 // The server never holds a key of a secret: the text is sealed in the
 // browser of the creator, and the service checks only what it can without a
@@ -71,8 +72,31 @@
 // wrong proofs) within LinkFailureWindow lock the client out for
 // LinkLockout; both are answered 429 and written as rate_limited.
 //
+// Express secrets (since 2.3, CLAUDE.md section 22.2, data model
+// docs/architecture/data-model-v2.3.md, format e2e-format.md section
+// 3.3.9, threat model section 6.65). [Service.CreateExpress] creates a
+// one-time text secret without any authentication (or with an API token
+// allowed for them): a restricted profile of the link secret, without
+// passphrase, file, read receipt nor creator address, active at once, for
+// 1 hour, 1 day or 7 days. The instance kill switch
+// (Options.ExpressKillSwitch) closes the service to everyone; the
+// anonymous mode of the tenant (tenant.ExpressSettings.Enabled, off by
+// default) governs the anonymous creations only. The anonymous creations
+// are limited per tenant and client in memory, those of a token per token
+// in the store, and the live express secrets of a tenant are capped for
+// the anonymous creations; the refusals are written as express_refused and
+// rate_limited (scopes express_ip and express_token), throttled. A closed
+// service also closes the reading ([Service.Status] and [Service.Reveal]
+// answer ErrExpressDisabled, consuming nothing, see [Service.gate]). The
+// reader may report an express secret ([Service.ReportAbuse], also after
+// reading and while the service is closed), stored with the transfer
+// reports and alerted through Options.AbuseNotifier; the administrators
+// find a secret from a pasted link ([Service.Lookup]) and end every live
+// anonymous express secret at once ([Service.PurgeExpress]).
+//
 // Nothing secret is ever written to the audit log, the security log or the
 // application log: neither the token, the key, the proofs, the verifiers nor
-// the content (threat model T-375); the audit events carry the "sec_"
-// identifier only (and, for secret.sent, the domain of the recipient).
+// the content (threat model T-375, T-402), nor a link pasted in a lookup;
+// the audit events carry the "sec_" identifier only (and, for secret.sent,
+// the domain of the recipient).
 package secret

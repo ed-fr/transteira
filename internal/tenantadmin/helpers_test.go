@@ -373,11 +373,11 @@ func (f *faultRepo) updateTenantParts(ctx context.Context, t *tenant.Tenant, par
 	return f.repo.updateTenantParts(ctx, t, parts)
 }
 
-func (f *faultRepo) setSecretSettings(ctx context.Context, tid tenant.ID, s tenant.SecretSettings) (*tenant.Tenant, error) {
+func (f *faultRepo) setSecretSettings(ctx context.Context, tid tenant.ID, s tenant.SecretSettings, e store.ExpressPatch) (*tenant.Tenant, error) {
 	if err := f.fail("setSecretSettings"); err != nil {
 		return nil, err
 	}
-	return f.repo.setSecretSettings(ctx, tid, s)
+	return f.repo.setSecretSettings(ctx, tid, s, e)
 }
 
 func (f *faultRepo) setTenantStatus(ctx context.Context, tid tenant.ID, st tenant.Status) error {

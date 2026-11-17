@@ -54,7 +54,7 @@ export interface paths {
          *     Metric names (all prefixed `transteira_`): `build_info`, `uptime_seconds`, `maintenance`,
          *     `transfers_total`, `uploaded_bytes_total`, `downloads_total`, `downloaded_bytes_total`,
          *     `antivirus_detections_total` (per tenant), `secrets_created_total`, `secrets_read_total`,
-         *     `secrets_locked_total` (per tenant, since 2.1; these three counters are in memory and reset
+         *     `secrets_locked_total` (per tenant, since 2.1, express secrets included since 2.3; these three counters are in memory and reset
          *     on a restart, so use `increase()` or `rate()`, while the `secrets*Last24h` fields of
          *     `/status` come from the database), `storage_used_bytes`, `storage_quota_bytes`,
          *     `active_transfers`, `secret_file_bytes` (per tenant, since 2.1), `scan_queue_files`,
@@ -219,6 +219,12 @@ export interface paths {
          *     of the tenant other than this one, `getTenantAsset` and `getTenantLegalDocument` answers
          *     `503 tenant-in-setup` (no transfer exists while in setup). `branding.faviconUrl` gives the
          *     favicon of the tenant.
+         *
+         *     Since 2.3 `features.expressSecrets` tells the web page whether anonymous express secrets
+         *     are offered (`enabled`: the tenant setting `expressEnabled` and not the instance kill
+         *     switch `TT_EXPRESS_SECRETS_DISABLED`), their fixed durations and the client-side text
+         *     limit (`maxChars`, in Unicode code points). Neither the rate limits nor the tenant cap
+         *     are disclosed.
          */
         get: operations["getPublicTenant"];
         put?: never;
@@ -980,6 +986,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/express-secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an express secret (text only, no authentication)
+         * @description Since 2.3. Creates an **express secret** (specification section 22.2): a one-time text
+         *     secret that anyone who reaches the FQDN of the tenant can create, with no deposit
+         *     session, no address verification, no invitation and no IP range check. It is the
+         *     restricted profile of a 2.1 secret described in docs/architecture/e2e-format.md,
+         *     section 3.3.9: the text is sealed by the client exactly as for `createSecret`, without
+         *     passphrase (so `K'` is derived with an empty salt), without file, link delivery only,
+         *     no read receipt and no mail. The server receives the sealed text and the two verifiers,
+         *     never the key nor the plaintext. The answer is the `id` and the `token` of the secret,
+         *     created directly `active`; the client composes the link
+         *     `https://<fqdn>/s/<token>#k=<key>` itself, the key never being sent here. The
+         *     recipient reads it once through the page `/s/<token>`, `getSecretLink` and
+         *     `revealSecret`, exactly like a 2.1 secret (destroyed at the first read or at expiry),
+         *     except that the reading is blocked while the express service is closed (see
+         *     `getSecretLink`), and may report it (`reportSecretAbuse`).
+         *
+         *     **Credentials.** No credential is needed (`security: {}`): such a call is an
+         *     **anonymous** creation. An API token of the tenant may be given instead
+         *     (`Authorization: Bearer`): the creation is then attributed to the token, limited per
+         *     token instead of per IP, and allowed even when the anonymous mode of the tenant is off.
+         *     An unknown, revoked or expired token (or a token of another tenant) is
+         *     `401 invalid-credentials` and written to the security log (`api_token_invalid`), never
+         *     downgraded to an anonymous creation; the lock of a client after repeated invalid tokens
+         *     applies (`429 rate-limited`, scope `api_token`); a valid token used from an IP outside
+         *     its `allowedCidrs` is `403 ip-not-allowed` (security log `deposit_refused`,
+         *     `reason=ip`), as for `createSecret`. A token needs the explicit opt-in
+         *     `expressAllowed` (off by default, set by the admins on the token): without it the call
+         *     is `403 express-token-not-allowed` (security log `express_refused`, `reason=token`). No session and no CSRF token: a deposit session
+         *     cookie sent along is ignored. The operation is protected from cross-site use like
+         *     `revealSecret`: an `Origin` header other than `https://<entity host>` or a
+         *     `Sec-Fetch-Site` other than `same-origin` gets `403 csrf-invalid`; requests without
+         *     these headers (scripts, API clients) are not affected.
+         *
+         *     **Switches**, checked after the maintenance mode and the setup state (`503`) and
+         *     before the body is validated (a body that is not JSON is refused earlier, `400` or
+         *     `415`):
+         *     - the instance kill switch `TT_EXPRESS_SECRETS_DISABLED=true` refuses every express
+         *       creation, with or without a token: `403 express-secrets-disabled`;
+         *     - otherwise an anonymous call on a tenant whose `expressEnabled` is off (the default)
+         *       is `403 express-secrets-disabled`; a call with a valid token that has
+         *       `expressAllowed` is accepted whatever `expressEnabled` says.
+         *     Both refusals write the security event `express_refused` (`reason=disabled`). The
+         *     `secrets-disabled` switch of the 2.1 module (`SecretSettings.enabled`) does not apply
+         *     to express secrets, which have their own switch. `features.expressSecrets.enabled` of
+         *     `getPublicTenant` tells the web page whether the anonymous mode is offered.
+         *
+         *     **Body.** Malformed values follow the rule of `createSecret`: any schema violation (a
+         *     sealed text outside 39 to 53 372 characters or outside base64url, a `verifier` or
+         *     `keyVerifier` that is not 64 lowercase hex characters, an `expiresIn` other than `1h`,
+         *     `1d` or `7d`, any other member such as `passphrase`, `file`, `delivery`, `recipient`,
+         *     `readReceipt` or `senderEmail`) is `400 validation-failed` with field codes;
+         *     `400 secret-format-invalid` is kept for the keyless checks the schema cannot express
+         *     (sealed text not canonical base64url, first byte other than 1, and the empty text:
+         *     exactly 29 decoded bytes, always refused since an express secret has no file). The
+         *     durations are fixed (`1h`, `1d`, `7d`), independent of the durations the tenant offers
+         *     to 2.1 secrets. The text is limited to 10 000 Unicode code points by the client: the
+         *     server only sees the ciphertext and keeps the 2.1 bound on its length (at most 40 029
+         *     decoded bytes, enough for 10 000 code points of 4 bytes), so it cannot count
+         *     characters (e2e-format.md, section 3.3.9).
+         *
+         *     **Limits.**
+         *     - Anonymous: at most `expressPerHourPerIp` creations (10 by default) per client
+         *       (IPv4 address or IPv6 /64) and per tenant in the sliding last hour; beyond,
+         *       `429 rate-limited` with `Retry-After` (security log `rate_limited`,
+         *       `scope="express_ip"`). A malformed call (`400`) counts against no limit. The
+         *       counters are kept in memory, one table per tenant; when that table is saturated
+         *       by clients at their limit, a new client is refused with
+         *       `429 express-secret-limit-reached` (security log `express_refused`,
+         *       `reason=limit`, never `express_ip` against that client) and the other tenants are
+         *       not affected.
+         *     - With a token: at most `expressPerHourPerToken` creations (100 by default) per token
+         *       in the sliding last hour instead of the per-IP limit; beyond, `429 rate-limited` with
+         *       `Retry-After` (`scope="express_token"`). The 2.1 per-creator limits of `createSecret`
+         *       (50 open, 200 per 24 hours) do not apply to express secrets.
+         *     - Per tenant: at most `expressMaxPending` live (`active`) express secrets (1 000 by
+         *       default), counted in the creation transaction over all express secrets of the tenant,
+         *       anonymous and token ones alike. When it is reached, an **anonymous** creation gets
+         *       `429 express-secret-limit-reached` without `Retry-After` (the secrets free up when
+         *       they are read or expire, at no predictable time) and writes `express_refused`
+         *       (`reason=limit`); a creation with a token is still accepted.
+         *     An express secret has no file, so it never counts in the storage quota. Abuse detection
+         *     does not count express secrets (they have no creator address).
+         *
+         *     **Traces.** Audited as `secret.created` with `details.express: true`,
+         *     `details.creatorKind` (`anonymous` or `api_token`), `details.delivery: link` and
+         *     `details.hasFile: false`, the client IP and, for an anonymous creation, the actor
+         *     kind `anonymous`; with a token, the actor is the token and `api_token.used` is also
+         *     recorded. Never the text, the key, the verifiers nor the token. The answer is sent with
+         *     `Cache-Control: no-store`.
+         */
+        post: operations["createExpressSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/secret-links/{secretToken}": {
         parameters: {
             query?: never;
@@ -1012,6 +1125,31 @@ export interface paths {
          *     first. An unknown token (or the token of a secret still `pending`, or of another tenant)
          *     gets the same `404 not-found`, and an unknown one is written to the security log
          *     (`secret_invalid`). Rate limited per client IP.
+         *
+         *     Since 2.3 it also serves the **express secrets** (`createExpressSecret`), unchanged: an
+         *     express secret has no passphrase (no `passphrase` member) and no file (`file: null`).
+         *     For an express secret the three states of specification section 22.2 are: **pending**
+         *     (not read yet) = `200` with `state: active`; **read** = `410 secret-gone` with reason
+         *     `read`; **expired** = `410 secret-gone` with reason `expired` (and `deleted` when an
+         *     admin deleted it). API clients poll it to know whether an express secret was read; it
+         *     consumes nothing. The answer carries `express: true` and `anonymous` (created without
+         *     credential, or with an API token), so that the read page shows a "third-party content,
+         *     not written by the entity" banner and the link to `reportSecretAbuse`.
+         *
+         *     **Read block of a closed express service** (since 2.3). While the instance kill switch
+         *     `TT_EXPRESS_SECRETS_DISABLED` is on, the status and the reveal of **any** express secret
+         *     answer `403 express-secrets-disabled`; while the tenant's `expressEnabled` is off, the
+         *     same applies to the **anonymous** express secrets only (those created with an API token
+         *     stay readable, since a token may create them while the anonymous mode is off). The 2.1
+         *     secrets are never affected (`SecretSettings.enabled` does not block their reading). The
+         *     block consumes nothing, counts no failure (neither the secret nor the per-client
+         *     failure counter), writes no security event and applies whatever the state of the
+         *     secret (a tombstone gives no `410` while closed): the secret is readable again if the
+         *     service is reopened before it expires; the expiry is not suspended. Order of the
+         *     checks: the per-client rate limits and lock (`429`), then the lookup of the token (an
+         *     unknown token, one of another tenant or of a pending secret answers `404` **first**,
+         *     exactly as when the service is open, so that the block is no oracle on tokens), then
+         *     the block, then the state (`200` or `410`).
          */
         get: operations["getSecretLink"];
         put?: never;
@@ -1073,6 +1211,16 @@ export interface paths {
          *     `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. Audited as
          *     `secret.revealed` (and `secret.locked`); a read receipt is mailed to the creator when
          *     requested.
+         *
+         *     Since 2.3 it also reveals the **express secrets** (`createExpressSecret`), unchanged:
+         *     without passphrase both proofs derive from the key alone (e2e-format.md, section
+         *     3.3.9), the answer carries `encryptedText` only (no file) and no read receipt exists.
+         *     The read block of a closed express service applies exactly as for `getSecretLink`
+         *     (`403 express-secrets-disabled` for any express secret under
+         *     `TT_EXPRESS_SECRETS_DISABLED`, for an anonymous one when `expressEnabled` is off;
+         *     checked after the cross-site check, the rate limits and the token lookup, before any
+         *     proof is read: nothing consumed, no attempt counted, no security event). The 2.1
+         *     secrets are unaffected.
          */
         post: operations["revealSecret"];
         delete?: never;
@@ -1116,6 +1264,63 @@ export interface paths {
         get: operations["downloadSecretFile"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/secret-links/{secretToken}/abuse-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Token of a one-time secret (`tts_` followed by 43 base62 characters, about 256 bits), the path component of the link `/s/<token>`. Unknown, pending and foreign-tenant tokens give the same `404`.
+                 * @example tts_UEb8n51xYj4xMXBFL52EtiILriXUayRi9TbqLuPp29L
+                 */
+                secretToken: components["parameters"]["SecretToken"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report an abuse on an express secret
+         * @description Since 2.3. The "Report abuse" link of the read page of an **express secret** (third-party
+         *     content created without authentication): records a report for the delegated admins
+         *     of the tenant, exactly like `reportAbuse` for a transfer. Same body
+         *     (`AbuseReportCreate`: a `category` and an optional plain-text `message` of at most 1000
+         *     characters, control, invisible and bidirectional characters removed, never interpreted
+         *     as HTML). The report names the secret (`AbuseReport.secretId`, its `sec_` ID), never
+         *     its token nor its content (the server cannot read it, and the reporter's text is the
+         *     only description); it has no sender address and its reporter is never verified. The
+         *     admins are alerted by mail (template `abuse-report`, naming the `sec_` ID) and by the
+         *     tenant webhooks (event `abuse.reported`, whose `adminUrl` leads to the report);
+         *     audited as `abuse.reported` (`details.secretId`). They can then delete the secret
+         *     (`deleteTenantSecret`), find another one from its link (`lookupTenantSecret`), purge
+         *     every live anonymous express secret (`purgeExpressSecrets`) or turn the anonymous mode
+         *     off.
+         *
+         *     Accepted for an express secret that is `active` or `read` (so that the reader can
+         *     report after reading). The other tombstones (`expired`, `deleted`, `locked`) answer
+         *     `410 secret-gone` with the reason. A 2.1 secret (not express) answers `404 not-found`
+         *     without security event (the token is real); an unknown token, one of another tenant
+         *     or of a pending secret answers `404 not-found` and writes `secret_invalid`, like the
+         *     status call. No credential: the token is enough (no key proof is asked, so a report
+         *     needs only the path of the link, accepted: a report changes nothing by itself).
+         *     **Not blocked** when the express service is closed (kill switch or `expressEnabled`
+         *     off): reporting stays possible precisely when the admins closed the service in
+         *     reaction to an abuse.
+         *
+         *     Rate limited like `reportAbuse`: 3 reports per secret per day and 5 per client IP per
+         *     hour, the latter shared with the transfer reports (`429 rate-limited`; security log
+         *     `rate_limited`, scopes `abuse_report_link`, whose truncated `transfer` field holds
+         *     the `sec_` ID, and `abuse_report_ip`). The per-client limits of the secret links also
+         *     apply (`secret_link_ip`, `secret_link`). Protected from cross-site use like
+         *     `revealSecret` (JSON body, `Origin` and `Sec-Fetch-Site` checks, `403 csrf-invalid`).
+         */
+        post: operations["reportSecretAbuse"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3297,6 +3502,10 @@ export interface paths {
          *     Requires the right to change the tenant; a tenant the admin is not attached to answers
          *     `404`. Audited as `api_token.created` (never with the secret; the allowed senders are
          *     recorded as a count only, never the addresses).
+         *
+         *     Since 2.3 `expressAllowed` (default false) lets the token create express secrets
+         *     (`createExpressSecret`); without it such a call gets `403 express-token-not-allowed`.
+         *     The opt-in does not depend on `allowedSenders` (an express secret has no sender).
          */
         post: operations["createApiToken"];
         delete?: never;
@@ -3335,7 +3544,7 @@ export interface paths {
         head?: never;
         /**
          * Rename a token or change its allowed IP ranges or senders
-         * @description Renames an API token or replaces its allowed IP ranges or allowed senders (`allowedSenders: []` allows any internal address again). A revoked token cannot be modified (`409 state-conflict`). Requires the right to change the tenant; a tenant the admin is not attached to, or a token of another tenant, answers `404`. Audited as `api_token.updated` (the allowed senders as a count only).
+         * @description Renames an API token or replaces its allowed IP ranges or allowed senders (`allowedSenders: []` allows any internal address again); since 2.3 also switches `expressAllowed` (creation of express secrets). A revoked token cannot be modified (`409 state-conflict`). Requires the right to change the tenant; a tenant the admin is not attached to, or a token of another tenant, answers `404`. Audited as `api_token.updated` (the allowed senders as a count only).
          */
         patch: operations["updateApiToken"];
         trace?: never;
@@ -3659,7 +3868,9 @@ export interface paths {
          *     image (base64, existing size limits). **Never exported:** the SMTP password and user
          *     name, webhook secrets and URLs, API tokens, admins, provisioning data, transfers,
          *     addresses, invitations, audit and the whole single sign-on configuration. Super admin and delegated admin of the tenant; not an
-         *     auditor. Audited as `tenant.exported`.
+         *     auditor. Audited as `tenant.exported`. Since 2.3 `secretSettings` carries the express
+         *     members (`expressEnabled` as stored, the limits), but an import never enables the
+         *     anonymous express secrets (see `importTenant`).
          */
         get: operations["exportTenantConfig"];
         put?: never;
@@ -3699,6 +3910,13 @@ export interface paths {
          *     `force` (`networkReviewedAt` of `getTenantSetup`). An optional first
          *     delegated admin is created as for `createTenant`. Audited as
          *     `tenant.imported` (`sourceVersion` and `exportedAt` of the file in the details).
+         *
+         *     Since 2.3 the import **forces `secretSettings.expressEnabled` to false**, whatever the
+         *     document says (a `true` is accepted and ignored, not refused): opening an anonymous
+         *     service on a new FQDN must be a deliberate action of its admins
+         *     (`updateSecretSettings`), never a side effect of a copied configuration (threat model
+         *     P92). The express limits (`expressPerHourPerIp`, `expressPerHourPerToken`,
+         *     `expressMaxPending`) are imported as given, or take their defaults when absent.
          */
         post: operations["importTenant"];
         delete?: never;
@@ -3850,7 +4068,9 @@ export interface paths {
         /**
          * List the one-time secrets of the tenant
          * @description Since 2.1. Lists the secrets of the tenant, most recent first, with filters on state and
-         *     creator address. Metadata only: never the content, the key, the proof, the verifier nor
+         *     creator address. Since 2.3 the list includes the express secrets (`express: true`,
+         *     without `senderEmail`; `creatorKind` `anonymous` or `api_token`); a `sender` filter never
+         *     matches them. Metadata only: never the content, the key, the proof, the verifier nor
          *     the token. Ended secrets stay listed as tombstones for 30 days. Readable by the
          *     delegated admins of the tenant, the super admin and, read-only, an auditor (who may not
          *     filter by address: `403 read-only-role`). A malformed `cursor` is `400 validation-failed`.
@@ -3900,6 +4120,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants/{tenantId}/secrets/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find a secret of the tenant from its link
+         * @description Since 2.3. Finds the secret a link points to, typically after an abuse report or a
+         *     complaint about an express secret: the body carries the `link` as the admin received
+         *     it, either the full link (`https://<fqdn>/s/<token>#k=<key>`) or the bare `tts_`
+         *     token. The server extracts the token (the last path segment after `/s/`, or the bare
+         *     value), **ignores the fragment** (`#k=...`: the key is dropped unread and never
+         *     reaches any log), ignores the host part, hashes the token with SHA-256 and looks it
+         *     up among the secrets of this tenant. A value from which no token of the form
+         *     `tts_` and 43 base62 characters can be extracted is `400 validation-failed` (`/link`,
+         *     `invalid-format`). The token is **never stored, logged nor audited**; the operation is
+         *     a `POST` so that it never appears in a URL, a browser history or a proxy log.
+         *
+         *     Works for any secret of the tenant, 2.1 and express, live or tombstone (kept 30 days
+         *     after its end), and answers its metadata (`AdminSecret`, never the content, the key,
+         *     the verifiers nor the token); a pending 2.1 secret is found too, as in the list. An
+         *     unknown token or a token of another tenant answers `404 not-found` (no security event:
+         *     the caller is an authenticated admin). Readable by the delegated admins of the tenant, the super admin
+         *     and an auditor (a read-only operation despite the `POST`). Audited as
+         *     `secret.looked_up` (object the `sec_` ID) when a secret is found; a miss is not
+         *     audited.
+         */
+        post: operations["lookupTenantSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/express-secrets/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete every live anonymous express secret of the tenant
+         * @description Since 2.3. Emergency action against an abusive use of the anonymous express secrets
+         *     (for example the tenant used as a relay for illicit content): deletes, in one call,
+         *     **every live (`active`) anonymous express secret** of the tenant. Each becomes a
+         *     `deleted` tombstone (end reason `deleted_by_admin`: its link answers
+         *     `410 secret-gone`, reason `deleted`), its sealed text and its server key are destroyed
+         *     (cryptographic erasure, as for `deleteTenantSecret`). Not touched: the express
+         *     secrets created with an API token, the 2.1 secrets and the tombstones. It does not
+         *     change `expressEnabled`: turn the anonymous mode off as well to stop new creations.
+         *
+         *     No body. Requires the right to change the tenant (delegated admin of the tenant, super
+         *     admin; an auditor gets `403 read-only-role`). Answers the number of secrets deleted
+         *     (0 when there was none). Audited **once** as `secret.express_purged` with
+         *     `details.count` (no `secret.deleted` per secret). Idempotent in effect: a second call
+         *     deletes the secrets created in between, if any.
+         */
+        post: operations["purgeExpressSecrets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants/{tenantId}/secret-settings": {
         parameters: {
             query?: never;
@@ -3933,6 +4236,22 @@ export interface paths {
          *     `defaultDuration`, when given, must be one of them. `fileMaxBytes` is between 1 MiB and
          *     25 MiB (ciphertext size). Requires the right to change the tenant. Audited as
          *     `secret.settings_updated` with the changed member names.
+         *
+         *     Since 2.3 the settings also hold the express secrets (`createExpressSecret`):
+         *     `expressEnabled` (off by default), `expressPerHourPerIp` (1 to 1000, default 10),
+         *     `expressPerHourPerToken` (1 to 10000, default 100) and `expressMaxPending` (1 to 100000,
+         *     default 1000). They are **optional in a replacement**: an absent member keeps its
+         *     current value (so a 2.1 client that does not know them never resets them), a `null`
+         *     one is `400 validation-failed` (`not-nullable`), a value out of bounds
+         *     `400 validation-failed` (`out-of-range`). The delegated admins manage them like the other
+         *     members, `expressEnabled` included; the instance kill switch
+         *     `TT_EXPRESS_SECRETS_DISABLED` (environment) overrides `expressEnabled` without changing
+         *     it, and `getSecretSettings` still returns the stored value. Lowering `expressMaxPending`
+         *     below the current number of live express secrets deletes nothing: anonymous creations are
+         *     refused until enough of them are read or expire. In the configuration export and
+         *     import (`secretSettings`), the four members are exported; an import always sets
+         *     `expressEnabled` to false (`importTenant`) and takes the defaults for the limits it
+         *     lacks (a 2.1 or 2.2 export).
          */
         put: operations["updateSecretSettings"];
         post?: never;
@@ -4884,7 +5203,7 @@ export interface components {
          * @description Stable error code. See `docs/api/errors.md`.
          * @enum {string}
          */
-        ProblemCode: "validation-failed" | "unauthenticated" | "invalid-credentials" | "forbidden" | "csrf-invalid" | "deposit-not-allowed" | "ip-not-allowed" | "blocked-file" | "invitation-not-allowed" | "invitation-gone" | "verification-code-invalid" | "verification-exhausted" | "not-found" | "method-not-allowed" | "transfer-gone" | "download-locked" | "transfer-password-invalid" | "transfer-locked" | "state-conflict" | "already-exists" | "upload-incomplete" | "checksum-mismatch" | "transfer-too-large" | "payload-too-large" | "range-not-satisfiable" | "unsupported-media-type" | "quota-exceeded" | "rate-limited" | "maintenance" | "mail-unavailable" | "unknown-tenant" | "setup-already-done" | "setup-token-invalid" | "new-master-key-missing" | "recipient-domain-refused" | "confidentiality-rule-violated" | "abuse-threshold-blocked" | "recipient-verification-required" | "max-downloads-reached" | "reply-not-allowed" | "access-link-invalid" | "extension-limit-reached" | "tenant-in-setup" | "setup-incomplete" | "setup-already-complete" | "unknown-background-preset" | "system-smtp-unavailable" | "admin-already-active" | "update-check-disabled" | "provisioning-token-invalid" | "provisioning-scope-exceeded" | "read-only-role" | "sso-required" | "sso-not-available" | "sso-not-configured" | "sso-issuer-not-allowed" | "sso-domain-conflict" | "sso-mfa-required" | "proof-not-available" | "import-invalid" | "import-schema-unsupported" | "drop-link-invalid" | "drop-link-limit-reached" | "link-only-forbidden" | "link-only-conflict" | "e2e-forbidden" | "e2e-required" | "e2e-archive-unavailable" | "e2e-format-invalid" | "secret-gone" | "secret-proof-invalid" | "secrets-disabled" | "secret-file-not-allowed" | "secret-file-too-large" | "secret-duration-not-offered" | "secret-email-not-allowed" | "secret-limit-reached" | "secret-format-invalid" | "secret-passphrase-required" | "internal-error";
+        ProblemCode: "validation-failed" | "unauthenticated" | "invalid-credentials" | "forbidden" | "csrf-invalid" | "deposit-not-allowed" | "ip-not-allowed" | "blocked-file" | "invitation-not-allowed" | "invitation-gone" | "verification-code-invalid" | "verification-exhausted" | "not-found" | "method-not-allowed" | "transfer-gone" | "download-locked" | "transfer-password-invalid" | "transfer-locked" | "state-conflict" | "already-exists" | "upload-incomplete" | "checksum-mismatch" | "transfer-too-large" | "payload-too-large" | "range-not-satisfiable" | "unsupported-media-type" | "quota-exceeded" | "rate-limited" | "maintenance" | "mail-unavailable" | "unknown-tenant" | "setup-already-done" | "setup-token-invalid" | "new-master-key-missing" | "recipient-domain-refused" | "confidentiality-rule-violated" | "abuse-threshold-blocked" | "recipient-verification-required" | "max-downloads-reached" | "reply-not-allowed" | "access-link-invalid" | "extension-limit-reached" | "tenant-in-setup" | "setup-incomplete" | "setup-already-complete" | "unknown-background-preset" | "system-smtp-unavailable" | "admin-already-active" | "update-check-disabled" | "provisioning-token-invalid" | "provisioning-scope-exceeded" | "read-only-role" | "sso-required" | "sso-not-available" | "sso-not-configured" | "sso-issuer-not-allowed" | "sso-domain-conflict" | "sso-mfa-required" | "proof-not-available" | "import-invalid" | "import-schema-unsupported" | "drop-link-invalid" | "drop-link-limit-reached" | "link-only-forbidden" | "link-only-conflict" | "e2e-forbidden" | "e2e-required" | "e2e-archive-unavailable" | "e2e-format-invalid" | "secret-gone" | "secret-proof-invalid" | "secrets-disabled" | "secret-file-not-allowed" | "secret-file-too-large" | "secret-duration-not-offered" | "secret-email-not-allowed" | "secret-limit-reached" | "secret-format-invalid" | "secret-passphrase-required" | "express-secrets-disabled" | "express-secret-limit-reached" | "express-token-not-allowed" | "internal-error";
         /**
          * @description Supported UI language (ISO 639-1). New languages may be added.
          * @enum {string}
@@ -5968,6 +6287,8 @@ export interface components {
             prefix: string;
             allowedCidrs: components["schemas"]["AllowedCidrs"];
             allowedSenders: components["schemas"]["AllowedSenders"];
+            /** @description Since 2.3. The token may create express secrets (`createExpressSecret`); off by default, an explicit opt-in. Always sent by a 2.3 server; absent means false. */
+            expressAllowed?: boolean;
             createdBy: string;
             /** Format: date-time */
             createdAt: string;
@@ -5994,6 +6315,11 @@ export interface components {
             allowedSenders?: components["schemas"]["AllowedSenders"];
             /** Format: date-time */
             expiresAt?: string | null;
+            /**
+             * @description Since 2.3. Allow the token to create express secrets. Default false.
+             * @default false
+             */
+            expressAllowed?: boolean;
         };
         /**
          * @description JSON Merge Patch of an API token; `null` is refused on every field. A list given replaces
@@ -6004,6 +6330,8 @@ export interface components {
             name?: string;
             allowedCidrs?: components["schemas"]["AllowedCidrs"];
             allowedSenders?: components["schemas"]["AllowedSenders"];
+            /** @description Since 2.3. Allow or forbid the creation of express secrets with this token. */
+            expressAllowed?: boolean;
         };
         ApiTokenCreated: components["schemas"]["ApiToken"] & {
             /** @description Secret value, returned only once. */
@@ -6075,9 +6403,10 @@ export interface components {
          *     identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
          *     a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
          *     Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the domain of the recipient (`details.recipientDomain`; the address stays on the secret); `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
+         *     Since 2.3: `secret.created` of an express secret carries `details.express: true` and `details.creatorKind` `anonymous` (actor kind `anonymous`, id `-`, with the client IP) or `api_token` (actor the token, plus an `api_token.used` entry whose actor is the token, there being no sender address); the express settings changed through `updateSecretSettings` are named in `secret.settings_updated` like the others; `secret.looked_up` (object the found `sec_` ID, actor the admin) never carries the link nor the token; `secret.express_purged` (object kind `tenant`) carries `details.count` and replaces the per-secret `secret.deleted` of the purge; `abuse.reported` on an express secret carries `details.secretId`; `api_token.created` and `api_token.updated` carry `details.expressAllowed` when set or changed.
          * @enum {string}
          */
-        AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed" | "transfer.extended" | "transfer.reminder_sent" | "transfer.reply_created" | "recipient.verified" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "abuse.report_closed" | "abuse.report_reopened" | "transfer.recipient_refused" | "antivirus.instance_disabled" | "antivirus.scans_released" | "antivirus.self_test" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.tested" | "tenant.confidentiality_updated" | "tenant.recipient_rules_updated" | "tenant.abuse_settings_updated" | "tenant.antivirus_disabled" | "tenant.antivirus_enabled" | "my_transfers.link_requested" | "my_transfers.signed_in" | "admin.invited" | "tenant.setup_completed" | "tenant.provisioned" | "tenant.provision_refused" | "provisioning_token.created" | "provisioning_token.revoked" | "admin.identity_linked" | "admin.identity_unlinked" | "tenant.sso_updated" | "tenant.sso_deleted" | "tenant.exported" | "tenant.imported" | "drop_link.created" | "drop_link.updated" | "drop_link.rotated" | "drop_link.revoked" | "transfer.proof_downloaded" | "proof_key.created" | "proof_key.retired" | "transfer.link_reissued" | "secret.created" | "secret.sent" | "secret.revealed" | "secret.file_downloaded" | "secret.expired" | "secret.deleted" | "secret.locked" | "secret.settings_updated";
+        AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed" | "transfer.extended" | "transfer.reminder_sent" | "transfer.reply_created" | "recipient.verified" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "abuse.report_closed" | "abuse.report_reopened" | "transfer.recipient_refused" | "antivirus.instance_disabled" | "antivirus.scans_released" | "antivirus.self_test" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.tested" | "tenant.confidentiality_updated" | "tenant.recipient_rules_updated" | "tenant.abuse_settings_updated" | "tenant.antivirus_disabled" | "tenant.antivirus_enabled" | "my_transfers.link_requested" | "my_transfers.signed_in" | "admin.invited" | "tenant.setup_completed" | "tenant.provisioned" | "tenant.provision_refused" | "provisioning_token.created" | "provisioning_token.revoked" | "admin.identity_linked" | "admin.identity_unlinked" | "tenant.sso_updated" | "tenant.sso_deleted" | "tenant.exported" | "tenant.imported" | "drop_link.created" | "drop_link.updated" | "drop_link.rotated" | "drop_link.revoked" | "transfer.proof_downloaded" | "proof_key.created" | "proof_key.retired" | "transfer.link_reissued" | "secret.created" | "secret.sent" | "secret.revealed" | "secret.file_downloaded" | "secret.expired" | "secret.deleted" | "secret.locked" | "secret.settings_updated" | "secret.looked_up" | "secret.express_purged";
         AuditEvent: {
             id: string;
             /** Format: date-time */
@@ -6086,10 +6415,10 @@ export interface components {
             tenantId?: string | null;
             actor: {
                 /**
-                 * @description Kind of the actor; since 1.2, `provisioning_token` for the tenants created through the provisioning API.
+                 * @description Kind of the actor; since 1.2, `provisioning_token` for the tenants created through the provisioning API; since 2.3, `anonymous` (id `-`) for an express secret created without credential.
                  * @enum {string}
                  */
-                kind: "depositor" | "recipient" | "admin" | "api_token" | "system" | "provisioning_token";
+                kind: "depositor" | "recipient" | "admin" | "api_token" | "system" | "provisioning_token" | "anonymous";
                 id: string;
             };
             ip?: string;
@@ -6125,7 +6454,7 @@ export interface components {
             storageQuotaBytes: components["schemas"]["ByteSize"];
             /** @description `storageUsedBytes` / `storageQuotaBytes` (may exceed 1). */
             storageUsedRatio: number;
-            /** @description Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows. */
+            /** @description Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows. Since 2.3 express secrets are included. */
             secretsCreated?: number;
             /**
              * @description Breakdown of `transferCount` and `bytesUploaded` over the period, oldest first, with a
@@ -6535,7 +6864,7 @@ export interface components {
                 transfersLast24h: number;
                 /** @description Since 2.1. Declared sizes of the stored one-time secret files, already counted in `storageUsedBytes`. */
                 secretFileBytes: components["schemas"]["ByteSize"];
-                /** @description Since 2.1. One-time secrets created during the last 24 hours, among the secret rows still present (an unfinished secret is deleted after one hour, an ended one 30 days after its end). */
+                /** @description Since 2.1. One-time secrets created during the last 24 hours, among the secret rows still present (an unfinished secret is deleted after one hour, an ended one 30 days after its end). Since 2.3 express secrets are included. */
                 secretsCreatedLast24h: number;
                 /** @description Since 2.1. One-time secrets read during the last 24 hours. */
                 secretsReadLast24h: number;
@@ -6565,6 +6894,7 @@ export interface components {
             /** @description Since 2.0. The tenant allows link-only transfers; the level's linkOnlyAllowed may still forbid them. */
             linkOnly?: boolean;
             secrets?: components["schemas"]["SecretFeatures"];
+            expressSecrets?: components["schemas"]["ExpressSecretFeatures"];
             /** @description Since 2.0. End-to-end encryption policy of the tenant (`forbidden` when absent). The policy that applies to a transfer is the `e2ePolicy` of its confidentiality level (`PublicConfidentialityLevel.e2ePolicy`), which a level can only tighten. */
             e2ePolicy?: components["schemas"]["E2ePolicy"];
         };
@@ -6924,9 +7254,15 @@ export interface components {
         };
         /** @description Since 2.1. A secret as the admins of the tenant see it: metadata only. */
         AdminSecret: components["schemas"]["Secret"] & {
-            /** @enum {string} */
-            creatorKind: "internal" | "internal_remote" | "external" | "api_token";
-            senderEmail: components["schemas"]["Email"];
+            /**
+             * @description Since 2.3, `anonymous` for an express secret created without credential; an express secret created with an API token is `api_token`.
+             * @enum {string}
+             */
+            creatorKind: "internal" | "internal_remote" | "external" | "api_token" | "anonymous";
+            /** @description The creator address (with an API token, the declared sender). Since 2.3 absent for express secrets, which have no creator address (`anonymous`, and `api_token` with `express: true`); always present otherwise. */
+            senderEmail?: components["schemas"]["Email"];
+            /** @description Since 2.3. An express secret (`createExpressSecret`): text only, link delivery, no passphrase. Always sent by a 2.3 server; absent means false. */
+            express?: boolean;
         };
         AdminSecretList: {
             items: components["schemas"]["AdminSecret"][];
@@ -6945,6 +7281,10 @@ export interface components {
                 /** Format: int64 */
                 size: number;
             } | null;
+            /** @description Since 2.3. An express secret (created through `createExpressSecret`): third-party content not written by the entity; the read page shows a banner saying so and the link to `reportSecretAbuse`. Absent means false. */
+            express?: boolean;
+            /** @description Since 2.3. Present with `express: true` only: true when the express secret was created without credential, false when it was created with an API token of the tenant. */
+            anonymous?: boolean;
         };
         /** @description Since 2.1. The reveal proof. */
         SecretReveal: {
@@ -6986,6 +7326,26 @@ export interface components {
             emailAllowed: boolean;
             /** @description Since 2.1. An e-mail secret must carry a passphrase (`403 secret-passphrase-required` otherwise). Default false; absent in a replacement means false. */
             emailRequiresPassphrase?: boolean;
+            /**
+             * @description Since 2.3. Anonymous express secrets (`createExpressSecret` without credential) are offered on the tenant. Off by default. Independent of `enabled`: it does not govern the 2.1 module, and the 2.1 switch does not govern express secrets. Creations with an API token of the tenant are accepted even when off; the instance kill switch `TT_EXPRESS_SECRETS_DISABLED` refuses both whatever this setting. Always present in answers; absent in a replacement keeps the current value. Forced to false by a configuration import.
+             * @default false
+             */
+            expressEnabled?: boolean;
+            /**
+             * @description Since 2.3. Anonymous express creations allowed per client (IPv4 address or IPv6 /64) in the sliding last hour, on this tenant. Default 10. Always present in answers; absent in a replacement keeps the current value.
+             * @default 10
+             */
+            expressPerHourPerIp?: number;
+            /**
+             * @description Since 2.3. Express creations allowed per API token in the sliding last hour (instead of the per-IP limit). Default 100. Always present in answers; absent in a replacement keeps the current value.
+             * @default 100
+             */
+            expressPerHourPerToken?: number;
+            /**
+             * @description Since 2.3. Live (`active`) express secrets the tenant may hold, anonymous and token ones together; when reached, anonymous creations are refused (`429 express-secret-limit-reached`), token creations still accepted. Default 1000. Always present in answers; absent in a replacement keeps the current value.
+             * @default 1000
+             */
+            expressMaxPending?: number;
         };
         /** @description Since 2.1. Real rules of the secrets module for the creation form: the settings of the tenant (`SecretSettings`), `defaultDuration` included. */
         SecretFeatures: {
@@ -6998,6 +7358,43 @@ export interface components {
             emailAllowed: boolean;
             /** @description Since 2.1. An e-mail secret needs a passphrase: the creation form requires one with the e-mail delivery. Absent means false. */
             emailRequiresPassphrase?: boolean;
+        };
+        /**
+         * @description Since 2.3. Duration code of an express secret, from its creation (it is created `active`): `1h`, `1d` or `7d`. Fixed by the specification (section 22.2), independent of the durations a tenant offers to 2.1 secrets (`SecretSettings.durations`).
+         * @enum {string}
+         */
+        ExpressSecretDuration: "1h" | "1d" | "7d";
+        /** @description Since 2.3. Creation of an express secret: the restricted profile of `SecretCreate` (docs/architecture/e2e-format.md, section 3.3.9). Link delivery, no passphrase, no file, no read receipt, no creator address: any other member is refused (`400 validation-failed`). */
+        ExpressSecretCreate: {
+            /** @description The text sealed by the client under `K'` derived without passphrase, exactly as for `SecretCreate` (same bounds: 39 to 53 372 characters, `400 secret-format-invalid` for the keyless checks, the empty text included). The 10 000 code point limit of the text is enforced by the client; the server never sees the text. */
+            encryptedText: components["schemas"]["SecretSealedText"];
+            /** @description SHA-256 of the proof derived from `K'` (here from `K` alone, no passphrase), 64 lowercase hex characters. */
+            verifier: string;
+            /** @description SHA-256 of the key proof derived from the key K alone (docs/architecture/e2e-format.md 3.3.4), 64 lowercase hex characters. */
+            keyVerifier: string;
+            expiresIn: components["schemas"]["ExpressSecretDuration"];
+        };
+        /** @description Since 2.3. What the express secret page needs. No limit value is disclosed beyond the text length. */
+        ExpressSecretFeatures: {
+            /** @description Anonymous express secrets are offered: `SecretSettings.expressEnabled` of the tenant and the instance kill switch `TT_EXPRESS_SECRETS_DISABLED` off. When false, the page is not offered (an API token can still create express secrets unless the kill switch is on). */
+            enabled: boolean;
+            /** @description Always `1h`, `1d`, `7d`. */
+            durations: components["schemas"]["ExpressSecretDuration"][];
+            /**
+             * @description Largest text, in Unicode code points (what JavaScript `[...text].length` counts), checked by the client before sealing.
+             * @enum {integer}
+             */
+            maxChars: 10000;
+        };
+        /** @description Since 2.3. Body of `lookupTenantSecret`: a secret link as received, or its bare token. The fragment (`#k=...`) is ignored and dropped unread; the token is hashed, never stored, logged nor audited. */
+        SecretLookup: {
+            /** @description Full link `https://<fqdn>/s/<token>[#k=<key>]` or bare token (`tts_` and 43 base62 characters). No token extractable: `400 validation-failed` (`invalid-format`). */
+            link: string;
+        };
+        /** @description Since 2.3. Answer of `purgeExpressSecrets`. */
+        ExpressSecretPurgeResult: {
+            /** @description Live anonymous express secrets deleted by this call. */
+            deleted: number;
         };
         /** @description Since 2.0. What the landing page of a drop link needs. */
         PublicDropLink: {
@@ -7091,7 +7488,7 @@ export interface components {
          *     be added within the API version: clients must accept unknown values.
          * @enum {string}
          */
-        SecurityEventType: "verification_code_invalid" | "transfer_password_invalid" | "admin_login_failed" | "api_token_invalid" | "unknown_fqdn" | "deposit_refused" | "rate_limited" | "metrics_token_invalid" | "access_link_invalid" | "provisioning_token_invalid" | "sso_failed" | "drop_link_invalid" | "secret_invalid" | "secret_proof_invalid";
+        SecurityEventType: "verification_code_invalid" | "transfer_password_invalid" | "admin_login_failed" | "api_token_invalid" | "unknown_fqdn" | "deposit_refused" | "rate_limited" | "metrics_token_invalid" | "access_link_invalid" | "provisioning_token_invalid" | "sso_failed" | "drop_link_invalid" | "secret_invalid" | "secret_proof_invalid" | "express_refused";
         /** @description Since 2.0. A line of the security log, kept in the database. Never holds an e-mail address. */
         SecurityEvent: {
             id: string;
@@ -7405,12 +7802,15 @@ export interface components {
         };
         /** @enum {string} */
         AbuseReportStatus: "open" | "closed";
+        /** @description A report on a transfer (`transferId`) or, since 2.3, on an express secret (`secretId`): exactly one of the two is present. */
         AbuseReport: {
             id: string;
-            /** @description Reported transfer (it may have expired or been deleted since). */
-            transferId: string;
-            /** @description Sender of the reported transfer, or the pseudonym `erased-<16 hex>` after a GDPR erasure. */
-            senderEmail: string;
+            /** @description Reported transfer (it may have expired or been deleted since). Since 2.3 absent for a report on an express secret; always present before 2.3. */
+            transferId?: string;
+            /** @description Since 2.3. Reported express secret (`reportSecretAbuse`; it may have ended since). */
+            secretId?: string;
+            /** @description Sender of the reported transfer, or the pseudonym `erased-<16 hex>` after a GDPR erasure. Since 2.3 absent for a report on an express secret (no creator address). */
+            senderEmail?: string;
             /** @description Address of the reporter, only when a valid recipient verification of the link proved it (`reporterVerified`); null otherwise, or the pseudonym after a GDPR erasure. */
             reportedBy?: string | null;
             /** @description The reporter proved being the recipient of the link (`__Host-tt_rv`). */
@@ -10309,6 +10709,115 @@ export interface operations {
             };
         };
     };
+    createExpressSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExpressSecretCreate"];
+            };
+        };
+        responses: {
+            /** @description Express secret created and active; its token is shown once. */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "sec_01JABCS3T4V5W6X7Y8Z9A0B1C2",
+                     *       "token": "tts_Xp4kQ7mZr2Lw9TfB3nHc8VyJd5Gs1KqA6eWu0RtNb7M",
+                     *       "state": "active",
+                     *       "expiresAt": "2026-11-18T09:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SecretCreated"];
+                };
+            };
+            /**
+             * @description The request is invalid: `validation-failed` (any schema violation, including a
+             *     member an express secret does not accept, such as `passphrase` or `file`) or
+             *     `secret-format-invalid` (sealed text whose framing the schema cannot check: not
+             *     canonical, wrong version byte, empty text).
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid-credentials`: the `Authorization: Bearer` token is malformed, unknown (including a token of another tenant), revoked or expired. Written to the security log (`api_token_invalid`). Never answered to a call without `Authorization` header, which is an anonymous creation. */
+            401: {
+                headers: {
+                    /**
+                     * @description `Bearer` (RFC 6750): the challenge of the API token scheme.
+                     * @example Bearer
+                     */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#invalid-credentials",
+                     *       "title": "Invalid credentials",
+                     *       "status": 401,
+                     *       "code": "invalid-credentials"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description `express-secrets-disabled`: the instance kill switch `TT_EXPRESS_SECRETS_DISABLED`
+             *     is on (with or without a token), or the call is anonymous and the tenant has not
+             *     enabled express secrets (`expressEnabled`); written to the security log
+             *     (`express_refused`, `reason=disabled`). `express-token-not-allowed` (since 2.3): a
+             *     valid API token without the opt-in `expressAllowed` (security log `express_refused`,
+             *     `reason=token`). `ip-not-allowed`: a valid API token used from an IP outside its
+             *     `allowedCidrs` (security log `deposit_refused`). Or `csrf-invalid`: cross-site
+             *     request (see the description).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            421: components["responses"]["UnknownTenant"];
+            /**
+             * @description `rate-limited`, with `Retry-After` (and `retryAfterSeconds`): more than
+             *     `expressPerHourPerIp` anonymous creations from this client (IPv4 address or IPv6
+             *     /64) in the last hour (security log scope `express_ip`), more than
+             *     `expressPerHourPerToken` creations with this token (scope `express_token`), or a
+             *     client locked after repeated invalid tokens (scope `api_token`).
+             *     `express-secret-limit-reached`, without `Retry-After`: the tenant already holds
+             *     `expressMaxPending` live express secrets and the call is anonymous (security log
+             *     `express_refused`, `reason=limit`).
+             */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["MaintenanceMode"];
+        };
+    };
     getSecretLink: {
         parameters: {
             query?: never;
@@ -10332,6 +10841,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SecretStatus"];
+                };
+            };
+            /** @description Since 2.3. `express-secrets-disabled`: an express secret while the express service is closed (instance kill switch, or the tenant's `expressEnabled` off for an anonymous express secret). Nothing is consumed or counted; see the description. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             404: components["responses"]["NotFound"];
@@ -10378,7 +10896,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
-            /** @description `secret-proof-invalid`: a proof does not match. A wrong key proof is not counted and carries no `attemptsRemaining`; a right key proof with a wrong proof (wrong passphrase) is counted and carries `attemptsRemaining`, the attempts left before the secret is locked. Or `csrf-invalid`: cross-site request (see the description). */
+            /** @description Since 2.3 also `express-secrets-disabled` (express secret while the express service is closed, checked before any proof: see `getSecretLink`). `secret-proof-invalid`: a proof does not match. A wrong key proof is not counted and carries no `attemptsRemaining`; a right key proof with a wrong proof (wrong passphrase) is counted and carries `attemptsRemaining`, the attempts left before the secret is locked. Or `csrf-invalid`: cross-site request (see the description). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10435,6 +10953,48 @@ export interface operations {
             404: components["responses"]["NotFound"];
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["TooManyStreams"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
+        };
+    };
+    reportSecretAbuse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Token of a one-time secret (`tts_` followed by 43 base62 characters, about 256 bits), the path component of the link `/s/<token>`. Unknown, pending and foreign-tenant tokens give the same `404`.
+                 * @example tts_UEb8n51xYj4xMXBFL52EtiILriXUayRi9TbqLuPp29L
+                 */
+                secretToken: components["parameters"]["SecretToken"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "category": "phishing",
+                 *       "message": "The text asks me to log in on a fake bank site."
+                 *     }
+                 */
+                "application/json": components["schemas"]["AbuseReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Report recorded; the administrators of the entity are alerted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            410: components["responses"]["SecretGone"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["TenantInSetup"];
         };
@@ -14905,6 +15465,7 @@ export interface operations {
                      *         "allowedSenders": [
                      *           "reporting@entity-a.example.com"
                      *         ],
+                     *         "expressAllowed": false,
                      *         "createdBy": "admin.entity-a",
                      *         "createdAt": "2026-10-01T08:00:00Z",
                      *         "lastUsedAt": "2026-10-19T02:00:12Z",
@@ -14957,6 +15518,7 @@ export interface operations {
                      *       "allowedSenders": [
                      *         "reporting@entity-a.example.com"
                      *       ],
+                     *       "expressAllowed": false,
                      *       "createdBy": "admin.entity-a",
                      *       "createdAt": "2026-10-19T16:20:00Z",
                      *       "lastUsedAt": null,
@@ -15028,13 +15590,6 @@ export interface operations {
         };
         requestBody: {
             content: {
-                /**
-                 * @example {
-                 *       "allowedCidrs": [
-                 *         "10.10.20.16/32"
-                 *       ]
-                 *     }
-                 */
                 "application/merge-patch+json": components["schemas"]["ApiTokenUpdate"];
             };
         };
@@ -15056,6 +15611,7 @@ export interface operations {
                      *       "allowedSenders": [
                      *         "reporting@entity-a.example.com"
                      *       ],
+                     *       "expressAllowed": false,
                      *       "createdBy": "admin.entity-a",
                      *       "createdAt": "2026-10-01T08:00:00Z",
                      *       "lastUsedAt": "2026-10-19T02:00:12Z",
@@ -16240,8 +16796,23 @@ export interface operations {
                      *           "recipient": "carol@customer.example.net",
                      *           "readReceipt": true,
                      *           "hasFile": false,
+                     *           "express": false,
                      *           "createdAt": "2026-11-09T09:00:00Z",
                      *           "expiresAt": "2026-11-10T09:00:00Z"
+                     *         },
+                     *         {
+                     *           "id": "sec_01JABCS3T4V5W6X7Y8Z9A0B1C2",
+                     *           "state": "read",
+                     *           "creatorKind": "anonymous",
+                     *           "express": true,
+                     *           "delivery": "link",
+                     *           "readReceipt": false,
+                     *           "hasFile": false,
+                     *           "createdAt": "2026-11-08T14:00:00Z",
+                     *           "expiresAt": "2026-11-08T15:00:00Z",
+                     *           "readAt": "2026-11-08T14:12:00Z",
+                     *           "endedAt": "2026-11-08T14:12:00Z",
+                     *           "endReason": "read"
                      *         }
                      *       ],
                      *       "nextCursor": "eyJjIjoiMjAyNi0xMS0wOVQwOTowMDowMFoiLCJpIjoic2VjXzAxIn0"
@@ -16290,6 +16861,89 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    lookupTenantSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecretLookup"];
+            };
+        };
+        responses: {
+            /** @description The secret the link points to (metadata only). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "sec_01JABCS3T4V5W6X7Y8Z9A0B1C2",
+                     *       "state": "active",
+                     *       "creatorKind": "anonymous",
+                     *       "express": true,
+                     *       "delivery": "link",
+                     *       "readReceipt": false,
+                     *       "hasFile": false,
+                     *       "createdAt": "2026-11-17T09:00:00Z",
+                     *       "expiresAt": "2026-11-18T09:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminSecret"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    purgeExpressSecrets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Live anonymous express secrets deleted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "deleted": 412
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ExpressSecretPurgeResult"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     getSecretSettings: {
         parameters: {
             query?: never;
@@ -16322,7 +16976,11 @@ export interface operations {
                      *       "defaultDuration": "1d",
                      *       "fileAllowed": true,
                      *       "fileMaxBytes": 10485760,
-                     *       "emailAllowed": true
+                     *       "emailAllowed": true,
+                     *       "expressEnabled": false,
+                     *       "expressPerHourPerIp": 10,
+                     *       "expressPerHourPerToken": 100,
+                     *       "expressMaxPending": 1000
                      *     }
                      */
                     "application/json": components["schemas"]["SecretSettings"];
@@ -16360,7 +17018,9 @@ export interface operations {
                  *       "defaultDuration": "1d",
                  *       "fileAllowed": true,
                  *       "fileMaxBytes": 10485760,
-                 *       "emailAllowed": false
+                 *       "emailAllowed": false,
+                 *       "expressEnabled": true,
+                 *       "expressPerHourPerIp": 5
                  *     }
                  */
                 "application/json": components["schemas"]["SecretSettings"];
@@ -16384,7 +17044,11 @@ export interface operations {
                      *       "defaultDuration": "1d",
                      *       "fileAllowed": true,
                      *       "fileMaxBytes": 10485760,
-                     *       "emailAllowed": false
+                     *       "emailAllowed": false,
+                     *       "expressEnabled": true,
+                     *       "expressPerHourPerIp": 5,
+                     *       "expressPerHourPerToken": 100,
+                     *       "expressMaxPending": 1000
                      *     }
                      */
                     "application/json": components["schemas"]["SecretSettings"];
@@ -18293,7 +18957,7 @@ type ReadonlyArray<T> = [
     unknown[]
 ] ? Readonly<Exclude<T, undefined>> : Readonly<Exclude<T, undefined>[]>;
 export const problemReasonValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Problem"]["reason"]> = ["read", "expired", "deleted", "locked"];
-export const problemCodeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProblemCode"]> = ["validation-failed", "unauthenticated", "invalid-credentials", "forbidden", "csrf-invalid", "deposit-not-allowed", "ip-not-allowed", "blocked-file", "invitation-not-allowed", "invitation-gone", "verification-code-invalid", "verification-exhausted", "not-found", "method-not-allowed", "transfer-gone", "download-locked", "transfer-password-invalid", "transfer-locked", "state-conflict", "already-exists", "upload-incomplete", "checksum-mismatch", "transfer-too-large", "payload-too-large", "range-not-satisfiable", "unsupported-media-type", "quota-exceeded", "rate-limited", "maintenance", "mail-unavailable", "unknown-tenant", "setup-already-done", "setup-token-invalid", "new-master-key-missing", "recipient-domain-refused", "confidentiality-rule-violated", "abuse-threshold-blocked", "recipient-verification-required", "max-downloads-reached", "reply-not-allowed", "access-link-invalid", "extension-limit-reached", "tenant-in-setup", "setup-incomplete", "setup-already-complete", "unknown-background-preset", "system-smtp-unavailable", "admin-already-active", "update-check-disabled", "provisioning-token-invalid", "provisioning-scope-exceeded", "read-only-role", "sso-required", "sso-not-available", "sso-not-configured", "sso-issuer-not-allowed", "sso-domain-conflict", "sso-mfa-required", "proof-not-available", "import-invalid", "import-schema-unsupported", "drop-link-invalid", "drop-link-limit-reached", "link-only-forbidden", "link-only-conflict", "e2e-forbidden", "e2e-required", "e2e-archive-unavailable", "e2e-format-invalid", "secret-gone", "secret-proof-invalid", "secrets-disabled", "secret-file-not-allowed", "secret-file-too-large", "secret-duration-not-offered", "secret-email-not-allowed", "secret-limit-reached", "secret-format-invalid", "secret-passphrase-required", "internal-error"];
+export const problemCodeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProblemCode"]> = ["validation-failed", "unauthenticated", "invalid-credentials", "forbidden", "csrf-invalid", "deposit-not-allowed", "ip-not-allowed", "blocked-file", "invitation-not-allowed", "invitation-gone", "verification-code-invalid", "verification-exhausted", "not-found", "method-not-allowed", "transfer-gone", "download-locked", "transfer-password-invalid", "transfer-locked", "state-conflict", "already-exists", "upload-incomplete", "checksum-mismatch", "transfer-too-large", "payload-too-large", "range-not-satisfiable", "unsupported-media-type", "quota-exceeded", "rate-limited", "maintenance", "mail-unavailable", "unknown-tenant", "setup-already-done", "setup-token-invalid", "new-master-key-missing", "recipient-domain-refused", "confidentiality-rule-violated", "abuse-threshold-blocked", "recipient-verification-required", "max-downloads-reached", "reply-not-allowed", "access-link-invalid", "extension-limit-reached", "tenant-in-setup", "setup-incomplete", "setup-already-complete", "unknown-background-preset", "system-smtp-unavailable", "admin-already-active", "update-check-disabled", "provisioning-token-invalid", "provisioning-scope-exceeded", "read-only-role", "sso-required", "sso-not-available", "sso-not-configured", "sso-issuer-not-allowed", "sso-domain-conflict", "sso-mfa-required", "proof-not-available", "import-invalid", "import-schema-unsupported", "drop-link-invalid", "drop-link-limit-reached", "link-only-forbidden", "link-only-conflict", "e2e-forbidden", "e2e-required", "e2e-archive-unavailable", "e2e-format-invalid", "secret-gone", "secret-proof-invalid", "secrets-disabled", "secret-file-not-allowed", "secret-file-too-large", "secret-duration-not-offered", "secret-email-not-allowed", "secret-limit-reached", "secret-format-invalid", "secret-passphrase-required", "express-secrets-disabled", "express-secret-limit-reached", "express-token-not-allowed", "internal-error"];
 export const languageValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Language"]> = ["fr", "en"];
 export const healthStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Health"]["status"]> = ["ok", "degraded"];
 export const componentHealthValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ComponentHealth"]> = ["ok", "unavailable"];
@@ -18321,8 +18985,8 @@ export const mailDnsCheckDkimStatusValues: ReadonlyArray<FlattenedDeepRequired<c
 export const emailTemplateKeyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["EmailTemplateKey"]> = ["verification-code", "transfer-notification", "transfer-confirmation", "first-download", "file-problems", "file-not-scanned", "invitation", "quota-warning", "quota-reached", "antivirus-unavailable", "expiry-reminder", "abuse-alert", "abuse-report", "my-transfers-link", "recipient-verification-code", "secret-notification", "secret-receipt"];
 export const transferOriginValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferOrigin"]> = ["internal", "external", "api", "internal_remote", "reply", "drop_link"];
 export const blocklistKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BlocklistKind"]> = ["email", "domain", "sha256"];
-export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.instance_disabled", "antivirus.scans_released", "antivirus.self_test", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in", "admin.invited", "tenant.setup_completed", "tenant.provisioned", "tenant.provision_refused", "provisioning_token.created", "provisioning_token.revoked", "admin.identity_linked", "admin.identity_unlinked", "tenant.sso_updated", "tenant.sso_deleted", "tenant.exported", "tenant.imported", "drop_link.created", "drop_link.updated", "drop_link.rotated", "drop_link.revoked", "transfer.proof_downloaded", "proof_key.created", "proof_key.retired", "transfer.link_reissued", "secret.created", "secret.sent", "secret.revealed", "secret.file_downloaded", "secret.expired", "secret.deleted", "secret.locked", "secret.settings_updated"];
-export const auditEventActorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditEvent"]["actor"]["kind"]> = ["depositor", "recipient", "admin", "api_token", "system", "provisioning_token"];
+export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.instance_disabled", "antivirus.scans_released", "antivirus.self_test", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in", "admin.invited", "tenant.setup_completed", "tenant.provisioned", "tenant.provision_refused", "provisioning_token.created", "provisioning_token.revoked", "admin.identity_linked", "admin.identity_unlinked", "tenant.sso_updated", "tenant.sso_deleted", "tenant.exported", "tenant.imported", "drop_link.created", "drop_link.updated", "drop_link.rotated", "drop_link.revoked", "transfer.proof_downloaded", "proof_key.created", "proof_key.retired", "transfer.link_reissued", "secret.created", "secret.sent", "secret.revealed", "secret.file_downloaded", "secret.expired", "secret.deleted", "secret.locked", "secret.settings_updated", "secret.looked_up", "secret.express_purged"];
+export const auditEventActorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditEvent"]["actor"]["kind"]> = ["depositor", "recipient", "admin", "api_token", "system", "provisioning_token", "anonymous"];
 export const tenantStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantStats"]["period"]> = ["7d", "30d", "12m"];
 export const globalStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["GlobalStats"]["period"]> = ["7d", "30d", "12m"];
 export const maintenanceSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Maintenance"]["source"]> = ["none", "environment", "admin"];
@@ -18346,9 +19010,11 @@ export const secretCreateDeliveryValues: ReadonlyArray<FlattenedDeepRequired<com
 export const secretCreatedStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecretCreated"]["state"]> = ["pending", "active"];
 export const secretDeliveryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Secret"]["delivery"]> = ["link", "email"];
 export const secretEndReasonValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Secret"]["endReason"]> = ["read", "expired", "deleted", "locked"];
-export const adminSecretCreatorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AdminSecret"]["creatorKind"]> = ["internal", "internal_remote", "external", "api_token"];
+export const adminSecretCreatorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AdminSecret"]["creatorKind"]> = ["internal", "internal_remote", "external", "api_token", "anonymous"];
 export const secretStatusStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecretStatus"]["state"]> = ["active"];
-export const securityEventTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecurityEventType"]> = ["verification_code_invalid", "transfer_password_invalid", "admin_login_failed", "api_token_invalid", "unknown_fqdn", "deposit_refused", "rate_limited", "metrics_token_invalid", "access_link_invalid", "provisioning_token_invalid", "sso_failed", "drop_link_invalid", "secret_invalid", "secret_proof_invalid"];
+export const expressSecretDurationValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ExpressSecretDuration"]> = ["1h", "1d", "7d"];
+export const expressSecretFeaturesMaxCharsValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ExpressSecretFeatures"]["maxChars"]> = [10000];
+export const securityEventTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecurityEventType"]> = ["verification_code_invalid", "transfer_password_invalid", "admin_login_failed", "api_token_invalid", "unknown_fqdn", "deposit_refused", "rate_limited", "metrics_token_invalid", "access_link_invalid", "provisioning_token_invalid", "sso_failed", "drop_link_invalid", "secret_invalid", "secret_proof_invalid", "express_refused"];
 export const tenantConfigExportLegalDocumentsDocumentValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantConfigExport"]["legalDocuments"]["document"]> = ["legal-notice", "privacy-policy"];
 export const recipientVerificationStartPurposeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RecipientVerificationStart"]["purpose"]> = ["download", "reply"];
 export const abuseReportCategoryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AbuseReportCategory"]> = ["malware", "phishing", "illegal_content", "spam", "unknown_sender", "other"];

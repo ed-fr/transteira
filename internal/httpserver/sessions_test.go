@@ -282,6 +282,12 @@ func TestRoutePoliciesMatchSpecSecurity(t *testing.T) {
 				if !declared || !p.meSession || p.meCSRF != meCSRF || p.depositSession || p.csrf || p.apiToken {
 					t.Errorf("%s (%s): route policy %+v, want meSession and meCSRF=%v only", pattern, op.OperationID, p, meCSRF)
 				}
+			case token && !session:
+				// An optional token (since 2.3): anonymous, or the token;
+				// without token, the cross-site checks.
+				if !declared || !p.apiToken || !p.sameOrigin || p.depositSession || p.csrf || p.meSession || p.meCSRF {
+					t.Errorf("%s (%s): route policy %+v, want apiToken and sameOrigin only", pattern, op.OperationID, p)
+				}
 			case !session:
 				if declared && (p.depositSession || p.csrf || p.apiToken || p.meSession || p.meCSRF) {
 					t.Errorf("%s (%s): route policy requires a session or a token, the spec does not", pattern, op.OperationID)
@@ -321,17 +327,21 @@ func myTransfersSecurity(security *[]map[string][]string) (me, csrf bool) {
 // csrf), token when apiToken is its alternative. ok is false for any
 // combination the route policies cannot express: the deposit session must
 // be an alternative of its own (with or without csrfToken), apiToken an
-// alternative of its own and only beside the deposit session. The
-// alternatives without either (admin session, none) are not read.
+// alternative of its own and only beside the deposit session or, since
+// 2.3, beside the empty alternative (an optional token). The alternatives
+// without either (admin session, none) are not read.
 func depositSecurity(security *[]map[string][]string) (session, csrf, token, ok bool) {
 	if security == nil {
 		return false, false, false, true
 	}
+	anonymous := false
 	for _, alt := range *security {
 		_, s := alt["depositSession"]
 		_, c := alt["csrfToken"]
 		_, k := alt["apiToken"]
 		switch {
+		case len(alt) == 0:
+			anonymous = true
 		case s && len(alt) == 1:
 			session = true
 		case s && c && len(alt) == 2:
@@ -342,5 +352,5 @@ func depositSecurity(security *[]map[string][]string) (session, csrf, token, ok 
 			return false, false, false, false
 		}
 	}
-	return session, csrf, token, !token || session
+	return session, csrf, token, !token || session != anonymous
 }

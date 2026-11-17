@@ -109,7 +109,11 @@ administrators, not by the firewall.
   `ignoreregex` matches only the exact line TransTeira writes for them
   (truncated ID, `trf_` for a transfer or, since 2.1, `sec_` for a one-time
   secret, then the scope, nothing after), so a value forged
-  elsewhere on the line cannot use it to escape a ban. Every other
+  elsewhere on the line cannot use it to escape a ban. Since 2.3 the
+  `scope="express_token"` line (hourly creation limit of an API token on
+  express secrets) is ignored the same way, and the `express_refused` event
+  is not in `_events` (a state of the tenant, not a client fault), while
+  `scope="express_ip"` (anonymous flood) still counts. Every other
   `rate_limited` scope still counts.
 - Since 2.1 the `secret_invalid` (unknown one-time secret link) and `secret_proof_invalid` (wrong
   key or passphrase proof, with a `reason`) events count as failures like the other ones: the

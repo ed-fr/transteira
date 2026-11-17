@@ -136,9 +136,11 @@ func (h errorHandlers) responseError(w http.ResponseWriter, r *http.Request, err
 		return
 	}
 	p := problem.From(err)
-	if p.Code == problem.CodeProvisioningTokenInvalid {
-		// A provisioning token refused by the operation itself (revoked or
-		// expired since the middleware accepted it) gets the same
+	if _, token := middleware.APITokenFrom(r.Context()); p.Code == problem.CodeProvisioningTokenInvalid ||
+		(token && p.Code == problem.CodeInvalidCredentials) {
+		// A provisioning token, or an API token (an express secret
+		// creation, since 2.3), refused by the operation itself (revoked
+		// or expired since the middleware accepted it) gets the same
 		// challenge as one refused by the middleware (RFC 6750).
 		w.Header().Set("WWW-Authenticate", challengeInvalidToken)
 	}

@@ -682,6 +682,9 @@ type AbuseReportData struct {
 	TransferID string
 	// SenderEmail is the address of the sender of the transfer.
 	SenderEmail string
+	// SecretID is the sec_ identifier of the reported express secret; when
+	// set, TransferID and SenderEmail are empty. Never the link or token.
+	SecretID string
 	// Category is one of the AbuseCategory constants; an unknown value is
 	// shown as "other".
 	Category string

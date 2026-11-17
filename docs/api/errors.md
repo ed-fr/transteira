@@ -912,7 +912,7 @@ use to ban the client IP.
 
 - **HTTP status:** 429 Too Many Requests
 - **Since:** 2.3.
-- **Meaning:** the entity already holds its maximum number of live (unread, unexpired) express secrets (`expressMaxPending`, 1 000 by default, counting anonymous and API token ones together), and the call is anonymous: anonymous creations are refused until some are read or expire, while creations with an API token are still accepted. No `Retry-After`: the secrets free up at no predictable time. Written to the security log (`express_refused`, `reason=limit`). Not to be confused with `rate-limited`, the per-client (`expressPerHourPerIp`) or per-token (`expressPerHourPerToken`) hourly limit, which carries `Retry-After`.
+- **Meaning:** the entity already holds its maximum number of live (unread, unexpired) express secrets (`expressMaxPending`, 1 000 by default, counting anonymous and API token ones together), and the call is anonymous: anonymous creations are refused until some are read or expire, while creations with an API token are still accepted. No `Retry-After`: the secrets free up at no predictable time. The same answer is given to a new anonymous client while the per-client limiter of the entity is saturated (its 100 000 tracked clients at their hourly limit), a state of the entity rather than a fault of that client. Written to the security log (`express_refused`, `reason=limit`). Not to be confused with `rate-limited`, the per-client (`expressPerHourPerIp`) or per-token (`expressPerHourPerToken`) hourly limit, which carries `Retry-After`.
 - **Typical endpoints:** `POST /express-secrets`.
 - **What to do:** try again later, use an API token of the entity, or ask the administrators (who can raise `expressMaxPending` or delete secrets).
 

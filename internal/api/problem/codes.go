@@ -188,6 +188,12 @@ const (
 	CodeSecretFormatInvalid Code = "secret-format-invalid"
 	// CodeSecretPassphraseRequired means the tenant requires a passphrase for the e-mail delivery of a secret and none was given (since 2.1).
 	CodeSecretPassphraseRequired Code = "secret-passphrase-required"
+	// CodeExpressSecretsDisabled means express secrets cannot be created or read: the instance kill switch is on, or the anonymous mode is off for the entity (since 2.3).
+	CodeExpressSecretsDisabled Code = "express-secrets-disabled"
+	// CodeExpressSecretLimitReached means the entity holds its maximum number of live express secrets and the creation is anonymous (since 2.3).
+	CodeExpressSecretLimitReached Code = "express-secret-limit-reached"
+	// CodeExpressTokenNotAllowed means the API token has not been allowed to create express secrets (since 2.3).
+	CodeExpressTokenNotAllowed Code = "express-token-not-allowed"
 	// CodeInternalError means an unexpected server-side error occurred.
 	CodeInternalError Code = "internal-error"
 )
@@ -285,6 +291,9 @@ var catalog = map[Code]Definition{
 	CodeSecretLimitReached:            {http.StatusTooManyRequests, "Secret limit reached"},
 	CodeSecretFormatInvalid:           {http.StatusBadRequest, "Malformed sealed content"},
 	CodeSecretPassphraseRequired:      {http.StatusForbidden, "Passphrase required for the e-mail delivery"},
+	CodeExpressSecretsDisabled:        {http.StatusForbidden, "Express secrets not available"},
+	CodeExpressSecretLimitReached:     {http.StatusTooManyRequests, "Too many express secrets pending"},
+	CodeExpressTokenNotAllowed:        {http.StatusForbidden, "Token not allowed to create express secrets"},
 	CodeInternalError:                 {http.StatusInternalServerError, "Internal error"},
 }
 

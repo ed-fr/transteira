@@ -47,7 +47,8 @@
     "admin": "Administrator",
     "api_token": "API token",
     "system": "System",
-    "provisioning_token": "Provisioning token"
+    "provisioning_token": "Provisioning token",
+    "anonymous": "Anonymous"
   },
   "objectKinds": {
     "transfer": "Transfer",
@@ -241,7 +242,9 @@
       "expired": "Secret expired unread",
       "deleted": "Secret deleted",
       "locked": "Secret locked after wrong proofs",
-      "settings_updated": "Secrets settings updated"
+      "settings_updated": "Secrets settings updated",
+      "looked_up": "Secret looked up from a link",
+      "express_purged": "Anonymous express secrets purged"
     }
   }
 }

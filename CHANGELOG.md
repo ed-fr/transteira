@@ -6,6 +6,31 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Express secret, server side (specification section 22.2): `POST /api/v1/express-secrets`
+  creates a one-time text secret without any authentication, or with an API token that has the
+  new `expressAllowed` opt-in. The text is sealed in the browser as for 2.1 secrets (restricted
+  profile of `e2e-format.md` section 3.3.9); it is read once through the existing
+  `/secret-links/{token}` endpoints and `/s/` page, whose status now tells `express` and
+  `anonymous`. Off by default per entity (`expressEnabled`), with an instance kill switch
+  `TT_EXPRESS_SECRETS_DISABLED`; closing the service also blocks the reading of the secrets it
+  covers. Limits: 10 creations per hour per client (IPv4 or IPv6 /64), 100 per hour per token,
+  1 000 live express secrets per entity (refusing anonymous creations only), all adjustable.
+- Admin lookup of a secret from a pasted link (`POST /admin/tenants/{tenantId}/secrets/lookup`),
+  purge of the live anonymous express secrets of an entity
+  (`POST /admin/tenants/{tenantId}/express-secrets/purge`) and abuse reports on an express secret
+  (`POST /secret-links/{token}/abuse-reports`).
+- Security log event `express_refused` and `rate_limited` scopes `express_ip` and
+  `express_token`; the shipped fail2ban and CrowdSec rules count `express_ip` only.
+- Migration 0036 (express settings of the entities, `secrets.express`, `api_tokens.express_allowed`,
+  abuse reports on secrets).
+
+### Changed
+
+- `AbuseReport` of the admin API: `transferId` and `senderEmail` are no longer required (a report
+  on a secret has neither) and `secretId` is added.
+
 ## [2.2.0] - 2026-11-11
 
 An installer for a blank Debian server, on top of 2.1. `install.sh`, a new signed asset of each

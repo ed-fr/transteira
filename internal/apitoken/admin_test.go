@@ -391,3 +391,73 @@ func TestAdminStoreFailures(t *testing.T) {
 		t.Errorf("token after a failing audit = %+v", list)
 	}
 }
+
+// TestAdminExpressAllowed checks the express secret opt-in (since 2.3): off
+// by default, set at creation, switched by an update, audited, and carried
+// by the authentication result.
+func TestAdminExpressAllowed(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		ev := newEnv(t, e)
+		svc := ev.svc
+		ip := netip.MustParseAddr("192.0.2.99")
+		cidrs := []string{"192.0.2.0/24"}
+
+		plain, err := svc.Create(ctx, ev.delegA, ev.a.ID, CreateInput{Name: "Plain", AllowedCIDRs: cidrs}, adminIP)
+		if err != nil || plain.Token.ExpressAllowed {
+			t.Fatalf("Create(default) = %+v, %v", plain.Token, err)
+		}
+		ev.clock.Advance(time.Second)
+		opted, err := svc.Create(ctx, ev.delegA, ev.a.ID, CreateInput{Name: "Express", AllowedCIDRs: cidrs, ExpressAllowed: true}, adminIP)
+		if err != nil || !opted.Token.ExpressAllowed {
+			t.Fatalf("Create(express) = %+v, %v", opted.Token, err)
+		}
+		if p, err := svc.Authenticate(ctx, ev.a.ID, "Bearer "+plain.Secret, ip); err != nil || p.ExpressAllowed {
+			t.Errorf("Authenticate(plain) = %+v, %v", p, err)
+		}
+		if p, err := svc.Authenticate(ctx, ev.a.ID, "Bearer "+opted.Secret, ip); err != nil || !p.ExpressAllowed {
+			t.Errorf("Authenticate(express) = %+v, %v", p, err)
+		}
+
+		on, off := true, false
+		ev.clock.Advance(time.Second)
+		upd, err := svc.Update(ctx, ev.delegA, ev.a.ID, plain.Token.ID, UpdateInput{ExpressAllowed: &on}, adminIP)
+		if err != nil || !upd.ExpressAllowed {
+			t.Fatalf("Update(on) = %+v, %v", upd, err)
+		}
+		ev.clock.Advance(time.Second)
+		// Keeping the flag when the field is absent.
+		if upd, err = svc.Update(ctx, ev.delegA, ev.a.ID, plain.Token.ID, UpdateInput{Name: strPtr("Plain2")}, adminIP); err != nil || !upd.ExpressAllowed {
+			t.Fatalf("Update(name) = %+v, %v", upd, err)
+		}
+		ev.clock.Advance(time.Second)
+		if upd, err = svc.Update(ctx, ev.delegA, ev.a.ID, plain.Token.ID, UpdateInput{ExpressAllowed: &off}, adminIP); err != nil || upd.ExpressAllowed {
+			t.Fatalf("Update(off) = %+v, %v", upd, err)
+		}
+		if p, err := svc.Authenticate(ctx, ev.a.ID, "Bearer "+plain.Secret, ip); err != nil || p.ExpressAllowed {
+			t.Errorf("Authenticate(after off) = %+v, %v", p, err)
+		}
+
+		rows := ev.auditRows(t, ev.a.ID)
+		if len(rows) != 5 {
+			t.Fatalf("audit rows = %d, want 5", len(rows))
+		}
+		if _, ok := rows[0].details["expressAllowed"]; ok {
+			t.Errorf("created(default) details = %v", rows[0].details)
+		}
+		if rows[1].details["expressAllowed"] != true {
+			t.Errorf("created(express) details = %v", rows[1].details)
+		}
+		if rows[2].details["expressAllowed"] != true || !reflect.DeepEqual(rows[2].details["fields"], []any{"expressAllowed"}) {
+			t.Errorf("updated(on) details = %v", rows[2].details)
+		}
+		if _, ok := rows[3].details["expressAllowed"]; ok {
+			t.Errorf("updated(name) details = %v", rows[3].details)
+		}
+		if rows[4].details["expressAllowed"] != false {
+			t.Errorf("updated(off) details = %v", rows[4].details)
+		}
+	})
+}

@@ -49,6 +49,8 @@ var secretRE = regexp.MustCompile(`^tt_[0-9A-Za-z]{43}$`)
 var (
 	apiTokenMembers = []string{
 		"id", "name", "prefix", "allowedCidrs", "allowedSenders", "createdBy", "createdAt", "lastUsedAt", "expiresAt", "revokedAt",
+		// Since 2.3, the opt-in of the express secrets.
+		"expressAllowed",
 	}
 	apiTokenRequired = []string{"id", "name", "prefix", "allowedCidrs", "allowedSenders", "createdBy", "createdAt"}
 )

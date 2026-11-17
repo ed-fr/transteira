@@ -128,9 +128,13 @@
 
   async function checkTransfer(row: AbuseReport): Promise<void> {
     transferExists = undefined;
+    const transferId = row.transferId;
+    if (transferId === undefined) {
+      return;
+    }
     try {
       await adminApi.get('/admin/tenants/{tenantId}/transfers/{transferId}', {
-        path: { tenantId, transferId: row.transferId },
+        path: { tenantId, transferId },
       });
       transferExists = true;
     } catch (err) {
@@ -282,24 +286,32 @@
       <dd>{when(report.reportedAt)}</dd>
       <dt>{t('opsAbuse.detail.reporter')}</dt>
       <dd class="tt-break">{reporterText(report, t)}</dd>
-      <dt>{t('opsAbuse.detail.sender')}</dt>
-      <dd class="tt-break">{addressText(report.senderEmail, t)}</dd>
-      <dt>{t('opsAbuse.detail.transfer')}</dt>
-      <dd class="tt-break">
-        {#if transferExists === true}
-          <a
-            href={nav.href(`${tenantPath(tenantId, 'transfers')}/${encodeURIComponent(report.transferId)}`)}
-            use:nav.link
-          >
+      {#if report.senderEmail !== undefined}
+        <dt>{t('opsAbuse.detail.sender')}</dt>
+        <dd class="tt-break">{addressText(report.senderEmail, t)}</dd>
+      {/if}
+      {#if report.transferId !== undefined}
+        <dt>{t('opsAbuse.detail.transfer')}</dt>
+        <dd class="tt-break">
+          {#if transferExists === true}
+            <a
+              href={nav.href(`${tenantPath(tenantId, 'transfers')}/${encodeURIComponent(report.transferId)}`)}
+              use:nav.link
+            >
+              {report.transferId}
+            </a>
+          {:else}
             {report.transferId}
-          </a>
-        {:else}
-          {report.transferId}
-          {#if transferExists === false}
-            <span class="tt-text-muted">({t('opsAbuse.detail.transferGone')})</span>
+            {#if transferExists === false}
+              <span class="tt-text-muted">({t('opsAbuse.detail.transferGone')})</span>
+            {/if}
           {/if}
-        {/if}
-      </dd>
+        </dd>
+      {/if}
+      {#if report.secretId !== undefined}
+        <dt>{t('opsAbuse.detail.secret')}</dt>
+        <dd class="tt-break">{report.secretId}</dd>
+      {/if}
     </dl>
     <h3 class="tt-text-lg">{t('opsAbuse.detail.message')}</h3>
     {#if report.message !== undefined && report.message !== ''}

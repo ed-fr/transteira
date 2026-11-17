@@ -152,7 +152,8 @@ func TestAuditorOperations(t *testing.T) {
 	want := []string{
 		"adminLogout", "changeAdminPassword", "confirmTotpEnrollment", "disableTotp", "getAdminMe",
 		"getDropLink", "getTenant", "getTenantSso", "getTenantStats", "getTenantTransfer", "getTenantTransferProof", "listDropLinks", "listTenantAuditEvents",
-		"listTenantSecrets", "listTenantSecurityEvents", "listTenantTransfers", "listTenants", "startTotpEnrollment",
+		"listTenantSecrets", "listTenantSecurityEvents", "listTenantTransfers", "listTenants", "lookupTenantSecret",
+		"startTotpEnrollment",
 	}
 	got := make([]string, 0, len(AuditorOperations))
 	for op, ok := range AuditorOperations {

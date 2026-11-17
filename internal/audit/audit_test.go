@@ -102,15 +102,25 @@ func TestWriterRefusesSecrets(t *testing.T) {
 			t.Errorf("RecordTx(%s) = %v, want ErrSecretDetail", key, err)
 		}
 	}
+	// An identifier key is not a secret (since 2.3), but only exactly.
+	ev := event(audit.ActionAbuseReported)
+	ev.Details = map[string]any{"secretId": "sec_01JABCS3T4V5W6X7Y8Z9A0B1C2"}
+	if err := w.Record(ctx, ev); err != nil {
+		t.Errorf("Record(secretId) = %v", err)
+	}
+	ev.Details = map[string]any{"secretid": "x"}
+	if err := w.Record(ctx, ev); !errors.Is(err, audit.ErrSecretDetail) {
+		t.Errorf("Record(secretid) = %v, want ErrSecretDetail", err)
+	}
 	// A value JSON cannot encode is an error too.
-	ev := event(audit.ActionAdminLogin)
+	ev = event(audit.ActionAdminLogin)
 	ev.Details = map[string]any{"fields": func() {}}
 	if err := w.Record(ctx, ev); err == nil {
 		t.Error("Record(unencodable details) = nil, want an error")
 	}
 	page, err := db.AuditEvents().List(ctx, store.AuditFilter{})
-	if err != nil || len(page.Items) != 0 {
-		t.Errorf("List = %d items, %v, want none", len(page.Items), err)
+	if err != nil || len(page.Items) != 1 || page.Items[0].Action != string(audit.ActionAbuseReported) {
+		t.Errorf("List = %+v, %v, want the secretId event only", page.Items, err)
 	}
 }
 
@@ -337,4 +347,13 @@ func TestSystemActions(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestExpressSecretActions pins the 2.3 action names of the OpenAPI
+// AuditAction enumeration.
+func TestExpressSecretActions(t *testing.T) {
+	t.Parallel()
+	if audit.ActionSecretLookedUp != "secret.looked_up" || audit.ActionSecretExpressPurged != "secret.express_purged" {
+		t.Errorf("got %q and %q", audit.ActionSecretLookedUp, audit.ActionSecretExpressPurged)
+	}
 }

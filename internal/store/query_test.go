@@ -492,14 +492,15 @@ var tenantAllowlist = map[string]int{
 	`SELECT email FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`: 0,
 	// API tokens.
 	`INSERT INTO api_tokens (tenant_id, id, name, prefix, token_hash, allowed_cidrs, allowed_senders, created_by, ` +
-		`created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`created_at, expires_at, express_allowed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`SELECT ` + apiTokenColumns + ` FROM api_tokens WHERE tenant_id = ? AND id = ?`:                        0,
 	`SELECT ` + apiTokenColumns + ` FROM api_tokens WHERE tenant_id = ? AND token_hash = ?`:                0,
 	`SELECT ` + apiTokenColumns + ` FROM api_tokens WHERE tenant_id = ? ORDER BY created_at DESC, id DESC`: 0,
 	`SELECT count(*) FROM api_tokens WHERE tenant_id = ? AND id = ?`:                                       0,
 	`UPDATE api_tokens SET revoked_at = ? WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`:           1,
 	`UPDATE api_tokens SET name = COALESCE(?, name), allowed_cidrs = COALESCE(?, allowed_cidrs), ` +
-		`allowed_senders = COALESCE(?, allowed_senders) WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`: 3,
+		`allowed_senders = COALESCE(?, allowed_senders), express_allowed = COALESCE(?, express_allowed) ` +
+		`WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`: 4,
 	`UPDATE api_tokens SET last_used_at = ? ` +
 		`WHERE tenant_id = ? AND id = ? AND (last_used_at IS NULL OR last_used_at < ?)`: 1,
 	// Drop links (since 2.0).
@@ -646,8 +647,11 @@ var tenantAllowlist = map[string]int{
 	`SELECT created_at, total_bytes FROM transfers WHERE tenant_id = ? AND sender_email = ? AND created_at >= ? ` +
 		`ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
 	`INSERT INTO abuse_reports (tenant_id, id, transfer_id, recipient_link_id, sender_email, recipient_position, ` +
-		`reporter_email, reporter_verified, reporter_ip, category, message, status, note, created_at) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', '', ?)`: 0,
+		`reporter_email, reporter_verified, reporter_ip, category, message, status, note, created_at, secret_id) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', '', ?, ?)`: 0,
+	// Reports on express secrets (0036).
+	`SELECT count(*) FROM abuse_reports WHERE tenant_id = ? AND secret_id = ? AND created_at >= ?`:         0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND id = ? AND express`:                              0,
 	`SELECT count(*) FROM abuse_reports WHERE tenant_id = ? AND recipient_link_id = ? AND created_at >= ?`: 0,
 	`SELECT count(*) FROM abuse_reports WHERE tenant_id = ? AND recipient_link_id IS NULL AND transfer_id = ? ` +
 		`AND created_at >= ?`: 0,
@@ -819,11 +823,21 @@ var tenantAllowlist = map[string]int{
 	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL ` +
 		`AND state IN ('pending', 'active')`: 0,
 	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND created_at > ?`: 0,
-	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND state IN ('pending', 'active')`:          0,
-	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND created_at > ?`:                          0,
-	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND id = ?`:                                          0,
-	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND token_hash = ?`:                                  0,
-	`SELECT id, state, expires_at, end_reason, key_verifier FROM secrets WHERE tenant_id = ? AND token_hash = ?`:        0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND NOT express ` +
+		`AND state IN ('pending', 'active')`: 0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND NOT express AND created_at > ?`: 0,
+	// Express secrets (0036).
+	`INSERT INTO secrets (id, tenant_id, token_hash, state, creator_kind, api_token_id, delivery, verifier, ` +
+		`key_verifier, text_sealed, text_key_id, duration_code, created_at, activated_at, expires_at, express) ` +
+		`VALUES (?, ?, ?, 'active', ?, ?, 'link', ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 1,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND express AND state = 'active' AND expires_at > ?`: 0,
+	`SELECT count(*), min(created_at) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND express ` +
+		`AND created_at > ?`: 0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND express AND creator_kind = 'anonymous' ` +
+		`AND state = 'active' ORDER BY id LIMIT ?`: 0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND id = ?`:                                   0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND token_hash = ?`:                           0,
+	`SELECT id, state, expires_at, end_reason, key_verifier FROM secrets WHERE tenant_id = ? AND token_hash = ?`: 0,
 	`UPDATE secrets SET failed_proofs = failed_proofs + 1 ` +
 		`WHERE tenant_id = ? AND id = ? AND state = 'active' AND expires_at > ? AND failed_proofs < 5`: 0,
 	`SELECT failed_proofs, verifier, text_sealed, text_key_id, file_metadata, file_size ` +
@@ -888,6 +902,10 @@ var reviewedAllowlist = map[string]string{
 	`SELECT n.status, n.secrets_enabled, n.secret_durations, n.secret_file_allowed, n.secret_file_max_bytes, ` +
 		`n.secret_email_allowed, n.secret_email_requires_passphrase, n.storage_quota_bytes ` +
 		`FROM secrets s JOIN tenants n ON n.id = s.tenant_id WHERE s.tenant_id = ? AND s.id = ?`: reasonSecretSettings,
+	`SELECT n.status, n.setup_state, n.express_enabled, n.express_per_hour_token, n.express_max_pending ` +
+		`FROM secrets s JOIN tenants n ON n.id = s.tenant_id WHERE s.tenant_id = ? AND s.id = ?`: reasonExpressSettings,
+	`SELECT s.express, s.creator_kind, n.express_enabled ` +
+		`FROM secrets s JOIN tenants n ON n.id = s.tenant_id WHERE s.tenant_id = ? AND s.token_hash = ?`: reasonExpressGate,
 	`SELECT count(*) FROM transfers t JOIN tenants n ON n.id = t.tenant_id WHERE t.tenant_id = ? AND t.id = ? ` +
 		`AND n.status = 'active'`: reasonTransferTenantActive,
 	`SELECT ` + transferColumns + ` FROM transfers t WHERE t.tenant_id = ? AND (? = '' OR t.status = ?) ` +
@@ -1197,6 +1215,13 @@ var systemAllowlist = map[string]string{
 	`UPDATE tenants SET secrets_enabled = ?, secret_durations = ?, secret_default_duration = ?, ` +
 		`secret_file_allowed = ?, secret_file_max_bytes = ?, secret_email_allowed = ?, ` +
 		`secret_email_requires_passphrase = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
+	// Express secrets (0036).
+	`UPDATE tenants SET express_enabled = ?, express_per_hour_ip = ?, express_per_hour_token = ?, ` +
+		`express_max_pending = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
+	`UPDATE tenants SET express_enabled = COALESCE(?, express_enabled), ` +
+		`express_per_hour_ip = COALESCE(?, express_per_hour_ip), ` +
+		`express_per_hour_token = COALESCE(?, express_per_hour_token), ` +
+		`express_max_pending = COALESCE(?, express_max_pending), updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
 	`SELECT tenant_id, id, created_at FROM secrets WHERE state = 'pending' AND created_at <= ? ` +
 		`AND (created_at, tenant_id, id) > (?, ?, ?) ORDER BY created_at, tenant_id, id LIMIT ?`: reasonSecretSweep,
 	`SELECT tenant_id, id, expires_at FROM secrets WHERE state = 'active' AND expires_at <= ? ` +

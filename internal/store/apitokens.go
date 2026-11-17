@@ -30,13 +30,13 @@ const (
 
 // apiTokenColumns is the column list read by the API token queries.
 const apiTokenColumns = `id, name, prefix, token_hash, allowed_cidrs, allowed_senders, created_by, created_at, ` +
-	`last_used_at, expires_at, revoked_at`
+	`last_used_at, expires_at, revoked_at, express_allowed`
 
 // Statements of the APITokens repository.
 var (
 	qAPITokenInsert = tenantQuery(
 		`INSERT INTO api_tokens (tenant_id, id, name, prefix, token_hash, allowed_cidrs, allowed_senders, created_by,
-		created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		created_at, expires_at, express_allowed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	qAPITokenGet = tenantQuery(
 		`SELECT ` + apiTokenColumns + ` FROM api_tokens WHERE tenant_id = ? AND id = ?`)
 	qAPITokenGetByHash = tenantQuery(
@@ -47,7 +47,8 @@ var (
 	// argument keeps the current value.
 	qAPITokenUpdate = tenantQuery(
 		`UPDATE api_tokens SET name = COALESCE(?, name), allowed_cidrs = COALESCE(?, allowed_cidrs),
-		allowed_senders = COALESCE(?, allowed_senders) WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`)
+		allowed_senders = COALESCE(?, allowed_senders), express_allowed = COALESCE(?, express_allowed)
+		WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`)
 	qAPITokenCount = tenantQuery(
 		`SELECT count(*) FROM api_tokens WHERE tenant_id = ? AND id = ?`)
 	// qAPITokenRevoke only revokes a token once.
@@ -96,6 +97,10 @@ type APIToken struct {
 	// RevokedAt is the revocation time, zero while the token is not
 	// revoked.
 	RevokedAt time.Time
+	// ExpressAllowed lets the token create express secrets (since 2.3,
+	// threat model P91): an explicit opt-in of the admins, false by
+	// default and for the tokens created before 2.3.
+	ExpressAllowed bool
 }
 
 // Revoked reports whether the token was revoked.
@@ -141,6 +146,9 @@ type APITokenUpdate struct {
 	// AllowedSenders replace the allowed senders, nil to keep them; an
 	// empty non-nil slice removes the restriction.
 	AllowedSenders []string
+	// ExpressAllowed replaces the express secret opt-in of the token (since
+	// 2.3), nil to keep it.
+	ExpressAllowed *bool
 }
 
 // APITokens is the tenant-scoped repository of API tokens. Obtain it with
@@ -247,7 +255,7 @@ func scanAPIToken(row interface{ Scan(...any) error }) (APIToken, error) {
 		lastUsed, expires, revoke sql.NullInt64
 	)
 	err := row.Scan(&t.ID, &t.Name, &t.Prefix, &t.TokenHash, &cidrs, &senders, &t.CreatedBy, &created, &lastUsed,
-		&expires, &revoke)
+		&expires, &revoke, &t.ExpressAllowed)
 	if err != nil {
 		return APIToken{}, err
 	}
@@ -271,7 +279,8 @@ func nullTime(t time.Time) any {
 }
 
 // Create stores the new token t for tenant tid and returns it as stored
-// (ranges masked, senders normalized, creation time set). It returns
+// (ranges masked, senders normalized, creation time set, ExpressAllowed as
+// given). It returns
 // ErrInvalid for a malformed field (an expiry must follow the creation; a new token is neither used
 // nor revoked), ErrNotFound when the tenant does not exist and ErrConflict
 // when the identifier or the hash is already used.
@@ -313,7 +322,7 @@ func (r *APITokens) Create(ctx context.Context, tid tenant.ID, t APIToken) (APIT
 	}
 	err = sc.Tx(ctx, func(tx *ScopedTx) error {
 		_, err := tx.Exec(ctx, qAPITokenInsert, t.ID, t.Name, t.Prefix, t.TokenHash, doc, sendersDoc, t.CreatedBy,
-			toMillis(t.CreatedAt), nullTime(t.ExpiresAt))
+			toMillis(t.CreatedAt), nullTime(t.ExpiresAt), t.ExpressAllowed)
 		return err
 	})
 	if err != nil {
@@ -360,9 +369,9 @@ func (r *APITokens) List(ctx context.Context, tid tenant.ID) ([]APIToken, error)
 	})
 }
 
-// Update applies u to the token tokID of tenant tid and returns the token
-// as changed. It returns ErrInvalid for a malformed name, set of ranges or
-// set of senders,
+// Update applies u to the token tokID of tenant tid (the express secret
+// opt-in included, since 2.3) and returns the token as changed. It returns
+// ErrInvalid for a malformed name, set of ranges or set of senders,
 // ErrNotFound when the token does not exist (or belongs to another tenant)
 // and ErrConflict when it is revoked.
 func (r *APITokens) Update(ctx context.Context, tid tenant.ID, tokID string, u APITokenUpdate) (APIToken, error) {
@@ -372,9 +381,12 @@ func (r *APITokens) Update(ctx context.Context, tid tenant.ID, tokID string, u A
 	if u.Name != "" && !validAPITokenName(u.Name) {
 		return APIToken{}, invalid("name must be 1 to %d characters on one line", MaxAPITokenNameLen)
 	}
-	var name, doc, sendersDoc any
+	var name, doc, sendersDoc, express any
 	if u.Name != "" {
 		name = u.Name
+	}
+	if u.ExpressAllowed != nil {
+		express = *u.ExpressAllowed
 	}
 	if u.AllowedCIDRs != nil {
 		_, text, err := normalizeCIDRs(u.AllowedCIDRs)
@@ -391,7 +403,7 @@ func (r *APITokens) Update(ctx context.Context, tid tenant.ID, tokID string, u A
 		sendersDoc = text
 	}
 	return writeScopedValue(ctx, r.db, tid, "update api token", func(tx *ScopedTx) (APIToken, error) {
-		res, err := tx.Exec(ctx, qAPITokenUpdate, name, doc, sendersDoc, tokID)
+		res, err := tx.Exec(ctx, qAPITokenUpdate, name, doc, sendersDoc, express, tokID)
 		if err != nil {
 			return APIToken{}, err
 		}

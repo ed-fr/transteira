@@ -2,6 +2,7 @@ package tenantops
 
 import (
 	"context"
+	"crypto/sha256"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
+	"github.com/ed-fr/transteira/internal/tenant"
 )
 
 // TestListAbuseReports lists the reports of a tenant only, by status and
@@ -139,5 +141,51 @@ func TestUpdateAbuseReport(t *testing.T) {
 		f.errs["setAbuseReportStatus"] = store.ErrNotFound
 		_, err = ev.svc.UpdateAbuseReport(ctx, ev.adminA, ev.a.ID, r.ID, store.AbuseReportClosed, nil, clientIP)
 		wantErr(t, "vanished", err, ErrNotFound)
+	})
+}
+
+// TestSecretAbuseReport reads and closes a report that names an express
+// secret: no transfer and no sender, audited like any other report.
+func TestSecretAbuseReport(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		on := tenant.DefaultExpressSettings()
+		on.Enabled = true
+		_, err := ev.db.Tenants().SetExpressSettings(ctx, ev.a.ID, on)
+		mustNoErr(t, "express settings", err)
+		kv, v := sha256.Sum256([]byte("key")), sha256.Sum256([]byte("proof"))
+		cs, err := ev.db.Secrets(ev.vault).CreateExpress(ctx, ev.a.ID, store.CreateExpressSecret{
+			Verifier: v[:], KeyVerifier: kv[:], SealedText: strings.Repeat("TTE2sealed-text_", 4),
+			Duration: tenant.SecretDuration1d, Now: ev.clock.Now(),
+		})
+		mustNoErr(t, "create express", err)
+		rep, err := ev.db.AbuseReports().Create(ctx, ev.a.ID, store.AbuseReport{
+			SecretID: cs.Secret.ID, Category: store.AbuseCategorySpam, Message: "junk", ReporterIP: clientIP,
+		}, store.AbuseReportLimits{PerLinkPerDay: 1000, PerIPPerHour: 1000}, ev.clock.Now())
+		mustNoErr(t, "report", err)
+
+		got, err := ev.svc.GetAbuseReport(ctx, ev.adminA, ev.a.ID, rep.ID)
+		mustNoErr(t, "get", err)
+		if got.SecretID != cs.Secret.ID || got.TransferID != "" || got.SenderEmail != "" {
+			t.Errorf("got %+v", got)
+		}
+		page, err := ev.svc.ListAbuseReports(ctx, ev.adminA, ev.a.ID, store.AbuseReportOpen, 0, "")
+		mustNoErr(t, "list", err)
+		if len(page.Items) != 1 || page.Items[0].SecretID != cs.Secret.ID {
+			t.Errorf("list %+v", page.Items)
+		}
+		note := "handled"
+		got, err = ev.svc.UpdateAbuseReport(ctx, ev.adminA, ev.a.ID, rep.ID, store.AbuseReportClosed, &note, clientIP)
+		mustNoErr(t, "close", err)
+		if got.Status != store.AbuseReportClosed || got.Note != note || got.SecretID != cs.Secret.ID {
+			t.Errorf("closed %+v", got)
+		}
+		if n := len(ev.auditEvents(ev.a.ID, audit.ActionAbuseReportClosed)); n != 1 {
+			t.Errorf("closed audits = %d", n)
+		}
+		// Another tenant never sees it.
+		_, err = ev.svc.GetAbuseReport(ctx, ev.adminB, ev.b.ID, rep.ID)
+		wantErr(t, "other tenant", err, ErrNotFound)
 	})
 }

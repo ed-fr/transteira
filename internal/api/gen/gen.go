@@ -90,6 +90,7 @@ func (e AdminRole) Valid() bool {
 
 // Defines values for AdminSecretCreatorKind.
 const (
+	AdminSecretCreatorKindAnonymous      AdminSecretCreatorKind = "anonymous"
 	AdminSecretCreatorKindApiToken       AdminSecretCreatorKind = "api_token"
 	AdminSecretCreatorKindExternal       AdminSecretCreatorKind = "external"
 	AdminSecretCreatorKindInternal       AdminSecretCreatorKind = "internal"
@@ -99,6 +100,8 @@ const (
 // Valid indicates whether the value is a known member of the AdminSecretCreatorKind enum.
 func (e AdminSecretCreatorKind) Valid() bool {
 	switch e {
+	case AdminSecretCreatorKindAnonymous:
+		return true
 	case AdminSecretCreatorKindApiToken:
 		return true
 	case AdminSecretCreatorKindExternal:
@@ -286,8 +289,10 @@ const (
 	AuditActionSecretCreated                AuditAction = "secret.created"
 	AuditActionSecretDeleted                AuditAction = "secret.deleted"
 	AuditActionSecretExpired                AuditAction = "secret.expired"
+	AuditActionSecretExpressPurged          AuditAction = "secret.express_purged"
 	AuditActionSecretFileDownloaded         AuditAction = "secret.file_downloaded"
 	AuditActionSecretLocked                 AuditAction = "secret.locked"
+	AuditActionSecretLookedUp               AuditAction = "secret.looked_up"
 	AuditActionSecretRevealed               AuditAction = "secret.revealed"
 	AuditActionSecretSent                   AuditAction = "secret.sent"
 	AuditActionSecretSettingsUpdated        AuditAction = "secret.settings_updated"
@@ -466,9 +471,13 @@ func (e AuditAction) Valid() bool {
 		return true
 	case AuditActionSecretExpired:
 		return true
+	case AuditActionSecretExpressPurged:
+		return true
 	case AuditActionSecretFileDownloaded:
 		return true
 	case AuditActionSecretLocked:
+		return true
+	case AuditActionSecretLookedUp:
 		return true
 	case AuditActionSecretRevealed:
 		return true
@@ -568,6 +577,7 @@ func (e AuditAction) Valid() bool {
 // Defines values for AuditEventActorKind.
 const (
 	AuditEventActorKindAdmin             AuditEventActorKind = "admin"
+	AuditEventActorKindAnonymous         AuditEventActorKind = "anonymous"
 	AuditEventActorKindApiToken          AuditEventActorKind = "api_token"
 	AuditEventActorKindDepositor         AuditEventActorKind = "depositor"
 	AuditEventActorKindProvisioningToken AuditEventActorKind = "provisioning_token"
@@ -579,6 +589,8 @@ const (
 func (e AuditEventActorKind) Valid() bool {
 	switch e {
 	case AuditEventActorKindAdmin:
+		return true
+	case AuditEventActorKindAnonymous:
 		return true
 	case AuditEventActorKindApiToken:
 		return true
@@ -832,6 +844,42 @@ func (e ExpiryDays) Valid() bool {
 	case N30:
 		return true
 	case N7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ExpressSecretDuration.
+const (
+	ExpressSecretDurationN1d ExpressSecretDuration = "1d"
+	ExpressSecretDurationN1h ExpressSecretDuration = "1h"
+	ExpressSecretDurationN7d ExpressSecretDuration = "7d"
+)
+
+// Valid indicates whether the value is a known member of the ExpressSecretDuration enum.
+func (e ExpressSecretDuration) Valid() bool {
+	switch e {
+	case ExpressSecretDurationN1d:
+		return true
+	case ExpressSecretDurationN1h:
+		return true
+	case ExpressSecretDurationN7d:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ExpressSecretFeaturesMaxChars.
+const (
+	N10000 ExpressSecretFeaturesMaxChars = 10000
+)
+
+// Valid indicates whether the value is a known member of the ExpressSecretFeaturesMaxChars enum.
+func (e ExpressSecretFeaturesMaxChars) Valid() bool {
+	switch e {
+	case N10000:
 		return true
 	default:
 		return false
@@ -1108,6 +1156,9 @@ const (
 	ProblemCodeE2eForbidden                  ProblemCode = "e2e-forbidden"
 	ProblemCodeE2eFormatInvalid              ProblemCode = "e2e-format-invalid"
 	ProblemCodeE2eRequired                   ProblemCode = "e2e-required"
+	ProblemCodeExpressSecretLimitReached     ProblemCode = "express-secret-limit-reached"
+	ProblemCodeExpressSecretsDisabled        ProblemCode = "express-secrets-disabled"
+	ProblemCodeExpressTokenNotAllowed        ProblemCode = "express-token-not-allowed"
 	ProblemCodeExtensionLimitReached         ProblemCode = "extension-limit-reached"
 	ProblemCodeForbidden                     ProblemCode = "forbidden"
 	ProblemCodeImportInvalid                 ProblemCode = "import-invalid"
@@ -1208,6 +1259,12 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeE2eFormatInvalid:
 		return true
 	case ProblemCodeE2eRequired:
+		return true
+	case ProblemCodeExpressSecretLimitReached:
+		return true
+	case ProblemCodeExpressSecretsDisabled:
+		return true
+	case ProblemCodeExpressTokenNotAllowed:
 		return true
 	case ProblemCodeExtensionLimitReached:
 		return true
@@ -1640,6 +1697,7 @@ const (
 	SecurityEventTypeApiTokenInvalid          SecurityEventType = "api_token_invalid"
 	SecurityEventTypeDepositRefused           SecurityEventType = "deposit_refused"
 	SecurityEventTypeDropLinkInvalid          SecurityEventType = "drop_link_invalid"
+	SecurityEventTypeExpressRefused           SecurityEventType = "express_refused"
 	SecurityEventTypeMetricsTokenInvalid      SecurityEventType = "metrics_token_invalid"
 	SecurityEventTypeProvisioningTokenInvalid SecurityEventType = "provisioning_token_invalid"
 	SecurityEventTypeRateLimited              SecurityEventType = "rate_limited"
@@ -1663,6 +1721,8 @@ func (e SecurityEventType) Valid() bool {
 	case SecurityEventTypeDepositRefused:
 		return true
 	case SecurityEventTypeDropLinkInvalid:
+		return true
+	case SecurityEventTypeExpressRefused:
 		return true
 	case SecurityEventTypeMetricsTokenInvalid:
 		return true
@@ -2407,7 +2467,7 @@ func (e AppendUploadChunkParamsTusResumable) Valid() bool {
 	}
 }
 
-// AbuseReport defines model for AbuseReport.
+// AbuseReport A report on a transfer (`transferId`) or, since 2.3, on an express secret (`secretId`): exactly one of the two is present.
 type AbuseReport struct {
 	Category AbuseReportCategory `json:"category"`
 	ClosedAt *time.Time          `json:"closedAt,omitempty"`
@@ -2430,12 +2490,15 @@ type AbuseReport struct {
 	// ReporterVerified The reporter proved being the recipient of the link (`__Host-tt_rv`).
 	ReporterVerified bool `json:"reporterVerified"`
 
-	// SenderEmail Sender of the reported transfer, or the pseudonym `erased-<16 hex>` after a GDPR erasure.
-	SenderEmail string            `json:"senderEmail"`
+	// SecretId Since 2.3. Reported express secret (`reportSecretAbuse`; it may have ended since).
+	SecretId *string `json:"secretId,omitempty"`
+
+	// SenderEmail Sender of the reported transfer, or the pseudonym `erased-<16 hex>` after a GDPR erasure. Since 2.3 absent for a report on an express secret (no creator address).
+	SenderEmail *string           `json:"senderEmail,omitempty"`
 	Status      AbuseReportStatus `json:"status"`
 
-	// TransferId Reported transfer (it may have expired or been deleted since).
-	TransferId string `json:"transferId"`
+	// TransferId Reported transfer (it may have expired or been deleted since). Since 2.3 absent for a report on an express secret; always present before 2.3.
+	TransferId *string `json:"transferId,omitempty"`
 }
 
 // AbuseReportCategory defines model for AbuseReportCategory.
@@ -2682,7 +2745,9 @@ type AdminRole string
 
 // AdminSecret Since 2.1. A secret as the admins of the tenant see it: metadata only.
 type AdminSecret struct {
-	CreatedAt   time.Time              `json:"createdAt"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// CreatorKind Since 2.3, `anonymous` for an express secret created without credential; an express secret created with an API token is `api_token`.
 	CreatorKind AdminSecretCreatorKind `json:"creatorKind"`
 	Delivery    AdminSecretDelivery    `json:"delivery"`
 
@@ -2694,6 +2759,9 @@ type AdminSecret struct {
 
 	// ExpiresAt Absent while `pending`.
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+
+	// Express Since 2.3. An express secret (`createExpressSecret`): text only, link delivery, no passphrase. Always sent by a 2.3 server; absent means false.
+	Express *bool `json:"express,omitempty"`
 
 	// FileSize Declared ciphertext size of the file. Kept in a tombstone, where it describes what was declared.
 	FileSize *int64 `json:"fileSize,omitempty"`
@@ -2707,8 +2775,8 @@ type AdminSecret struct {
 	// Recipient With `email` delivery.
 	Recipient *Email `json:"recipient,omitempty"`
 
-	// SenderEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
-	SenderEmail Email `json:"senderEmail"`
+	// SenderEmail The creator address (with an API token, the declared sender). Since 2.3 absent for express secrets, which have no creator address (`anonymous`, and `api_token` with `express: true`); always present otherwise.
+	SenderEmail *Email `json:"senderEmail,omitempty"`
 
 	// State Since 2.1. `pending` (created, waiting for its file or its send call, purged after 1 hour)
 	// then `active` (the expiry clock runs), then one of `read`, `expired`, `deleted` or
@@ -2716,7 +2784,7 @@ type AdminSecret struct {
 	State SecretState `json:"state"`
 }
 
-// AdminSecretCreatorKind defines model for AdminSecret.CreatorKind.
+// AdminSecretCreatorKind Since 2.3, `anonymous` for an express secret created without credential; an express secret created with an API token is `api_token`.
 type AdminSecretCreatorKind string
 
 // AdminSecretDelivery defines model for AdminSecret.Delivery.
@@ -3012,7 +3080,10 @@ type ApiToken struct {
 
 	// ExpiresAt Optional expiry; `null` means the token never expires.
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
-	Id        string     `json:"id"`
+
+	// ExpressAllowed Since 2.3. The token may create express secrets (`createExpressSecret`); off by default, an explicit opt-in. Always sent by a 2.3 server; absent means false.
+	ExpressAllowed *bool  `json:"expressAllowed,omitempty"`
+	Id             string `json:"id"`
 
 	// LastUsedAt Last successful use of the token. Updated at most once a minute per token, so it may lag behind the real last use by up to a minute.
 	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
@@ -3033,7 +3104,10 @@ type ApiTokenCreate struct {
 	// AllowedSenders Optional; absent or empty allows any address of the tenant's internal domains.
 	AllowedSenders *AllowedSenders `json:"allowedSenders,omitempty"`
 	ExpiresAt      *time.Time      `json:"expiresAt,omitempty"`
-	Name           string          `json:"name"`
+
+	// ExpressAllowed Since 2.3. Allow the token to create express secrets. Default false.
+	ExpressAllowed *bool  `json:"expressAllowed,omitempty"`
+	Name           string `json:"name"`
 }
 
 // ApiTokenCreated defines model for ApiTokenCreated.
@@ -3054,7 +3128,10 @@ type ApiTokenCreated struct {
 
 	// ExpiresAt Optional expiry; `null` means the token never expires.
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
-	Id        string     `json:"id"`
+
+	// ExpressAllowed Since 2.3. The token may create express secrets (`createExpressSecret`); off by default, an explicit opt-in. Always sent by a 2.3 server; absent means false.
+	ExpressAllowed *bool  `json:"expressAllowed,omitempty"`
+	Id             string `json:"id"`
 
 	// LastUsedAt Last successful use of the token. Updated at most once a minute per token, so it may lag behind the real last use by up to a minute.
 	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
@@ -3140,6 +3217,7 @@ type ApiTokenUpdate = json.RawMessage
 // identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
 // a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
 // Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the domain of the recipient (`details.recipientDomain`; the address stays on the secret); `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
+// Since 2.3: `secret.created` of an express secret carries `details.express: true` and `details.creatorKind` `anonymous` (actor kind `anonymous`, id `-`, with the client IP) or `api_token` (actor the token, plus an `api_token.used` entry whose actor is the token, there being no sender address); the express settings changed through `updateSecretSettings` are named in `secret.settings_updated` like the others; `secret.looked_up` (object the found `sec_` ID, actor the admin) never carries the link nor the token; `secret.express_purged` (object kind `tenant`) carries `details.count` and replaces the per-secret `secret.deleted` of the purge; `abuse.reported` on an express secret carries `details.secretId`; `api_token.created` and `api_token.updated` carry `details.expressAllowed` when set or changed.
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
@@ -3209,11 +3287,12 @@ type AuditEvent struct {
 	// identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
 	// a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
 	// Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the domain of the recipient (`details.recipientDomain`; the address stays on the secret); `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
+	// Since 2.3: `secret.created` of an express secret carries `details.express: true` and `details.creatorKind` `anonymous` (actor kind `anonymous`, id `-`, with the client IP) or `api_token` (actor the token, plus an `api_token.used` entry whose actor is the token, there being no sender address); the express settings changed through `updateSecretSettings` are named in `secret.settings_updated` like the others; `secret.looked_up` (object the found `sec_` ID, actor the admin) never carries the link nor the token; `secret.express_purged` (object kind `tenant`) carries `details.count` and replaces the per-secret `secret.deleted` of the purge; `abuse.reported` on an express secret carries `details.secretId`; `api_token.created` and `api_token.updated` carry `details.expressAllowed` when set or changed.
 	Action AuditAction `json:"action"`
 	Actor  struct {
 		Id string `json:"id"`
 
-		// Kind Kind of the actor; since 1.2, `provisioning_token` for the tenants created through the provisioning API.
+		// Kind Kind of the actor; since 1.2, `provisioning_token` for the tenants created through the provisioning API; since 2.3, `anonymous` (id `-`) for an express secret created without credential.
 		Kind AuditEventActorKind `json:"kind"`
 	} `json:"actor"`
 	Details *map[string]interface{} `json:"details,omitempty"`
@@ -3229,7 +3308,7 @@ type AuditEvent struct {
 	TenantId *string `json:"tenantId,omitempty"`
 }
 
-// AuditEventActorKind Kind of the actor; since 1.2, `provisioning_token` for the tenants created through the provisioning API.
+// AuditEventActorKind Kind of the actor; since 1.2, `provisioning_token` for the tenants created through the provisioning API; since 2.3, `anonymous` (id `-`) for an express secret created without credential.
 type AuditEventActorKind string
 
 // AuditEventList defines model for AuditEventList.
@@ -3746,6 +3825,45 @@ type ExportedAsset struct {
 	MediaType  string `json:"mediaType"`
 }
 
+// ExpressSecretCreate Since 2.3. Creation of an express secret: the restricted profile of `SecretCreate` (docs/architecture/e2e-format.md, section 3.3.9). Link delivery, no passphrase, no file, no read receipt, no creator address: any other member is refused (`400 validation-failed`).
+type ExpressSecretCreate struct {
+	// EncryptedText The text sealed by the client under `K'` derived without passphrase, exactly as for `SecretCreate` (same bounds: 39 to 53 372 characters, `400 secret-format-invalid` for the keyless checks, the empty text included). The 10 000 code point limit of the text is enforced by the client; the server never sees the text.
+	EncryptedText SecretSealedText `json:"encryptedText"`
+
+	// ExpiresIn Since 2.3. Duration code of an express secret, from its creation (it is created `active`): `1h`, `1d` or `7d`. Fixed by the specification (section 22.2), independent of the durations a tenant offers to 2.1 secrets (`SecretSettings.durations`).
+	ExpiresIn ExpressSecretDuration `json:"expiresIn"`
+
+	// KeyVerifier SHA-256 of the key proof derived from the key K alone (docs/architecture/e2e-format.md 3.3.4), 64 lowercase hex characters.
+	KeyVerifier string `json:"keyVerifier"`
+
+	// Verifier SHA-256 of the proof derived from `K'` (here from `K` alone, no passphrase), 64 lowercase hex characters.
+	Verifier string `json:"verifier"`
+}
+
+// ExpressSecretDuration Since 2.3. Duration code of an express secret, from its creation (it is created `active`): `1h`, `1d` or `7d`. Fixed by the specification (section 22.2), independent of the durations a tenant offers to 2.1 secrets (`SecretSettings.durations`).
+type ExpressSecretDuration string
+
+// ExpressSecretFeatures Since 2.3. What the express secret page needs. No limit value is disclosed beyond the text length.
+type ExpressSecretFeatures struct {
+	// Durations Always `1h`, `1d`, `7d`.
+	Durations []ExpressSecretDuration `json:"durations"`
+
+	// Enabled Anonymous express secrets are offered: `SecretSettings.expressEnabled` of the tenant and the instance kill switch `TT_EXPRESS_SECRETS_DISABLED` off. When false, the page is not offered (an API token can still create express secrets unless the kill switch is on).
+	Enabled bool `json:"enabled"`
+
+	// MaxChars Largest text, in Unicode code points (what JavaScript `[...text].length` counts), checked by the client before sealing.
+	MaxChars ExpressSecretFeaturesMaxChars `json:"maxChars"`
+}
+
+// ExpressSecretFeaturesMaxChars Largest text, in Unicode code points (what JavaScript `[...text].length` counts), checked by the client before sealing.
+type ExpressSecretFeaturesMaxChars int
+
+// ExpressSecretPurgeResult Since 2.3. Answer of `purgeExpressSecrets`.
+type ExpressSecretPurgeResult struct {
+	// Deleted Live anonymous express secrets deleted by this call.
+	Deleted int `json:"deleted"`
+}
+
 // FileDeclaration defines model for FileDeclaration.
 type FileDeclaration struct {
 	// EncryptedMetadata Since 2.0. Required on every file of an end-to-end encrypted transfer (`endToEndEncrypted`), forbidden otherwise; `name` is then the generic `file-<n>.tte2` (n from 1, in order), `mediaType` and `path` are absent, `size` is the size of the ciphertext (at least 48 bytes) and `expectedSha256` its SHA-256.
@@ -3903,7 +4021,7 @@ type InstanceStatus struct {
 		// SecretFileBytes Since 2.1. Declared sizes of the stored one-time secret files, already counted in `storageUsedBytes`.
 		SecretFileBytes ByteSize `json:"secretFileBytes"`
 
-		// SecretsCreatedLast24h Since 2.1. One-time secrets created during the last 24 hours, among the secret rows still present (an unfinished secret is deleted after one hour, an ended one 30 days after its end).
+		// SecretsCreatedLast24h Since 2.1. One-time secrets created during the last 24 hours, among the secret rows still present (an unfinished secret is deleted after one hour, an ended one 30 days after its end). Since 2.3 express secrets are included.
 		SecretsCreatedLast24h int `json:"secretsCreatedLast24h"`
 
 		// SecretsLockedLast24h Since 2.1. One-time secrets locked after five wrong passphrase proofs during the last 24 hours.
@@ -4996,6 +5114,12 @@ type SecretList struct {
 	NextCursor *PageCursor `json:"nextCursor,omitempty"`
 }
 
+// SecretLookup Since 2.3. Body of `lookupTenantSecret`: a secret link as received, or its bare token. The fragment (`#k=...`) is ignored and dropped unread; the token is hashed, never stored, logged nor audited.
+type SecretLookup struct {
+	// Link Full link `https://<fqdn>/s/<token>[#k=<key>]` or bare token (`tts_` and 43 base62 characters). No token extractable: `400 validation-failed` (`invalid-format`).
+	Link string `json:"link"`
+}
+
 // SecretPassphrase Since 2.1. Public parameters of the passphrase key derivation (PBKDF2-HMAC-SHA-256 of the NFC passphrase). Clients refuse any `kdf` other than `pbkdf2-sha256`, any iteration count other than 600000 and any salt other than 22 canonical base64url characters, so that a server cannot downgrade it; the server validates the same through this schema (`400 validation-failed`).
 type SecretPassphrase struct {
 	Iterations SecretPassphraseIterations `json:"iterations"`
@@ -5064,6 +5188,18 @@ type SecretSettings struct {
 	// Enabled The module is on by default.
 	Enabled bool `json:"enabled"`
 
+	// ExpressEnabled Since 2.3. Anonymous express secrets (`createExpressSecret` without credential) are offered on the tenant. Off by default. Independent of `enabled`: it does not govern the 2.1 module, and the 2.1 switch does not govern express secrets. Creations with an API token of the tenant are accepted even when off; the instance kill switch `TT_EXPRESS_SECRETS_DISABLED` refuses both whatever this setting. Always present in answers; absent in a replacement keeps the current value. Forced to false by a configuration import.
+	ExpressEnabled *bool `json:"expressEnabled,omitempty"`
+
+	// ExpressMaxPending Since 2.3. Live (`active`) express secrets the tenant may hold, anonymous and token ones together; when reached, anonymous creations are refused (`429 express-secret-limit-reached`), token creations still accepted. Default 1000. Always present in answers; absent in a replacement keeps the current value.
+	ExpressMaxPending *int `json:"expressMaxPending,omitempty"`
+
+	// ExpressPerHourPerIp Since 2.3. Anonymous express creations allowed per client (IPv4 address or IPv6 /64) in the sliding last hour, on this tenant. Default 10. Always present in answers; absent in a replacement keeps the current value.
+	ExpressPerHourPerIp *int `json:"expressPerHourPerIp,omitempty"`
+
+	// ExpressPerHourPerToken Since 2.3. Express creations allowed per API token in the sliding last hour (instead of the per-IP limit). Default 100. Always present in answers; absent in a replacement keeps the current value.
+	ExpressPerHourPerToken *int `json:"expressPerHourPerToken,omitempty"`
+
 	// FileAllowed Default true.
 	FileAllowed bool `json:"fileAllowed"`
 
@@ -5078,7 +5214,12 @@ type SecretState string
 
 // SecretStatus Since 2.1. What the recipient page needs before the reveal. Never anything sealed under the secret keys (neither the text nor the file metadata): before a successful reveal, the server returns no value that would let whoever holds the link alone test passphrases offline.
 type SecretStatus struct {
+	// Anonymous Since 2.3. Present with `express: true` only: true when the express secret was created without credential, false when it was created with an API token of the tenant.
+	Anonymous *bool     `json:"anonymous,omitempty"`
 	ExpiresAt time.Time `json:"expiresAt"`
+
+	// Express Since 2.3. An express secret (created through `createExpressSecret`): third-party content not written by the entity; the read page shows a banner saying so and the link to `reportSecretAbuse`. Absent means false.
+	Express *bool `json:"express,omitempty"`
 
 	// File Null without file. Only the ciphertext size (not an oracle: it is chosen by the creator's client and bounded by the tenant); the sealed metadata comes with `revealSecret`. A file is never scanned by the antivirus.
 	File *struct {
@@ -5657,6 +5798,9 @@ type TenantFeatures struct {
 	// E2ePolicy Since 2.0. End-to-end encryption policy of the tenant (`forbidden` when absent). The policy that applies to a transfer is the `e2ePolicy` of its confidentiality level (`PublicConfidentialityLevel.e2ePolicy`), which a level can only tighten.
 	E2ePolicy *E2ePolicy `json:"e2ePolicy,omitempty"`
 
+	// ExpressSecrets Since 2.3. What the express secret page needs. No limit value is disclosed beyond the text length.
+	ExpressSecrets *ExpressSecretFeatures `json:"expressSecrets,omitempty"`
+
 	// Folders Folders may be dropped and keep their tree.
 	Folders bool `json:"folders"`
 
@@ -5801,7 +5945,7 @@ type TenantStats struct {
 	DownloadCount int               `json:"downloadCount"`
 	Period        TenantStatsPeriod `json:"period"`
 
-	// SecretsCreated Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows.
+	// SecretsCreated Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows. Since 2.3 express secrets are included.
 	SecretsCreated *int `json:"secretsCreated,omitempty"`
 
 	// Series Breakdown of `transferCount` and `bytesUploaded` over the period, oldest first, with a
@@ -6908,6 +7052,9 @@ type UpdateRecipientRulesJSONRequestBody = RecipientRules
 // UpdateSecretSettingsJSONRequestBody defines body for UpdateSecretSettings for application/json ContentType.
 type UpdateSecretSettingsJSONRequestBody = SecretSettings
 
+// LookupTenantSecretJSONRequestBody defines body for LookupTenantSecret for application/json ContentType.
+type LookupTenantSecretJSONRequestBody = SecretLookup
+
 // CompleteTenantSetupJSONRequestBody defines body for CompleteTenantSetup for application/json ContentType.
 type CompleteTenantSetupJSONRequestBody = TenantSetupCompletion
 
@@ -6950,6 +7097,9 @@ type StartRecipientVerificationJSONRequestBody = RecipientVerificationStart
 // ConfirmRecipientVerificationJSONRequestBody defines body for ConfirmRecipientVerification for application/json ContentType.
 type ConfirmRecipientVerificationJSONRequestBody = VerificationCode
 
+// CreateExpressSecretJSONRequestBody defines body for CreateExpressSecret for application/json ContentType.
+type CreateExpressSecretJSONRequestBody = ExpressSecretCreate
+
 // CreateInvitationJSONRequestBody defines body for CreateInvitation for application/json ContentType.
 type CreateInvitationJSONRequestBody = InvitationCreate
 
@@ -6964,6 +7114,9 @@ type ExtendMyTransferJSONRequestBody = TransferExtension
 
 // ProvisionTenantJSONRequestBody defines body for ProvisionTenant for application/json ContentType.
 type ProvisionTenantJSONRequestBody = ProvisionTenantRequest
+
+// ReportSecretAbuseJSONRequestBody defines body for ReportSecretAbuse for application/json ContentType.
+type ReportSecretAbuseJSONRequestBody = AbuseReportCreate
 
 // RevealSecretJSONRequestBody defines body for RevealSecret for application/json ContentType.
 type RevealSecretJSONRequestBody = SecretReveal
@@ -7356,6 +7509,9 @@ type ServerInterface interface {
 	// ExportTenantConfig Export the configuration of the tenant
 	// (GET /admin/tenants/{tenantId}/export)
 	ExportTenantConfig(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ExportTenantConfigParams)
+	// PurgeExpressSecrets Delete every live anonymous express secret of the tenant
+	// (POST /admin/tenants/{tenantId}/express-secrets/purge)
+	PurgeExpressSecrets(w http.ResponseWriter, r *http.Request, tenantId TenantId)
 	// ListTenantInvitations List invitations with their issuer
 	// (GET /admin/tenants/{tenantId}/invitations)
 	ListTenantInvitations(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ListTenantInvitationsParams)
@@ -7389,6 +7545,9 @@ type ServerInterface interface {
 	// ListTenantSecrets List the one-time secrets of the tenant
 	// (GET /admin/tenants/{tenantId}/secrets)
 	ListTenantSecrets(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ListTenantSecretsParams)
+	// LookupTenantSecret Find a secret of the tenant from its link
+	// (POST /admin/tenants/{tenantId}/secrets/lookup)
+	LookupTenantSecret(w http.ResponseWriter, r *http.Request, tenantId TenantId)
 	// DeleteTenantSecret Delete a pending or active secret
 	// (DELETE /admin/tenants/{tenantId}/secrets/{secretId})
 	DeleteTenantSecret(w http.ResponseWriter, r *http.Request, tenantId TenantId, secretId SecretId)
@@ -7500,6 +7659,9 @@ type ServerInterface interface {
 	// GetPublicDropLink Check a permanent drop link
 	// (GET /drop-links/{dropToken})
 	GetPublicDropLink(w http.ResponseWriter, r *http.Request, dropToken DropToken)
+	// CreateExpressSecret Create an express secret (text only, no authentication)
+	// (POST /express-secrets)
+	CreateExpressSecret(w http.ResponseWriter, r *http.Request)
 	// GetHealth Health check
 	// (GET /healthz)
 	GetHealth(w http.ResponseWriter, r *http.Request)
@@ -7566,6 +7728,9 @@ type ServerInterface interface {
 	// GetSecretLink Status of a secret link
 	// (GET /secret-links/{secretToken})
 	GetSecretLink(w http.ResponseWriter, r *http.Request, secretToken SecretToken)
+	// ReportSecretAbuse Report an abuse on an express secret
+	// (POST /secret-links/{secretToken}/abuse-reports)
+	ReportSecretAbuse(w http.ResponseWriter, r *http.Request, secretToken SecretToken)
 	// DownloadSecretFile Download the file of a revealed secret (once)
 	// (GET /secret-links/{secretToken}/file)
 	DownloadSecretFile(w http.ResponseWriter, r *http.Request, secretToken SecretToken, params DownloadSecretFileParams)
@@ -10173,6 +10338,32 @@ func (siw *ServerInterfaceWrapper) ExportTenantConfig(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// PurgeExpressSecrets operation middleware
+func (siw *ServerInterfaceWrapper) PurgeExpressSecrets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PurgeExpressSecrets(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTenantInvitations operation middleware
 func (siw *ServerInterfaceWrapper) ListTenantInvitations(w http.ResponseWriter, r *http.Request) {
 
@@ -10592,6 +10783,32 @@ func (siw *ServerInterfaceWrapper) ListTenantSecrets(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListTenantSecrets(w, r, tenantId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LookupTenantSecret operation middleware
+func (siw *ServerInterfaceWrapper) LookupTenantSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LookupTenantSecret(w, r, tenantId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -11946,6 +12163,20 @@ func (siw *ServerInterfaceWrapper) GetPublicDropLink(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// CreateExpressSecret operation middleware
+func (siw *ServerInterfaceWrapper) CreateExpressSecret(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateExpressSecret(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetHealth operation middleware
 func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Request) {
 
@@ -12500,6 +12731,32 @@ func (siw *ServerInterfaceWrapper) GetSecretLink(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetSecretLink(w, r, secretToken)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReportSecretAbuse operation middleware
+func (siw *ServerInterfaceWrapper) ReportSecretAbuse(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "secretToken" -------------
+	var secretToken SecretToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretToken", r.PathValue("secretToken"), &secretToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretToken", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReportSecretAbuse(w, r, secretToken)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -13367,9 +13624,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/secrets", wrapper.CreateSecret)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/secrets/{secretId}/file", wrapper.UploadSecretFile)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/secrets/{secretId}/send", wrapper.SendSecret)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/express-secrets", wrapper.CreateExpressSecret)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/secret-links/{secretToken}", wrapper.GetSecretLink)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/secret-links/{secretToken}/reveal", wrapper.RevealSecret)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/secret-links/{secretToken}/file", wrapper.DownloadSecretFile)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/secret-links/{secretToken}/abuse-reports", wrapper.ReportSecretAbuse)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/downloads/{linkToken}", wrapper.GetDownload)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/downloads/{linkToken}/unlock", wrapper.UnlockDownload)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/downloads/{linkToken}/files/{fileId}", wrapper.DownloadFile)
@@ -13476,6 +13735,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/drop-links/{dropLinkId}/rotate", wrapper.RotateDropLink)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/secrets", wrapper.ListTenantSecrets)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/tenants/{tenantId}/secrets/{secretId}", wrapper.DeleteTenantSecret)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/secrets/lookup", wrapper.LookupTenantSecret)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/express-secrets/purge", wrapper.PurgeExpressSecrets)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/secret-settings", wrapper.GetSecretSettings)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/secret-settings", wrapper.UpdateSecretSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/security-events", wrapper.ListTenantSecurityEvents)
@@ -21908,6 +22169,92 @@ func (response ExportTenantConfig500ApplicationProblemPlusJSONResponse) VisitExp
 	return err
 }
 
+type PurgeExpressSecretsRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+}
+
+type PurgeExpressSecretsResponseObject interface {
+	VisitPurgeExpressSecretsResponse(w http.ResponseWriter) error
+}
+
+type PurgeExpressSecrets200JSONResponse ExpressSecretPurgeResult
+
+func (response PurgeExpressSecrets200JSONResponse) VisitPurgeExpressSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PurgeExpressSecrets401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response PurgeExpressSecrets401ApplicationProblemPlusJSONResponse) VisitPurgeExpressSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PurgeExpressSecrets403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response PurgeExpressSecrets403ApplicationProblemPlusJSONResponse) VisitPurgeExpressSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PurgeExpressSecrets404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response PurgeExpressSecrets404ApplicationProblemPlusJSONResponse) VisitPurgeExpressSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PurgeExpressSecrets500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response PurgeExpressSecrets500ApplicationProblemPlusJSONResponse) VisitPurgeExpressSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTenantInvitationsRequestObject struct {
 	TenantId TenantId `json:"tenantId"`
 	Params   ListTenantInvitationsParams
@@ -22880,6 +23227,109 @@ type ListTenantSecrets500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListTenantSecrets500ApplicationProblemPlusJSONResponse) VisitListTenantSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LookupTenantSecretRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Body     *LookupTenantSecretJSONRequestBody
+}
+
+type LookupTenantSecretResponseObject interface {
+	VisitLookupTenantSecretResponse(w http.ResponseWriter) error
+}
+
+type LookupTenantSecret200JSONResponse AdminSecret
+
+func (response LookupTenantSecret200JSONResponse) VisitLookupTenantSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LookupTenantSecret400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response LookupTenantSecret400ApplicationProblemPlusJSONResponse) VisitLookupTenantSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LookupTenantSecret401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response LookupTenantSecret401ApplicationProblemPlusJSONResponse) VisitLookupTenantSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LookupTenantSecret403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response LookupTenantSecret403ApplicationProblemPlusJSONResponse) VisitLookupTenantSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LookupTenantSecret404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response LookupTenantSecret404ApplicationProblemPlusJSONResponse) VisitLookupTenantSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LookupTenantSecret500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response LookupTenantSecret500ApplicationProblemPlusJSONResponse) VisitLookupTenantSecretResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -27241,6 +27691,165 @@ func (response GetPublicDropLink503ApplicationProblemPlusJSONResponse) VisitGetP
 	return err
 }
 
+type CreateExpressSecretRequestObject struct {
+	Body *CreateExpressSecretJSONRequestBody
+}
+
+type CreateExpressSecretResponseObject interface {
+	VisitCreateExpressSecretResponse(w http.ResponseWriter) error
+}
+
+type CreateExpressSecret201ResponseHeaders struct {
+	CacheControl *string
+}
+
+type CreateExpressSecret201JSONResponse struct {
+	Body    SecretCreated
+	Headers CreateExpressSecret201ResponseHeaders
+}
+
+func (response CreateExpressSecret201JSONResponse) VisitCreateExpressSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateExpressSecret400ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateExpressSecret400ApplicationProblemPlusJSONResponse) VisitCreateExpressSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateExpressSecret401ResponseHeaders struct {
+	WWWAuthenticate *string
+}
+
+type CreateExpressSecret401ApplicationProblemPlusJSONResponse struct {
+	Body    Problem
+	Headers CreateExpressSecret401ResponseHeaders
+}
+
+func (response CreateExpressSecret401ApplicationProblemPlusJSONResponse) VisitCreateExpressSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateExpressSecret403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateExpressSecret403ApplicationProblemPlusJSONResponse) VisitCreateExpressSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateExpressSecret421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response CreateExpressSecret421ApplicationProblemPlusJSONResponse) VisitCreateExpressSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateExpressSecret429ResponseHeaders struct {
+	RetryAfter *int
+}
+
+type CreateExpressSecret429ApplicationProblemPlusJSONResponse struct {
+	Body    Problem
+	Headers CreateExpressSecret429ResponseHeaders
+}
+
+func (response CreateExpressSecret429ApplicationProblemPlusJSONResponse) VisitCreateExpressSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateExpressSecret500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response CreateExpressSecret500ApplicationProblemPlusJSONResponse) VisitCreateExpressSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateExpressSecret503ApplicationProblemPlusJSONResponse struct {
+	MaintenanceModeApplicationProblemPlusJSONResponse
+}
+
+func (response CreateExpressSecret503ApplicationProblemPlusJSONResponse) VisitCreateExpressSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetHealthRequestObject struct {
 }
 
@@ -29615,6 +30224,20 @@ func (response GetSecretLink200JSONResponse) VisitGetSecretLinkResponse(w http.R
 	return err
 }
 
+type GetSecretLink403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetSecretLink403ApplicationProblemPlusJSONResponse) VisitGetSecretLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetSecretLink404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -29703,6 +30326,154 @@ type GetSecretLink503ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetSecretLink503ApplicationProblemPlusJSONResponse) VisitGetSecretLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportSecretAbuseRequestObject struct {
+	SecretToken SecretToken `json:"secretToken"`
+	Body        *ReportSecretAbuseJSONRequestBody
+}
+
+type ReportSecretAbuseResponseObject interface {
+	VisitReportSecretAbuseResponse(w http.ResponseWriter) error
+}
+
+type ReportSecretAbuse202Response struct {
+}
+
+func (response ReportSecretAbuse202Response) VisitReportSecretAbuseResponse(w http.ResponseWriter) error {
+	w.WriteHeader(202)
+	return nil
+}
+
+type ReportSecretAbuse400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportSecretAbuse400ApplicationProblemPlusJSONResponse) VisitReportSecretAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportSecretAbuse403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response ReportSecretAbuse403ApplicationProblemPlusJSONResponse) VisitReportSecretAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportSecretAbuse404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ReportSecretAbuse404ApplicationProblemPlusJSONResponse) VisitReportSecretAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportSecretAbuse410ApplicationProblemPlusJSONResponse struct {
+	SecretGoneApplicationProblemPlusJSONResponse
+}
+
+func (response ReportSecretAbuse410ApplicationProblemPlusJSONResponse) VisitReportSecretAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportSecretAbuse421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response ReportSecretAbuse421ApplicationProblemPlusJSONResponse) VisitReportSecretAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportSecretAbuse429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportSecretAbuse429ApplicationProblemPlusJSONResponse) VisitReportSecretAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportSecretAbuse500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ReportSecretAbuse500ApplicationProblemPlusJSONResponse) VisitReportSecretAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportSecretAbuse503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response ReportSecretAbuse503ApplicationProblemPlusJSONResponse) VisitReportSecretAbuseResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -32694,6 +33465,9 @@ type StrictServerInterface interface {
 	// ExportTenantConfig Export the configuration of the tenant
 	// (GET /admin/tenants/{tenantId}/export)
 	ExportTenantConfig(ctx context.Context, request ExportTenantConfigRequestObject) (ExportTenantConfigResponseObject, error)
+	// PurgeExpressSecrets Delete every live anonymous express secret of the tenant
+	// (POST /admin/tenants/{tenantId}/express-secrets/purge)
+	PurgeExpressSecrets(ctx context.Context, request PurgeExpressSecretsRequestObject) (PurgeExpressSecretsResponseObject, error)
 	// ListTenantInvitations List invitations with their issuer
 	// (GET /admin/tenants/{tenantId}/invitations)
 	ListTenantInvitations(ctx context.Context, request ListTenantInvitationsRequestObject) (ListTenantInvitationsResponseObject, error)
@@ -32727,6 +33501,9 @@ type StrictServerInterface interface {
 	// ListTenantSecrets List the one-time secrets of the tenant
 	// (GET /admin/tenants/{tenantId}/secrets)
 	ListTenantSecrets(ctx context.Context, request ListTenantSecretsRequestObject) (ListTenantSecretsResponseObject, error)
+	// LookupTenantSecret Find a secret of the tenant from its link
+	// (POST /admin/tenants/{tenantId}/secrets/lookup)
+	LookupTenantSecret(ctx context.Context, request LookupTenantSecretRequestObject) (LookupTenantSecretResponseObject, error)
 	// DeleteTenantSecret Delete a pending or active secret
 	// (DELETE /admin/tenants/{tenantId}/secrets/{secretId})
 	DeleteTenantSecret(ctx context.Context, request DeleteTenantSecretRequestObject) (DeleteTenantSecretResponseObject, error)
@@ -32838,6 +33615,9 @@ type StrictServerInterface interface {
 	// GetPublicDropLink Check a permanent drop link
 	// (GET /drop-links/{dropToken})
 	GetPublicDropLink(ctx context.Context, request GetPublicDropLinkRequestObject) (GetPublicDropLinkResponseObject, error)
+	// CreateExpressSecret Create an express secret (text only, no authentication)
+	// (POST /express-secrets)
+	CreateExpressSecret(ctx context.Context, request CreateExpressSecretRequestObject) (CreateExpressSecretResponseObject, error)
 	// GetHealth Health check
 	// (GET /healthz)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
@@ -32904,6 +33684,9 @@ type StrictServerInterface interface {
 	// GetSecretLink Status of a secret link
 	// (GET /secret-links/{secretToken})
 	GetSecretLink(ctx context.Context, request GetSecretLinkRequestObject) (GetSecretLinkResponseObject, error)
+	// ReportSecretAbuse Report an abuse on an express secret
+	// (POST /secret-links/{secretToken}/abuse-reports)
+	ReportSecretAbuse(ctx context.Context, request ReportSecretAbuseRequestObject) (ReportSecretAbuseResponseObject, error)
 	// DownloadSecretFile Download the file of a revealed secret (once)
 	// (GET /secret-links/{secretToken}/file)
 	DownloadSecretFile(ctx context.Context, request DownloadSecretFileRequestObject) (DownloadSecretFileResponseObject, error)
@@ -35488,6 +36271,32 @@ func (sh *strictHandler) ExportTenantConfig(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// PurgeExpressSecrets operation middleware
+func (sh *strictHandler) PurgeExpressSecrets(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request PurgeExpressSecretsRequestObject
+
+	request.TenantId = tenantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PurgeExpressSecrets(ctx, request.(PurgeExpressSecretsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PurgeExpressSecrets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PurgeExpressSecretsResponseObject); ok {
+		if err := validResponse.VisitPurgeExpressSecretsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListTenantInvitations operation middleware
 func (sh *strictHandler) ListTenantInvitations(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ListTenantInvitationsParams) {
 	var request ListTenantInvitationsRequestObject
@@ -35802,6 +36611,39 @@ func (sh *strictHandler) ListTenantSecrets(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListTenantSecretsResponseObject); ok {
 		if err := validResponse.VisitListTenantSecretsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LookupTenantSecret operation middleware
+func (sh *strictHandler) LookupTenantSecret(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request LookupTenantSecretRequestObject
+
+	request.TenantId = tenantId
+
+	var body LookupTenantSecretJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LookupTenantSecret(ctx, request.(LookupTenantSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LookupTenantSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LookupTenantSecretResponseObject); ok {
+		if err := validResponse.VisitLookupTenantSecretResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -36891,6 +37733,37 @@ func (sh *strictHandler) GetPublicDropLink(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+// CreateExpressSecret operation middleware
+func (sh *strictHandler) CreateExpressSecret(w http.ResponseWriter, r *http.Request) {
+	var request CreateExpressSecretRequestObject
+
+	var body CreateExpressSecretJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateExpressSecret(ctx, request.(CreateExpressSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateExpressSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateExpressSecretResponseObject); ok {
+		if err := validResponse.VisitCreateExpressSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetHealth operation middleware
 func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	var request GetHealthRequestObject
@@ -37474,6 +38347,39 @@ func (sh *strictHandler) GetSecretLink(w http.ResponseWriter, r *http.Request, s
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetSecretLinkResponseObject); ok {
 		if err := validResponse.VisitGetSecretLinkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReportSecretAbuse operation middleware
+func (sh *strictHandler) ReportSecretAbuse(w http.ResponseWriter, r *http.Request, secretToken SecretToken) {
+	var request ReportSecretAbuseRequestObject
+
+	request.SecretToken = secretToken
+
+	var body ReportSecretAbuseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReportSecretAbuse(ctx, request.(ReportSecretAbuseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReportSecretAbuse")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReportSecretAbuseResponseObject); ok {
+		if err := validResponse.VisitReportSecretAbuseResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

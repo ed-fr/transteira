@@ -30,10 +30,11 @@ const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max
 	`link_only_allowed, e2e_policy`
 
 // tenantReadColumns is the column list read by the tenant selects:
-// tenantColumns and the secret settings (since 2.1), which the insert
-// leaves to their column defaults.
+// tenantColumns, the secret settings (since 2.1) and the express secret
+// settings (since 2.3), which the insert leaves to their column defaults.
 const tenantReadColumns = tenantColumns + `, secrets_enabled, secret_durations, secret_default_duration, ` +
-	`secret_file_allowed, secret_file_max_bytes, secret_email_allowed, secret_email_requires_passphrase`
+	`secret_file_allowed, secret_file_max_bytes, secret_email_allowed, secret_email_requires_passphrase, ` +
+	`express_enabled, express_per_hour_ip, express_per_hour_token, express_max_pending`
 
 // Statements of the Tenants repository. The tenants table is the registry of
 // tenants itself, so its statements are system queries.
@@ -82,6 +83,21 @@ var (
 		`UPDATE tenants SET secrets_enabled = ?, secret_durations = ?, secret_default_duration = ?,
 			secret_file_allowed = ?, secret_file_max_bytes = ?, secret_email_allowed = ?,
 			secret_email_requires_passphrase = ?, updated_at = ? WHERE id = ? AND status = 'active'`,
+		reasonTenantAdmin)
+	// qTenantSetExpress writes the express secret settings of an active
+	// tenant (delegated admin or super admin, since 2.3).
+	qTenantSetExpress = systemQuery(
+		`UPDATE tenants SET express_enabled = ?, express_per_hour_ip = ?, express_per_hour_token = ?,
+			express_max_pending = ?, updated_at = ? WHERE id = ? AND status = 'active'`,
+		reasonTenantAdmin)
+	// qTenantPatchExpress changes the express secret settings of an
+	// active tenant member by member: a NULL argument keeps the stored
+	// value, read in the same statement (ExpressPatch).
+	qTenantPatchExpress = systemQuery(
+		`UPDATE tenants SET express_enabled = COALESCE(?, express_enabled),
+			express_per_hour_ip = COALESCE(?, express_per_hour_ip),
+			express_per_hour_token = COALESCE(?, express_per_hour_token),
+			express_max_pending = COALESCE(?, express_max_pending), updated_at = ? WHERE id = ? AND status = 'active'`,
 		reasonTenantAdmin)
 	// qTenantSetSMTPTested records the SMTP configuration of an active
 	// tenant that passed a test send (Tenants.SetSMTPTested).
@@ -225,7 +241,8 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &t.AllowTransferReply, &t.AntivirusEnabled,
 		&setup, &tested, &reviewed, &networkReviewed, &created, &updated, &provBy, &t.LinkOnlyAllowed, &e2e,
 		&t.Secrets.Enabled, &durations, &defaultDuration, &t.Secrets.FileAllowed, &t.Secrets.FileMaxBytes,
-		&t.Secrets.EmailAllowed, &t.Secrets.EmailRequiresPassphrase); err != nil {
+		&t.Secrets.EmailAllowed, &t.Secrets.EmailRequiresPassphrase, &t.Express.Enabled, &t.Express.PerHourPerIP,
+		&t.Express.PerHourPerToken, &t.Express.MaxPending); err != nil {
 		return nil, err
 	}
 	// The column check makes a parse error impossible (an empty set would
@@ -266,12 +283,17 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 // [tenant.E2EForbidden] for the zero values): the caller checks that only a
 // super admin sets them. It stores t.Secrets (since 2.1), normalized like
 // [Tenants.SetSecretSettings], when it names durations, and the defaults
-// ([tenant.DefaultSecretSettings]) otherwise. It returns the stored tenant,
+// ([tenant.DefaultSecretSettings]) otherwise. It stores the limits of
+// t.Express (since 2.3), each zero limit taking its default
+// ([tenant.ExpressSettings.WithDefaults]), with the anonymous mode always
+// off whatever t.Express.Enabled: a creation, an imported configuration
+// included, never opens the anonymous express service (threat model P92;
+// [Tenants.SetExpressSettings] does). It returns the stored tenant,
 // ErrInvalid for invalid fields (including a preset ID, a status other
 // than active, a missing or unknown setup state, a transfer limit above
 // the ceiling, the ceiling being at most [tenant.MaxTransferLimit], or a
-// background preset of invalid syntax) and ErrConflict when the FQDN is
-// already used.
+// background preset of invalid syntax, or express limits out of bounds)
+// and ErrConflict when the FQDN is already used.
 func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
 	return r.CreateWith(ctx, t, nil)
 }
@@ -327,6 +349,14 @@ func (r *Tenants) create(ctx context.Context, t *tenant.Tenant, guard func(tx *S
 			return nil, err
 		}
 	}
+	// The express limits are the column defaults, unless the caller gives
+	// some; the anonymous mode is always off at creation (P92).
+	c.Express = t.Express.WithDefaults()
+	c.Express.Enabled = false
+	if err := c.Express.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	customExpress := c.Express != tenant.DefaultExpressSettings()
 	c.SMTPTestedAt, c.MailTemplatesReviewedAt, c.NetworkReviewedAt = time.Time{}, time.Time{}, time.Time{}
 	now := r.db.now().UTC().Truncate(time.Millisecond) // millisecond precision, as stored
 	c.CreatedAt, c.UpdatedAt = now, now
@@ -351,6 +381,12 @@ func (r *Tenants) create(ctx context.Context, t *tenant.Tenant, guard func(tx *S
 			if _, err := tx.Exec(ctx, qTenantSetSecrets, c.Secrets.Enabled, c.Secrets.Durations.String(),
 				nullText(string(c.Secrets.DefaultDuration)), c.Secrets.FileAllowed, c.Secrets.FileMaxBytes,
 				c.Secrets.EmailAllowed, c.Secrets.EmailRequiresPassphrase, toMillis(now), string(c.ID)); err != nil {
+				return err
+			}
+		}
+		if customExpress {
+			if _, err := tx.Exec(ctx, qTenantSetExpress, false, c.Express.PerHourPerIP, c.Express.PerHourPerToken,
+				c.Express.MaxPending, toMillis(now), string(c.ID)); err != nil {
 				return err
 			}
 		}
@@ -473,6 +509,46 @@ type TenantParts struct {
 	// Secrets writes t.Secrets as [Tenants.SetSecretSettings] does (since
 	// 2.1).
 	Secrets bool
+	// Express writes t.Express as [Tenants.SetExpressSettings] does (since
+	// 2.3).
+	Express bool
+	// ExpressPatch, when not nil and Express is not set, writes the members
+	// of the express settings it sets, each other member keeping its
+	// stored value in the same statement (since 2.3): a replacement that
+	// leaves out a member never writes back a value read before a
+	// concurrent change of that member.
+	ExpressPatch *ExpressPatch
+}
+
+// ExpressPatch changes the settings of the express secrets of a tenant
+// member by member (since 2.3, [TenantParts.ExpressPatch]): a nil member
+// keeps its stored value.
+type ExpressPatch struct {
+	Enabled         *bool
+	PerHourPerIP    *int
+	PerHourPerToken *int
+	MaxPending      *int
+}
+
+// Apply returns s with the members of p that are set.
+func (p ExpressPatch) Apply(s tenant.ExpressSettings) tenant.ExpressSettings {
+	if p.Enabled != nil {
+		s.Enabled = *p.Enabled
+	}
+	for _, m := range []struct{ in, out *int }{
+		{p.PerHourPerIP, &s.PerHourPerIP}, {p.PerHourPerToken, &s.PerHourPerToken}, {p.MaxPending, &s.MaxPending},
+	} {
+		if m.in != nil {
+			*m.out = *m.in
+		}
+	}
+	return s
+}
+
+// Validate checks every limit p sets against the bounds of
+// [tenant.ExpressSettings].
+func (p ExpressPatch) Validate() error {
+	return p.Apply(tenant.DefaultExpressSettings()).Validate()
 }
 
 // UpdateWithPolicies writes the parts of t selected by parts in one
@@ -480,9 +556,12 @@ type TenantParts struct {
 // general fields as [Tenants.Update] does, and the super admin switches
 // (antivirus, link-only transfers, end-to-end encryption policy) as
 // [Tenants.SetAntivirusEnabled], [Tenants.SetLinkOnlyAllowed] and
-// [Tenants.SetE2EPolicy] do. Callers check the caller's scope for
-// each switch. It returns the stored tenant and the errors of
-// [Tenants.Update]; selecting no part only reads the tenant back.
+// [Tenants.SetE2EPolicy] do, and the secret and express secret settings as
+// [Tenants.SetSecretSettings] and [Tenants.SetExpressSettings] do (or the
+// express members of parts.ExpressPatch only). Callers
+// check the caller's scope for each part. It returns the stored tenant and
+// the errors of [Tenants.Update] and of the setters selected; selecting no
+// part only reads the tenant back.
 func (r *Tenants) UpdateWithPolicies(ctx context.Context, t *tenant.Tenant, parts TenantParts) (*tenant.Tenant, error) {
 	return r.update(ctx, t, parts, "update tenant")
 }
@@ -555,6 +634,23 @@ func (r *Tenants) SetSecretSettings(ctx context.Context, tid tenant.ID, s tenant
 	return r.update(ctx, &tenant.Tenant{ID: tid, Secrets: s}, TenantParts{Secrets: true}, "set tenant secret settings")
 }
 
+// SetExpressSettings writes the settings of the express secrets of the
+// active tenant tid (since 2.3) as given, Enabled included, and refreshes
+// UpdatedAt. The delegated admin of the tenant and the super admin may call
+// it (callers check the caller's scope; the service keeps the stored value
+// of a member absent from a replacement). It returns the stored tenant,
+// ErrInvalid for a limit out of the bounds of [tenant.ExpressSettings], and
+// ErrNotFound when the tenant does not exist or is being deleted. Lowering
+// a limit deletes nothing; the settings apply to the next creations and,
+// for Enabled, to the next readings of the anonymous express secrets.
+// Callers must invalidate the tenant.Resolver cache of its FQDN.
+func (r *Tenants) SetExpressSettings(ctx context.Context, tid tenant.ID, s tenant.ExpressSettings) (*tenant.Tenant, error) {
+	if err := tid.Validate(); err != nil {
+		return nil, fmt.Errorf("store: set tenant express settings: %w", ErrNotFound)
+	}
+	return r.update(ctx, &tenant.Tenant{ID: tid, Express: s}, TenantParts{Express: true}, "set tenant express settings")
+}
+
 // normalizeSecretSettings resets a default duration that is a known code
 // but no longer offered, then validates s.
 func normalizeSecretSettings(s tenant.SecretSettings) (tenant.SecretSettings, error) {
@@ -571,9 +667,9 @@ func normalizeSecretSettings(s tenant.SecretSettings) (tenant.SecretSettings, er
 }
 
 // update implements Update, UpdateWithAntivirus, UpdateWithPolicies,
-// SetAntivirusEnabled, SetLinkOnlyAllowed, SetE2EPolicy and
-// SetSecretSettings: the parts of t
-// selected by parts, in one transaction.
+// SetAntivirusEnabled, SetLinkOnlyAllowed, SetE2EPolicy,
+// SetSecretSettings and SetExpressSettings: the parts of t selected by
+// parts, in one transaction.
 func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, parts TenantParts, op string) (*tenant.Tenant, error) {
 	if t.ID.IsZero() {
 		return nil, invalid("tenant id is required")
@@ -591,6 +687,15 @@ func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, parts TenantPart
 		var err error
 		if secrets, err = normalizeSecretSettings(secrets); err != nil {
 			return nil, err
+		}
+	}
+	if parts.Express {
+		if err := t.Express.Validate(); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
+	} else if parts.ExpressPatch != nil {
+		if err := parts.ExpressPatch.Validate(); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
 	}
 	now := toMillis(r.db.now())
@@ -639,6 +744,29 @@ func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, parts TenantPart
 			res, err := tx.Exec(ctx, qTenantSetSecrets, secrets.Enabled, secrets.Durations.String(),
 				nullText(string(secrets.DefaultDuration)), secrets.FileAllowed, secrets.FileMaxBytes,
 				secrets.EmailAllowed, secrets.EmailRequiresPassphrase, now, string(t.ID))
+			if err == nil {
+				err = expectOne(res)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		if parts.Express || parts.ExpressPatch != nil {
+			q, args := qTenantSetExpress, []any{
+				t.Express.Enabled, t.Express.PerHourPerIP,
+				t.Express.PerHourPerToken, t.Express.MaxPending, now, string(t.ID),
+			}
+			if p := parts.ExpressPatch; !parts.Express {
+				var enabled any
+				if p.Enabled != nil {
+					enabled = *p.Enabled
+				}
+				q, args = qTenantPatchExpress, []any{
+					enabled, nullInt(p.PerHourPerIP), nullInt(p.PerHourPerToken),
+					nullInt(p.MaxPending), now, string(t.ID),
+				}
+			}
+			res, err := tx.Exec(ctx, q, args...)
 			if err == nil {
 				err = expectOne(res)
 			}

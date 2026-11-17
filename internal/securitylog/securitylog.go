@@ -84,6 +84,11 @@ const (
 	// one-time secret (since 2.1); field reason=key|passphrase. Neither the token
 	// nor the proofs are written.
 	SecretProofInvalid EventType = "secret_proof_invalid"
+	// ExpressRefused: an express secret creation was refused (since 2.3);
+	// field reason=disabled|limit|token. Never the text, the key, the
+	// verifiers nor the token. Not counted by the shipped fail2ban and
+	// CrowdSec rules.
+	ExpressRefused EventType = "express_refused"
 )
 
 // Well-known field keys.
@@ -135,6 +140,18 @@ const (
 	ReasonKey = "key"
 	// ReasonPassphrase: right key proof, wrong passphrase proof.
 	ReasonPassphrase = "passphrase"
+)
+
+// Well-known values of the reason field of ExpressRefused (since 2.3).
+const (
+	// ReasonExpressDisabled: the kill switch is on, or the call is anonymous
+	// and the tenant has not enabled express secrets.
+	ReasonExpressDisabled = "disabled"
+	// ReasonExpressLimit: the tenant holds its maximum of live express
+	// secrets and the call is anonymous.
+	ReasonExpressLimit = "limit"
+	// ReasonExpressToken: the API token has no expressAllowed opt-in.
+	ReasonExpressToken = "token"
 )
 
 // Well-known values of the reason field of SSOFailed (since 2.0).

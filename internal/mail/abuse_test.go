@@ -230,3 +230,77 @@ func TestAbuseAlertInvitationsNotice(t *testing.T) {
 		}
 	}
 }
+
+func TestAbuseReportSecret(t *testing.T) {
+	d := AbuseReportData{TenantName: "Entity A", SecretID: "sec_01JABCU7W8X9Y0Z1A2B3C4D5E6", Category: AbuseCategorySpam, AdminLink: goldenAdminLink}
+	for lang, intro := range map[string]string{"en": "A one-time secret of Entity A", "fr": "Un secret à usage unique de Entity A"} {
+		m, err := Render(TemplateAbuseReport, lang, d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, body := range []string{m.Text, m.HTML} {
+			if !strings.Contains(body, intro) || !strings.Contains(body, d.SecretID) {
+				t.Errorf("%s: secret report lacks the sentence or the identifier:\n%s", lang, body)
+			}
+			if strings.Contains(body, "tr_") || strings.Contains(body, "Sender") || strings.Contains(body, "Expéditeur") {
+				t.Errorf("%s: secret report names a transfer or a sender:\n%s", lang, body)
+			}
+		}
+	}
+	if got := reportObjectBlock("fr", abuseLabelsFor("fr"), d).text; got != "Secret : "+d.SecretID {
+		t.Errorf("French object line %q", got)
+	}
+}
+
+// TestAbuseReportLegacyCustomization checks that an abuse_report
+// customization saved before 2.3, which only names the transfer and its
+// sender, never sends a report on an express secret without its sec_
+// identifier: the default template renders it, while the customization
+// keeps rendering the transfer reports. A customization that shows
+// {{secret_id}} (or {{report_object}}) in both bodies is used.
+func TestAbuseReportLegacyCustomization(t *testing.T) {
+	legacy := &TemplateSource{
+		Subject: "Abuse report",
+		HTML:    "<p>Transfer: <strong>{{transfer_id}}</strong><br>Sender: {{sender_email}}<br>Category: {{category}}</p>",
+		Text:    "Transfer: {{transfer_id}}\nSender: {{sender_email}}\nCategory: {{category}}",
+	}
+	sec := AbuseReportData{TenantName: "Entity A", SecretID: "sec_01JABCU7W8X9Y0Z1A2B3C4D5E6", Category: AbuseCategorySpam, AdminLink: goldenAdminLink}
+	m, err := RenderOverride(TemplateAbuseReport, "en", sec, legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Subject == "Abuse report" || !strings.Contains(m.Text, sec.SecretID) || !strings.Contains(m.HTML, sec.SecretID) {
+		t.Errorf("secret report rendered with the legacy customization:\n%s\n%s", m.Text, m.HTML)
+	}
+	tr := AbuseReportData{TenantName: "Entity A", TransferID: "tr_1", SenderEmail: "alice@entity-a.example.com", Category: AbuseCategorySpam, AdminLink: goldenAdminLink}
+	if m, err := RenderOverride(TemplateAbuseReport, "en", tr, legacy); err != nil || m.Subject != "Abuse report" || !strings.Contains(m.Text, "Transfer: tr_1") {
+		t.Errorf("transfer report: %v %+v", err, m)
+	}
+	for name, c := range map[string]struct {
+		src  TemplateSource
+		used bool
+	}{
+		"secret_id in both": {TemplateSource{Subject: "Custom", HTML: "<p>{{category}} {{secret_id}}</p>", Text: "{{category}} {{secret_id}}"}, true},
+		"report_object and secret_id": {
+			TemplateSource{Subject: "Custom", HTML: "<p>{{category}}</p>{{report_object}}", Text: "{{category}} {{secret_id}}"}, true,
+		},
+		"secret_id in the text only": {TemplateSource{Subject: "Custom", HTML: "<p>{{category}}</p>", Text: "{{category}} {{secret_id}}"}, false},
+	} {
+		m, err := RenderOverride(TemplateAbuseReport, "en", sec, &c.src)
+		if err != nil || (m.Subject == "Custom") != c.used || !strings.Contains(m.Text, sec.SecretID) {
+			t.Errorf("%s: %v, subject %q, text %q", name, err, m.Subject, m.Text)
+		}
+	}
+	if got := abuseReportRequired("not a report"); got != nil {
+		t.Errorf("required for another data type = %v", got)
+	}
+	vars, err := Variables("abuse-report")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range vars {
+		if v.Name == "secret_id" && !strings.HasPrefix(v.Sample, "sec_") {
+			t.Errorf("secret_id sample %q", v.Sample)
+		}
+	}
+}

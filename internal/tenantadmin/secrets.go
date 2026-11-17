@@ -15,7 +15,8 @@ import (
 
 // SecretSettingsInput are the one-time secrets settings of a tenant as the
 // API carries them (OpenAPI SecretSettings, since 2.1): the durations are
-// codes ("1h", "1d"...). The update replaces every setting.
+// codes ("1h", "1d"...). The update replaces every setting of the 2.1
+// module.
 type SecretSettingsInput struct {
 	Enabled bool
 	// Durations are the offered duration codes, at least one.
@@ -27,6 +28,16 @@ type SecretSettingsInput struct {
 	FileMaxBytes            int64
 	EmailAllowed            bool
 	EmailRequiresPassphrase bool
+	// ExpressEnabled, ExpressPerHourPerIP, ExpressPerHourPerToken and
+	// ExpressMaxPending are the settings of the express secrets (since
+	// 2.3, tenant.ExpressSettings). In an update a nil member keeps its
+	// stored value (a 2.1 client does not know them); the reads and the
+	// answers of the service set all four. [SecretSettingsOf] leaves them
+	// nil.
+	ExpressEnabled         *bool
+	ExpressPerHourPerIP    *int
+	ExpressPerHourPerToken *int
+	ExpressMaxPending      *int
 }
 
 // SecretSettingsOf converts the stored settings to their API form, the
@@ -42,6 +53,53 @@ func SecretSettingsOf(s tenant.SecretSettings) SecretSettingsInput {
 		out.Durations[i] = string(c)
 	}
 	return out
+}
+
+// secretSettingsOfTenant returns the secrets settings of t in their API
+// form, the express members included (a zero limit read as its default).
+func secretSettingsOfTenant(t *tenant.Tenant) SecretSettingsInput {
+	out := SecretSettingsOf(t.Secrets)
+	e := t.Express.WithDefaults()
+	out.ExpressEnabled, out.ExpressPerHourPerIP = &e.Enabled, &e.PerHourPerIP
+	out.ExpressPerHourPerToken, out.ExpressMaxPending = &e.PerHourPerToken, &e.MaxPending
+	return out
+}
+
+// expressPatch returns the members of the express settings set in in, as
+// a change to store. Every limit set is checked against its bounds, an
+// *InvalidError naming its member (FieldExpressPerHourPerIP,
+// FieldExpressPerHourPerToken or FieldExpressMaxPending).
+func expressPatch(in SecretSettingsInput) (store.ExpressPatch, error) {
+	for _, m := range []struct {
+		in       *int
+		field    string
+		min, max int
+	}{
+		{in.ExpressPerHourPerIP, FieldExpressPerHourPerIP, tenant.MinExpressPerHourPerIP, tenant.MaxExpressPerHourPerIP},
+		{in.ExpressPerHourPerToken, FieldExpressPerHourPerToken, tenant.MinExpressPerHourPerToken, tenant.MaxExpressPerHourPerToken},
+		{in.ExpressMaxPending, FieldExpressMaxPending, tenant.MinExpressMaxPending, tenant.MaxExpressMaxPending},
+	} {
+		if m.in != nil && (*m.in < m.min || *m.in > m.max) {
+			return store.ExpressPatch{}, &InvalidError{
+				Field: m.field, Code: CodeOutOfRange, Reason: fmt.Sprintf("must be between %d and %d", m.min, m.max),
+			}
+		}
+	}
+	return store.ExpressPatch{
+		Enabled: in.ExpressEnabled, PerHourPerIP: in.ExpressPerHourPerIP,
+		PerHourPerToken: in.ExpressPerHourPerToken, MaxPending: in.ExpressMaxPending,
+	}, nil
+}
+
+// expressSettings returns the express settings stored with the members of
+// in that are set, checked as [expressPatch] does (a zero stored limit
+// read as its default).
+func expressSettings(stored tenant.ExpressSettings, in SecretSettingsInput) (tenant.ExpressSettings, error) {
+	p, err := expressPatch(in)
+	if err != nil {
+		return tenant.ExpressSettings{}, err
+	}
+	return p.Apply(stored.WithDefaults()), nil
 }
 
 // secretSettings validates in and returns the settings to store. Every
@@ -83,19 +141,29 @@ func secretSettings(in SecretSettingsInput) (tenant.SecretSettings, error) {
 }
 
 // GetSecretSettings returns the one-time secrets settings of tenant tid
-// (since 2.1). It is a configuration read, closed to the auditor role.
+// (since 2.1), with the settings of its express secrets (since 2.3, the
+// stored value of the anonymous mode, whatever the instance kill switch).
+// It is a configuration read, closed to the auditor role.
 func (s *Service) GetSecretSettings(ctx context.Context, p adminauth.Principal, tid tenant.ID) (SecretSettingsInput, error) {
 	t, err := s.readable(ctx, p, tid)
 	if err != nil {
 		return SecretSettingsInput{}, err
 	}
-	return SecretSettingsOf(t.Secrets), nil
+	return secretSettingsOfTenant(t), nil
 }
 
 // UpdateSecretSettings replaces the one-time secrets settings of tenant tid
-// (since 2.1) and returns the stored ones. The delegated admins of the
-// tenant and the super admin may call it. The settings apply to the secrets
-// created afterwards: the existing ones are untouched. Audited as
+// (since 2.1) and returns the stored ones; the settings of the express
+// secrets (since 2.3) set in in replace the stored ones, the others are
+// kept, both written in one transaction. An express member left out keeps
+// the value stored at the time of the write, not of the read (one
+// statement, store.ExpressPatch): a 2.1 client never writes back an
+// anonymous mode that a concurrent update just closed. The delegated admins of the
+// tenant and the super admin may call it, the anonymous mode of the
+// express secrets included. The settings apply to the secrets created
+// afterwards: the existing ones are untouched (lowering the cap of live
+// express secrets deletes nothing), except that turning the anonymous mode
+// off closes the reading of the anonymous express secrets. Audited as
 // secret.settings_updated with the names of the changed members.
 func (s *Service) UpdateSecretSettings(ctx context.Context, p adminauth.Principal, tid tenant.ID, in SecretSettingsInput, ip netip.Addr) (SecretSettingsInput, error) {
 	before, err := s.writable(ctx, p, tid)
@@ -106,7 +174,11 @@ func (s *Service) UpdateSecretSettings(ctx context.Context, p adminauth.Principa
 	if err != nil {
 		return SecretSettingsInput{}, err
 	}
-	t, err := s.repo.setSecretSettings(ctx, tid, next)
+	express, err := expressPatch(in)
+	if err != nil {
+		return SecretSettingsInput{}, err
+	}
+	t, err := s.repo.setSecretSettings(ctx, tid, next, express)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return SecretSettingsInput{}, ErrNotFound
@@ -118,10 +190,11 @@ func (s *Service) UpdateSecretSettings(ctx context.Context, p adminauth.Principa
 		return SecretSettingsInput{}, fmt.Errorf("tenantadmin: set secret settings: %w", err)
 	}
 	s.invalidate(tid, t.FQDN)
+	out := secretSettingsOfTenant(t)
 	s.record(ctx, p, ip, tid, audit.ActionSecretSettingsUpdated, map[string]any{
-		"changed": changedSecretSettings(SecretSettingsOf(before.Secrets), SecretSettingsOf(t.Secrets)),
+		"changed": changedSecretSettings(secretSettingsOfTenant(before), out),
 	})
-	return SecretSettingsOf(t.Secrets), nil
+	return out, nil
 }
 
 // changedSecretSettings returns the API names of the members that differ
@@ -139,12 +212,24 @@ func changedSecretSettings(a, b SecretSettingsInput) []string {
 		{"fileMaxBytes", a.FileMaxBytes != b.FileMaxBytes},
 		{"emailAllowed", a.EmailAllowed != b.EmailAllowed},
 		{"emailRequiresPassphrase", a.EmailRequiresPassphrase != b.EmailRequiresPassphrase},
+		{"expressEnabled", !samePtr(a.ExpressEnabled, b.ExpressEnabled)},
+		{"expressPerHourPerIp", !samePtr(a.ExpressPerHourPerIP, b.ExpressPerHourPerIP)},
+		{"expressPerHourPerToken", !samePtr(a.ExpressPerHourPerToken, b.ExpressPerHourPerToken)},
+		{"expressMaxPending", !samePtr(a.ExpressMaxPending, b.ExpressMaxPending)},
 	} {
 		if m.diff {
 			changed = append(changed, m.name)
 		}
 	}
 	return changed
+}
+
+// samePtr reports whether a and b are both nil or point to equal values.
+func samePtr[T comparable](a, b *T) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // PublicSecretFeatures returns the secrets settings of t for the public

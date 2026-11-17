@@ -57,6 +57,18 @@ regexes = [
   '''^prv_[0-9A-HJKMNP-TV-Z]{26}$''',
 ]
 
+# Secret and API token record identifiers ("sec_" and "tok_" + ULID) are public identifiers,
+# never secrets (the bearer values are "tts_..." and "tt_..."); the generic rule reports them when
+# they sit next to a "secret" or "token" key. Only that exact shape is allowed, and only for the
+# generic rule.
+[[allowlists]]
+description = "Secret and API token identifiers (sec_ / tok_ + ULID), not secrets"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = [
+  '''^(sec|tok)_[0-9A-Z]{26}$''',
+]
+
 [[allowlists]]
 description = "Test fixtures use fake values"
 paths = [

@@ -25,6 +25,12 @@ type Status struct {
 	Passphrase *Passphrase
 	// FileSize is the ciphertext size of the file, 0 without file.
 	FileSize int64
+	// Express marks an express secret (since 2.3): third-party content,
+	// which the read page says, with the link to [Service.ReportAbuse].
+	Express bool
+	// Anonymous marks an express secret created without credential (not
+	// with an API token).
+	Anonymous bool
 }
 
 // Revealed is the content of a revealed secret (OpenAPI SecretRevealed).
@@ -71,23 +77,26 @@ func (s *Service) unknown(ctx context.Context, t *tenant.Tenant, ip netip.Addr, 
 // token, for the client ip. It consumes nothing. It returns a
 // *RateLimitError over the limits of the client, ErrNotFound for an unknown
 // token (secret_invalid, counted as a failure of the client), a token of
-// another tenant or of a pending secret, and a *GoneError for a secret
-// that ended or is past its expiry.
+// another tenant or of a pending secret, ErrExpressDisabled for an express
+// secret while the express service is closed to it (see [Service.gate]),
+// and a *GoneError for a secret that ended or is past its expiry.
 func (s *Service) Status(ctx context.Context, t *tenant.Tenant, ip netip.Addr, token string) (Status, error) {
 	key, err := s.admit(ctx, t, ip)
 	if err != nil {
 		return Status{}, err
 	}
-	sec, err := s.repo.StatusByToken(ctx, t.ID, token, s.now())
+	sec, err := s.repo.StatusByToken(ctx, t.ID, token, s.gate(), s.now())
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return Status{}, s.unknown(ctx, t, ip, key, err)
+	case errors.Is(err, store.ErrExpressClosed):
+		return Status{}, ErrExpressDisabled
 	case err != nil:
 		return Status{}, fmt.Errorf("secret: status: %w", err)
 	case sec.State != store.SecretActive:
 		return Status{}, &GoneError{Reason: APIReason(sec.EndReason)}
 	}
-	st := Status{ExpiresAt: sec.ExpiresAt, FileSize: sec.FileSize}
+	st := Status{ExpiresAt: sec.ExpiresAt, FileSize: sec.FileSize, Express: sec.Express, Anonymous: sec.Anonymous()}
 	if sec.HasPassphrase() {
 		st.Passphrase = &Passphrase{
 			KDF: tte2.PassphraseKDF, Iterations: sec.KDFIterations,
@@ -104,8 +113,9 @@ func (s *Service) Status(ctx context.Context, t *tenant.Tenant, ip netip.Addr, t
 //   - the limits of the client (*RateLimitError);
 //   - the proofs (*ValidationError on FieldKeyProof and FieldProof);
 //   - an unknown token: ErrNotFound with secret_invalid and a failure of
-//     the client; a pending secret: ErrNotFound alone; a secret that
-//     ended: a *GoneError;
+//     the client; a pending secret: ErrNotFound alone; an express secret
+//     while the express service is closed to it: ErrExpressDisabled (see
+//     [Service.gate]); a secret that ended: a *GoneError;
 //   - a wrong key proof: a *ProofError not counted against the secret,
 //     with secret_proof_invalid (reason key) and a failure of the client;
 //   - a wrong proof with a right key proof: counted against the secret,
@@ -129,7 +139,7 @@ func (s *Service) Reveal(ctx context.Context, t *tenant.Tenant, ip netip.Addr, t
 	if len(v.errs) > 0 {
 		return Revealed{}, &ValidationError{Fields: v.errs}
 	}
-	out, err := s.repo.Reveal(ctx, t.ID, token, kp, pr, s.now())
+	out, err := s.repo.Reveal(ctx, t.ID, token, s.gate(), kp, pr, s.now())
 	var (
 		gone  *store.SecretGoneError
 		wrong *store.SecretProofError
@@ -148,6 +158,8 @@ func (s *Service) Reveal(ctx context.Context, t *tenant.Tenant, ip netip.Addr, t
 		}, nil
 	case errors.Is(err, store.ErrNotFound):
 		return Revealed{}, s.unknown(ctx, t, ip, key, err)
+	case errors.Is(err, store.ErrExpressClosed):
+		return Revealed{}, ErrExpressDisabled
 	case errors.As(err, &gone):
 		return Revealed{}, &GoneError{Reason: APIReason(gone.Reason)}
 	case errors.Is(err, store.ErrSecretKeyProof):
@@ -168,6 +180,19 @@ func (s *Service) Reveal(ctx context.Context, t *tenant.Tenant, ip netip.Addr, t
 		return Revealed{}, &GoneError{Reason: ReasonLocked}
 	}
 	return Revealed{}, fmt.Errorf("secret: reveal: %w", err)
+}
+
+// gate returns the read gate of the express secrets (since 2.3, threat
+// model T-389, decision P90): under the instance kill switch every express
+// secret is closed, and the store also closes the anonymous ones of a
+// tenant whose anonymous mode is off. A closed secret is answered
+// ErrExpressDisabled once its token is found (an unknown token stays
+// ErrNotFound first, so the gate is no oracle), whatever its state; nothing
+// is consumed, no failure is counted and no security event is written:
+// the reader holds a valid link, readable again if the service reopens
+// before its expiry. The 2.1 secrets are never closed.
+func (s *Service) gate() store.ExpressGate {
+	return store.ExpressGate{KillSwitch: s.killSwitch}
 }
 
 // wrongProof writes a secret_proof_invalid event with reason and counts a

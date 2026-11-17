@@ -309,6 +309,13 @@ const (
 	// ActionSecretSettingsUpdated: the one-time secrets settings of a tenant
 	// were changed; details hold member names only (since 2.1).
 	ActionSecretSettingsUpdated Action = "secret.settings_updated"
+	// ActionSecretLookedUp: an admin found a secret from a pasted link (since
+	// 2.3); the object is the found "sec_" ID, never the link nor the token.
+	ActionSecretLookedUp Action = "secret.looked_up"
+	// ActionSecretExpressPurged: an admin deleted every live anonymous express
+	// secret of a tenant in bulk (since 2.3); the object is the tenant, details
+	// hold the count only.
+	ActionSecretExpressPurged Action = "secret.express_purged"
 )
 
 // ActorAntivirus is the system actor (store.ActorSystem) of the events of
@@ -396,6 +403,12 @@ var ErrPersonalDetail = errors.New("audit: details must not hold a mail address"
 // secretKeyParts are the fragments of a detail key refused by
 // [ErrSecretDetail], compared case-insensitively.
 var secretKeyParts = []string{"password", "passphrase", "secret", "token", "code"}
+
+// identifierKeys are the detail keys exempted from [ErrSecretDetail]: each
+// names a public identifier, never a secret, although its name holds one
+// of secretKeyParts (since 2.3, secretId: the "sec_" identifier of the
+// express secret of an abuse.reported event).
+var identifierKeys = map[string]bool{"secretId": true}
 
 // Event is an audit event to record.
 type Event struct {
@@ -544,6 +557,9 @@ func toStore(ev Event) (store.AuditEvent, error) {
 		return row, nil
 	}
 	for k := range ev.Details {
+		if identifierKeys[k] {
+			continue
+		}
 		lower := strings.ToLower(k)
 		for _, part := range secretKeyParts {
 			if strings.Contains(lower, part) {

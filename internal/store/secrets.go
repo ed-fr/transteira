@@ -70,8 +70,8 @@ func (s SecretState) Live() bool { return s == SecretPending || s == SecretActiv
 // SecretCreatorKind tells who created a secret (secrets.creator_kind).
 type SecretCreatorKind string
 
-// Creator kinds: the depositor kinds of the deposit sessions, and the API
-// tokens.
+// Creator kinds: the depositor kinds of the deposit sessions, the API
+// tokens and, for the express secrets only, the anonymous creators.
 const (
 	// SecretCreatorInternal is an internal depositor.
 	SecretCreatorInternal SecretCreatorKind = "internal"
@@ -83,9 +83,14 @@ const (
 	SecretCreatorExternal SecretCreatorKind = "external"
 	// SecretCreatorAPIToken is an API token.
 	SecretCreatorAPIToken SecretCreatorKind = "api_token"
+	// SecretCreatorAnonymous is the creator of an express secret created
+	// without credential (since 2.3): no address, no token, no
+	// invitation. It is never a creator of [Secrets.Create].
+	SecretCreatorAnonymous SecretCreatorKind = "anonymous"
 )
 
-// valid reports whether k is a known creator kind.
+// valid reports whether k is a creator kind of [Secrets.Create] (every
+// kind but SecretCreatorAnonymous).
 func (k SecretCreatorKind) valid() bool {
 	switch k {
 	case SecretCreatorInternal, SecretCreatorInternalRemote, SecretCreatorExternal, SecretCreatorAPIToken:
@@ -269,7 +274,9 @@ type Secret struct {
 	// expiry checked on read).
 	State SecretState
 	// CreatorKind, SenderEmail, APITokenID ("" unless an API token) and
-	// InvitationID ("" unless external) describe the creator.
+	// InvitationID ("" unless external) describe the creator. SenderEmail
+	// is "" exactly for an express secret (anonymous or created with an API
+	// token: no declared sender).
 	CreatorKind  SecretCreatorKind
 	SenderEmail  string
 	APITokenID   string
@@ -309,11 +316,18 @@ type Secret struct {
 	// complete download.
 	FileUploadedAt   time.Time
 	FileDownloadedAt time.Time
+	// Express tells an express secret (since 2.3, [Secrets.CreateExpress]):
+	// link delivery, no passphrase, no file, no receipt, created active.
+	Express bool
 }
 
 // HasPassphrase reports whether s is protected by a passphrase (known
 // while it is live only).
 func (s Secret) HasPassphrase() bool { return s.KDFSalt != nil }
+
+// Anonymous reports whether s is an express secret created without
+// credential (OpenAPI SecretStatus.anonymous): neither address nor token.
+func (s Secret) Anonymous() bool { return s.CreatorKind == SecretCreatorAnonymous }
 
 // SecretActor identifies who acts on a secret on the creator side
 // (data-model-v2.1.md, "Creator identity").
@@ -446,7 +460,7 @@ type SecretListOptions struct {
 const secretColumns = `id, state, creator_kind, sender_email, api_token_id, invitation_id, delivery, recipient_email, ` +
 	`read_receipt, receipt_sent_at, kdf_salt, kdf_iterations, duration_code, created_at, activated_at, expires_at, ` +
 	`read_at, ended_at, end_reason, failed_proofs, file_size, file_storage_name, file_uploaded_at, file_downloaded_at, ` +
-	`text_key_id, file_key_id`
+	`express, text_key_id, file_key_id`
 
 // secretContentNull clears the content of a secret that ends: every
 // column a tombstone must not hold (checks of migration 0033).
@@ -487,10 +501,14 @@ var (
 	qSecretCountRecentBySender = tenantQuery(
 		`SELECT count(*) FROM secrets WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL
 		AND created_at > ?`)
+	// The token counts exclude the express secrets of the token (since
+	// 2.3), which have their own hourly limit; the address counts cannot
+	// match one (an express secret has no address).
 	qSecretCountOpenByToken = tenantQuery(
-		`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND state IN ('pending', 'active')`)
+		`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND NOT express
+		AND state IN ('pending', 'active')`)
 	qSecretCountRecentByToken = tenantQuery(
-		`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND created_at > ?`)
+		`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND NOT express AND created_at > ?`)
 	qSecretGet = tenantQuery(
 		`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND id = ?`)
 	qSecretGetByHash = tenantQuery(
@@ -589,6 +607,7 @@ func scanSecret(sc interface{ Scan(...any) error }, tid tenant.ID) (secretRow, e
 	var (
 		r                                       secretRow
 		state, kind, delivery, duration         string
+		sender                                  sql.NullString
 		apiTok, inv, recipient, reason, storage sql.NullString
 		textKey, fileKey                        sql.NullString
 		iterations                              sql.NullInt64
@@ -597,16 +616,17 @@ func scanSecret(sc interface{ Scan(...any) error }, tid tenant.ID) (secretRow, e
 		ended, uploaded, downloaded             sql.NullInt64
 		created                                 int64
 	)
-	err := sc.Scan(&r.ID, &state, &kind, &r.SenderEmail, &apiTok, &inv, &delivery, &recipient,
+	err := sc.Scan(&r.ID, &state, &kind, &sender, &apiTok, &inv, &delivery, &recipient,
 		&r.ReadReceipt, &receipt, &r.KDFSalt, &iterations, &duration, &created, &activated, &expires,
 		&read, &ended, &reason, &r.FailedProofs, &fileSize, &storage, &uploaded, &downloaded,
-		&textKey, &fileKey)
+		&r.Express, &textKey, &fileKey)
 	if err != nil {
 		return secretRow{}, err
 	}
 	r.TenantID = tid
 	r.State, r.CreatorKind, r.Delivery = SecretState(state), SecretCreatorKind(kind), SecretDelivery(delivery)
 	r.Duration = tenant.SecretDuration(duration)
+	r.SenderEmail = sender.String // NULL for an express secret
 	r.APITokenID, r.InvitationID, r.RecipientEmail = apiTok.String, inv.String, recipient.String
 	r.EndReason = SecretEndReason(reason.String)
 	r.KDFIterations = int(iterations.Int64)
@@ -629,14 +649,24 @@ type Secrets struct {
 	keys     SecretKeys
 	newToken func() (string, error) // id.NewSecretToken; replaced in tests
 	newGrant func() (string, error) // id.NewSecretGrant; replaced in tests
+	// expressPurgeBatch is the batch of PurgeAnonymousExpress
+	// (ExpressPurgeBatchSize; lowered in tests).
+	expressPurgeBatch int
+	// expressPurgeHook, set by tests only, runs in each batch transaction
+	// of PurgeAnonymousExpress between the list and the updates, to end
+	// listed secrets concurrently; nil in production.
+	expressPurgeHook func(ctx context.Context, tx *ScopedTx, listed []secretRow) error
 }
 
 // Secrets returns the secret repository using keys for the server data
 // keys of the secrets. keys may be nil for the operations that touch no
-// key (Get, StatusByToken, lists, counts, PurgeTombstones); the others then
-// fail.
+// key (Get, StatusByToken, LookupByToken, lists, counts, PurgeTombstones);
+// the others then fail.
 func (db *DB) Secrets(keys SecretKeys) *Secrets {
-	return &Secrets{db: db, keys: keys, newToken: id.NewSecretToken, newGrant: id.NewSecretGrant}
+	return &Secrets{
+		db: db, keys: keys, newToken: id.NewSecretToken, newGrant: id.NewSecretGrant,
+		expressPurgeBatch: ExpressPurgeBatchSize,
+	}
 }
 
 // Stages of a reveal reported to secretRevealHook.
@@ -943,14 +973,20 @@ func goneReason(state SecretState, reason SecretEndReason, expires time.Time, no
 // SecretExpired (end reason expired, EndedAt its expiry, no salt) before
 // the lifecycle sweep changed it. It returns ErrNotFound for a malformed
 // or unknown token, a token of another tenant and a pending secret (never
-// delivered; ErrSecretPending, which wraps ErrNotFound). The caller answers
-// a tombstone with its end reason.
-func (r *Secrets) StatusByToken(ctx context.Context, tid tenant.ID, token string, now time.Time) (Secret, error) {
+// delivered; ErrSecretPending, which wraps ErrNotFound), then, for an
+// express secret, ErrExpressClosed while gate or the tenant closes it
+// ([ExpressGate]: before any other check, whatever its state, reading
+// only). The caller answers a tombstone with its end reason.
+func (r *Secrets) StatusByToken(ctx context.Context, tid tenant.ID, token string, gate ExpressGate, now time.Time) (Secret, error) {
 	if !id.SecretTokenValid(token) {
 		return Secret{}, fmt.Errorf("store: secret status: %w", ErrNotFound)
 	}
+	hash := id.HashToken(token)
 	s, err := readScoped(ctx, r.db, tid, "secret status", func(tx *ScopedTx) (Secret, error) {
-		row, err := scanSecret(tx.QueryRow(ctx, qSecretGetByHash, id.HashToken(token)), tid)
+		if err := checkExpressGate(ctx, tx, hash, gate); err != nil {
+			return Secret{}, err
+		}
+		row, err := scanSecret(tx.QueryRow(ctx, qSecretGetByHash, hash), tid)
 		return row.Secret, err
 	})
 	if err != nil {
@@ -970,13 +1006,17 @@ func (r *Secrets) StatusByToken(ctx context.Context, tid tenant.ID, token string
 // the key proof and the proof of the recipient (e2e-format.md 3.3.4,
 // data-model-v2.1.md 2.1 "Proofs"):
 //
-//  1. read: an unknown secret is ErrNotFound, a pending one
+//  1. read: an unknown secret is ErrNotFound; an express secret closed by
+//     gate or by its tenant ([ExpressGate]) is ErrExpressClosed, whatever
+//     its state, nothing compared nor written; a pending one is
 //     ErrSecretPending (wrapping ErrNotFound), a tombstone or an
 //     active secret past its expiry a [*SecretGoneError]; SHA-256(keyProof)
 //     is compared with the key verifier in constant time, and a mismatch
 //     is ErrSecretKeyProof, neither counted nor written;
 //  2. in one write transaction (BEGIN IMMEDIATE on SQLite, a row lock on
-//     PostgreSQL): an attempt slot is claimed (failed_proofs + 1 while
+//     PostgreSQL): the express gate is checked again (a closing committed
+//     since step 1 is ErrExpressClosed, nothing written), an attempt slot
+//     is claimed (failed_proofs + 1 while
 //     below SecretMaxFailedProofs, active and not expired; none: a
 //     [*SecretGoneError] with the reason of the row), then the proof is
 //     compared in constant time (the key verifier of a live secret never
@@ -997,7 +1037,9 @@ func (r *Secrets) StatusByToken(ctx context.Context, tid tenant.ID, token string
 // file metadata; the stored file and its key stay until
 // [Secrets.CompleteFileDownload] or [Secrets.ExpireGrants]. The caller
 // scrubs the database after a success or a lock (keys destroyed).
-func (r *Secrets) Reveal(ctx context.Context, tid tenant.ID, token string, keyProof, proof [32]byte, now time.Time) (RevealedSecret, error) {
+func (r *Secrets) Reveal(ctx context.Context, tid tenant.ID, token string, gate ExpressGate, keyProof, proof [32]byte,
+	now time.Time,
+) (RevealedSecret, error) {
 	if r.keys == nil {
 		return RevealedSecret{}, errSecretNoKeys
 	}
@@ -1006,6 +1048,9 @@ func (r *Secrets) Reveal(ctx context.Context, tid tenant.ID, token string, keyPr
 	}
 	hash := id.HashToken(token)
 	secID, err := readScoped(ctx, r.db, tid, "reveal secret", func(tx *ScopedTx) (string, error) {
+		if err := checkExpressGate(ctx, tx, hash, gate); err != nil {
+			return "", err
+		}
 		return checkKeyProof(ctx, tx, hash, keyProof, now)
 	})
 	if err != nil {
@@ -1019,6 +1064,9 @@ func (r *Secrets) Reveal(ctx context.Context, tid tenant.ID, token string, keyPr
 		outcome error
 	)
 	err = writeScoped(ctx, r.db, tid, "reveal secret", func(tx *ScopedTx) error {
+		if err := checkExpressGate(ctx, tx, hash, gate); err != nil {
+			return err
+		}
 		var err error
 		out, outcome, err = r.revealTx(ctx, tx, secID, proof, now)
 		return err

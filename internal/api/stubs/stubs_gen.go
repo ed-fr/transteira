@@ -115,6 +115,11 @@ func (Unimplemented) CreateDropLink(_ context.Context, _ gen.CreateDropLinkReque
 	return nil, ErrNotImplemented
 }
 
+// CreateExpressSecret answers 404 not-found until the operation is implemented.
+func (Unimplemented) CreateExpressSecret(_ context.Context, _ gen.CreateExpressSecretRequestObject) (gen.CreateExpressSecretResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // CreateInvitation answers 404 not-found until the operation is implemented.
 func (Unimplemented) CreateInvitation(_ context.Context, _ gen.CreateInvitationRequestObject) (gen.CreateInvitationResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -650,6 +655,11 @@ func (Unimplemented) ListTenants(_ context.Context, _ gen.ListTenantsRequestObje
 	return nil, ErrNotImplemented
 }
 
+// LookupTenantSecret answers 404 not-found until the operation is implemented.
+func (Unimplemented) LookupTenantSecret(_ context.Context, _ gen.LookupTenantSecretRequestObject) (gen.LookupTenantSecretResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // PreviewEmailTemplate answers 404 not-found until the operation is implemented.
 func (Unimplemented) PreviewEmailTemplate(_ context.Context, _ gen.PreviewEmailTemplateRequestObject) (gen.PreviewEmailTemplateResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -657,6 +667,11 @@ func (Unimplemented) PreviewEmailTemplate(_ context.Context, _ gen.PreviewEmailT
 
 // ProvisionTenant answers 404 not-found until the operation is implemented.
 func (Unimplemented) ProvisionTenant(_ context.Context, _ gen.ProvisionTenantRequestObject) (gen.ProvisionTenantResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// PurgeExpressSecrets answers 404 not-found until the operation is implemented.
+func (Unimplemented) PurgeExpressSecrets(_ context.Context, _ gen.PurgeExpressSecretsRequestObject) (gen.PurgeExpressSecretsResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -672,6 +687,11 @@ func (Unimplemented) ReissueMyTransferLink(_ context.Context, _ gen.ReissueMyTra
 
 // ReportAbuse answers 404 not-found until the operation is implemented.
 func (Unimplemented) ReportAbuse(_ context.Context, _ gen.ReportAbuseRequestObject) (gen.ReportAbuseResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// ReportSecretAbuse answers 404 not-found until the operation is implemented.
+func (Unimplemented) ReportSecretAbuse(_ context.Context, _ gen.ReportSecretAbuseRequestObject) (gen.ReportSecretAbuseResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 

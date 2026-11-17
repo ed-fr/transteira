@@ -139,31 +139,39 @@ func (h *harness) openTokenOf(t *testing.T, op operation, tid tenant.ID) string 
 	return tok.Token
 }
 
-// getForeignSecretLink: A's token is active under A and unknown under B.
+// getForeignSecretLink: A's token is active under A and unknown under B,
+// for a 2.1 secret and an express secret (since 2.3, created with an
+// express API token of A).
 func getForeignSecretLink(t *testing.T, h *harness, op operation) {
 	t.Helper()
-	s := h.createSecretA(t)
-	params := map[string]string{"secretToken": s.Token}
-	if resp := h.call(t, op, hostA, params, ""); resp.status != http.StatusOK || !strings.Contains(string(resp.body), `"state":"active"`) {
-		t.Fatalf("%s under %s: %d %s", op, hostA, resp.status, resp.body)
+	for _, s := range []createdSecretA{h.createSecretA(t), h.createExpress(t, hostA, h.expressTokenOf(t, h.tenantA.ID))} {
+		params := map[string]string{"secretToken": s.Token}
+		if resp := h.call(t, op, hostA, params, ""); resp.status != http.StatusOK || !strings.Contains(string(resp.body), `"state":"active"`) {
+			t.Fatalf("%s under %s: %d %s", op, hostA, resp.status, resp.body)
+		}
+		resp := h.call(t, op, hostB, params, "")
+		wantCode(t, op, hostB, resp, http.StatusNotFound, "not-found")
+		noSealed(t, h, op, hostB, resp, s)
+		if strings.Contains(string(resp.body), "express") {
+			t.Errorf("%s under %s tells an express secret: %s", op, hostB, resp.body)
+		}
 	}
-	resp := h.call(t, op, hostB, params, "")
-	wantCode(t, op, hostB, resp, http.StatusNotFound, "not-found")
-	noSealed(t, h, op, hostB, resp, s)
 }
 
 // revealForeignSecret: A's token with the right proofs is unknown under B
-// (the secret is not consumed), then revealed under A.
+// (the secret is not consumed), then revealed under A, for a 2.1 secret
+// and an express secret (since 2.3).
 func revealForeignSecret(t *testing.T, h *harness, op operation) {
 	t.Helper()
-	s := h.createSecretA(t)
-	params := map[string]string{"secretToken": s.Token}
-	resp := h.call(t, op, hostB, params, s.revealBody())
-	wantCode(t, op, hostB, resp, http.StatusNotFound, "not-found")
-	noSealed(t, h, op, hostB, resp, s)
-	resp = h.call(t, op, hostA, params, s.revealBody())
-	if resp.status != http.StatusOK || !strings.Contains(string(resp.body), s.text) {
-		t.Fatalf("%s under %s: %d %s", op, hostA, resp.status, resp.body)
+	for _, s := range []createdSecretA{h.createSecretA(t), h.createExpress(t, hostA, h.expressTokenOf(t, h.tenantA.ID))} {
+		params := map[string]string{"secretToken": s.Token}
+		resp := h.call(t, op, hostB, params, s.revealBody())
+		wantCode(t, op, hostB, resp, http.StatusNotFound, "not-found")
+		noSealed(t, h, op, hostB, resp, s)
+		resp = h.call(t, op, hostA, params, s.revealBody())
+		if resp.status != http.StatusOK || !strings.Contains(string(resp.body), s.text) {
+			t.Fatalf("%s under %s: %d %s", op, hostA, resp.status, resp.body)
+		}
 	}
 }
 

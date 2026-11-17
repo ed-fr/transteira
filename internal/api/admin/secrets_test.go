@@ -195,7 +195,8 @@ func TestImportSecretSettings(t *testing.T) {
 	t.Parallel()
 	super := ctxWith(store.SessionAuthenticated, superRoot)
 	settings := `"secretSettings":{"enabled":true,"durations":["1h","1d"],"defaultDuration":"1d","fileAllowed":true,` +
-		`"fileMaxBytes":10485760,"emailAllowed":true,"emailRequiresPassphrase":true},`
+		`"fileMaxBytes":10485760,"emailAllowed":true,"emailRequiresPassphrase":true,"expressEnabled":true,` +
+		`"expressPerHourPerIp":3,"expressPerHourPerToken":30,"expressMaxPending":300},`
 	raw := strings.Replace(validImport, `"network"`, settings+`"network"`, 1)
 	svc := &fakeTenantService{}
 	if _, err := tenantServer(svc).ImportTenant(importCtx(super, raw), importReq()); err != nil {
@@ -205,6 +206,12 @@ func TestImportSecretSettings(t *testing.T) {
 	if ss == nil || !ss.Enabled || len(ss.Durations) != 2 || ss.DefaultDuration == nil || *ss.DefaultDuration != "1d" ||
 		ss.FileMaxBytes != 10485760 || !ss.EmailRequiresPassphrase {
 		t.Errorf("settings = %+v", ss)
+	}
+	// The express members (since 2.3) are accepted and passed on; the
+	// service never imports the anonymous mode.
+	if ss.ExpressEnabled == nil || ss.ExpressPerHourPerIP == nil || *ss.ExpressPerHourPerIP != 3 ||
+		ss.ExpressPerHourPerToken == nil || *ss.ExpressPerHourPerToken != 30 || ss.ExpressMaxPending == nil || *ss.ExpressMaxPending != 300 {
+		t.Errorf("express settings = %+v", ss)
 	}
 	// Still strict: an incomplete block and an unknown member are refused.
 	for name, bad := range map[string]string{
