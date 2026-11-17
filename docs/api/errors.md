@@ -32,7 +32,7 @@ Some codes carry extension members:
 |---|---|---|
 | `errors` | `validation-failed`, and since 2.1 `secret-format-invalid` (for example field `/encryptedText`, code `invalid-format`), `secret-duration-not-offered` (`/expiresIn`, code `not-allowed`, with `allowed`) and `recipient-domain-refused` | List of `{field, code, allowed?, line?, column?, message?}` objects, one per invalid field. `field` is the JSON pointer (RFC 6901) of the field in the request body, such as `/recipients/0` or `/files/2/name`, or the name of a header (`Idempotency-Key`) or query parameter (`confirm`). For a mail template (`code: invalid-template`), `field` names the part (`/subject`, `/bodyHtml` or `/bodyText`), `line` and `column` (1-based, the column in characters) locate the problem when it has a position, and `message` explains it in English. |
 | `attemptsRemaining` | `verification-code-invalid`, `transfer-password-invalid`, `secret-proof-invalid` | Number of attempts left before lockout or invalidation. |
-| `retryAfterSeconds` | `rate-limited`, `secret-limit-reached` (24-hour creation count only), `transfer-locked`, `maintenance`, `state-conflict` (admin deletion of a transfer being uploaded, GDPR erasure blocked by an upload in progress) | Seconds to wait before retrying; the `Retry-After` header carries the same value. |
+| `retryAfterSeconds` | `rate-limited` (the express secret hourly limits included, since 2.3), `secret-limit-reached` (24-hour creation count only; never `express-secret-limit-reached`), `transfer-locked`, `maintenance`, `state-conflict` (admin deletion of a transfer being uploaded, GDPR erasure blocked by an upload in progress) | Seconds to wait before retrying; the `Retry-After` header carries the same value. |
 | `maxTransferBytes` | `transfer-too-large`, `secret-file-too-large` | Size limit in bytes: the per-transfer limit of the entity, or for `secret-file-too-large` the secret file limit (`features.secrets.fileMaxBytes`). |
 | `files` | `upload-incomplete`, `checksum-mismatch` | Identifiers of the files concerned. |
 | `reason` | `secret-gone` | Since 2.1. Why the secret ended: `read`, `expired`, `deleted` or `locked`. |
@@ -442,15 +442,16 @@ use to ban the client IP.
   20 at once, then one every 3 seconds), the SMTP tests of an entity (5 per administrator
   and entity within 10 minutes), and the notification resends of a transfer (5 per hour per
   transfer, whoever the administrator), and abuse reports (3 per day per recipient link,
-  5 per hour per client IP). Since 2.1, the secret links: 30 status or reveal requests per minute per client, and 10 failures (unknown token, wrong key proof) within 15 minutes lock that client for 15 minutes (scopes `secret_link_ip` and `secret_link`), and the number of simultaneous secret file streams is capped.
+  5 per hour per client IP). Since 2.1, the secret links: 30 status or reveal requests per minute per client, and 10 failures (unknown token, wrong key proof) within 15 minutes lock that client for 15 minutes (scopes `secret_link_ip` and `secret_link`), and the number of simultaneous secret file streams is capped. Since 2.3, the express secrets: more than `expressPerHourPerIp` anonymous creations (10 by default) from one client (an IPv4 address or an IPv6 /64) on an entity in the sliding last hour (scope `express_ip`), or more than `expressPerHourPerToken` creations (100 by default) with one API token (scope `express_token`); the abuse reports on express secrets (3 per secret per day, 5 per client IP per hour shared with the transfer reports, scopes `abuse_report_link` and `abuse_report_ip`).
 - **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`, `POST /invitations`,
   `POST /transfers`, `GET /downloads/{linkToken}/files/{fileId}`,
   `GET /downloads/{linkToken}/archive`, `POST /admin/auth/login`, `POST /admin/auth/totp`,
   `POST /admin/setup`, `POST /admin/activation`, `POST /admin/me/totp/confirm`,
   `PUT /admin/me/password`, `POST /admin/tenants/{tenantId}/smtp/test`,
   `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`,
-  `POST /admin/system/master-key/rotations`, `GET /secret-links/{secretToken}` and
-  `POST /secret-links/{secretToken}/reveal`.
+  `POST /admin/system/master-key/rotations`, `GET /secret-links/{secretToken}`,
+  `POST /secret-links/{secretToken}/reveal` and, since 2.3, `POST /express-secrets` and
+  `POST /secret-links/{secretToken}/abuse-reports`.
 - **What to do:** wait for `Retry-After` (`retryAfterSeconds`) seconds before retrying. Scripts
   must not retry in a tight loop.
 
@@ -816,7 +817,7 @@ use to ban the client IP.
 - **HTTP status:** 410 Gone
 - **Since:** 2.1.
 - **Meaning:** the one-time secret ended and only its tombstone remains (kept 30 days, without content). The `reason` member says why: `read` (someone read it first, which lets a recipient detect an interception), `expired`, `deleted` (by its creator or an admin) or `locked` (5 wrong proofs).
-- **Typical endpoints:** `GET /secret-links/{secretToken}`, `POST /secret-links/{secretToken}/reveal`.
+- **Typical endpoints:** `GET /secret-links/{secretToken}`, `POST /secret-links/{secretToken}/reveal`, and since 2.3 `POST /secret-links/{secretToken}/abuse-reports` (an express secret `expired`, `deleted` or `locked`; a `read` one can still be reported).
 - **What to do:** ask the creator for a new secret. If `reason` is `read` and you did not read it, tell the creator: the link may have been intercepted.
 
 ### secret-proof-invalid
@@ -880,7 +881,7 @@ use to ban the client IP.
 - **HTTP status:** 400 Bad Request
 - **Since:** 2.1.
 - **Meaning:** a sealed value of a secret fails a keyless check that the OpenAPI schema cannot express: the sealed text is not canonical base64url or its first byte is not 1, the sealed text is exactly 29 decoded bytes (empty text) without a declared file, the sealed file metadata fails the framing of a sealed blob, or the uploaded file is not exactly the declared size or fails the `TTE2` validator. The server holds no key: it only checks the encoding, the version and the sizes (and, for the file, the `TTE2` header and the declared size), never the content. The refused upload leaves the secret `pending`. **Rule:** anything the schema expresses (pattern, enumeration, length, bound: a verifier that is not 64 lowercase hex characters, a passphrase descriptor other than `pbkdf2-sha256` with 600000 iterations and a canonical 22-character salt, a sealed text outside 39 to 53 372 characters, a `fragmentKey` or a proof of the wrong form) is `400 validation-failed` with field codes, checked first.
-- **Typical endpoints:** `POST /secrets`, `PUT /secrets/{secretId}/file`.
+- **Typical endpoints:** `POST /secrets`, `PUT /secrets/{secretId}/file`, and since 2.3 `POST /express-secrets`.
 - **What to do:** produce the sealed values again with a client that implements the format (`docs/architecture/e2e-format.md`) and send them again.
 
 ### secret-passphrase-required
@@ -890,6 +891,30 @@ use to ban the client IP.
 - **Meaning:** the entity requires a passphrase for the e-mail delivery of a secret (`emailRequiresPassphrase`) and the request has no `passphrase` descriptor: a mailed link carries the key, so only a passphrase sent by another channel keeps the secret out of reach of the mail chain.
 - **Typical endpoints:** `POST /secrets`.
 - **What to do:** add a passphrase and send it to the recipient by another channel, or use `delivery: link`.
+
+### express-secrets-disabled
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.3.
+- **Meaning:** express secrets (text only, created without authentication) cannot be created here: either the instance kill switch `TT_EXPRESS_SECRETS_DISABLED=true` is on, which refuses every express creation, **with or without an API token**; or the call has no credential and the entity has not enabled the anonymous mode (`expressEnabled` is off, the default). A valid API token of the entity with `expressAllowed` is accepted even when the anonymous mode is off, but never under the kill switch. Independent of `secrets-disabled` (the 2.1 module switch). Creation refusals are written to the security log (`express_refused`, `reason=disabled`). **Reading is blocked too** while the service is closed: the status and the reveal of an express secret answer this code under the kill switch (any express secret) or when `expressEnabled` is off (anonymous express secrets only; those created with an API token stay readable). Nothing is consumed and no failed attempt is counted: the secret is readable again if the service reopens before it expires. An unknown token still answers `404 not-found` first. 2.1 secrets are never blocked, and abuse reports (`POST /secret-links/{secretToken}/abuse-reports`) stay possible.
+- **Typical endpoints:** `POST /express-secrets`, `GET /secret-links/{secretToken}`, `POST /secret-links/{secretToken}/reveal`.
+- **What to do:** check `features.expressSecrets.enabled` of `GET /tenant` before offering the page; scripts use an API token of the entity, or ask the administrators to enable express secrets. A reader can only wait for the service to reopen (before the secret expires) or ask the sender for another channel.
+
+### express-token-not-allowed
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.3.
+- **Meaning:** the API token is valid but has not been allowed to create express secrets: the opt-in `expressAllowed` of the token is off (the default). Written to the security log (`express_refused`, `reason=token`).
+- **Typical endpoints:** `POST /express-secrets` with `Authorization: Bearer`.
+- **What to do:** ask the administrators of the entity to set `expressAllowed` on the token (`PATCH /admin/tenants/{tenantId}/api-tokens/{tokenId}`), or use a token that has it.
+
+### express-secret-limit-reached
+
+- **HTTP status:** 429 Too Many Requests
+- **Since:** 2.3.
+- **Meaning:** the entity already holds its maximum number of live (unread, unexpired) express secrets (`expressMaxPending`, 1 000 by default, counting anonymous and API token ones together), and the call is anonymous: anonymous creations are refused until some are read or expire, while creations with an API token are still accepted. No `Retry-After`: the secrets free up at no predictable time. Written to the security log (`express_refused`, `reason=limit`). Not to be confused with `rate-limited`, the per-client (`expressPerHourPerIp`) or per-token (`expressPerHourPerToken`) hourly limit, which carries `Retry-After`.
+- **Typical endpoints:** `POST /express-secrets`.
+- **What to do:** try again later, use an API token of the entity, or ask the administrators (who can raise `expressMaxPending` or delete secrets).
 
 ### internal-error
 

@@ -321,6 +321,60 @@ info:
 
     **Compatibility:** no member is removed, retyped or newly required.
 
+    ## Version 2.3 additions
+    Version 2.3 only adds paths, optional members and values of enumerations to `/api/v1`;
+    every operation, member and value marked "Since 2.3." is absent from a 2.2 server (a 2.2
+    server answers `404 not-found` on the new paths and ignores or refuses the new members). A
+    2.1 or 2.2 client sees no behaviour change, except the relaxations and the read block
+    stated below.
+    - **Express secrets** (specification section 22.2): a one-time **text** secret created
+      without any authentication, from any network, by whoever reaches the FQDN of the tenant
+      (`createExpressSecret`, `POST /express-secrets`). It is a restricted profile of the 2.1
+      secret (format: docs/architecture/e2e-format.md, section 3.3.9): sealed in the browser
+      (or by the API client) exactly like a 2.1 secret, link delivery only, no passphrase, no
+      file, no read receipt, no mail, durations fixed to `1h`, `1d` and `7d`, text up to
+      10 000 Unicode code points (checked by the client: the server never sees the text). The
+      client composes the link `https://<fqdn>/s/<token>#k=<key>` itself; the status and the
+      one-time reveal use the 2.1 recipient operations (`getSecretLink`, `revealSecret`, page
+      `/s/<token>`), whose status now says `express` and `anonymous` (banner "third-party
+      content" on the read page). The reader may report it (`reportSecretAbuse`, also after
+      reading).
+    - **Switches**: off by default per tenant (`SecretSettings.expressEnabled`), and an instance
+      kill switch (`TT_EXPRESS_SECRETS_DISABLED=true`) that refuses every express creation,
+      with or without an API token (`403 express-secrets-disabled`). An API token of the tenant
+      needs the opt-in `ApiToken.expressAllowed` (`403 express-token-not-allowed` otherwise);
+      with it, an express secret can be created even when the anonymous mode of the tenant is
+      off (integrations: ticketing tools, password vaults, scripts). **Read block:** while the
+      service is closed, reading is blocked too (`403 express-secrets-disabled` on the status
+      and the reveal): every express secret under the kill switch, the anonymous ones when
+      `expressEnabled` is off; nothing is consumed, and the secrets are readable again if the
+      service reopens before they expire. 2.1 secrets are never blocked. A configuration import
+      always sets `expressEnabled` to false.
+    - **Abuse limits**: anonymous creations limited per client IP (IPv4 address or IPv6 /64)
+      per tenant (`expressPerHourPerIp`, 10 per hour by default), creations with a token per
+      token instead (`expressPerHourPerToken`, 100 per hour by default), both
+      `429 rate-limited` with `Retry-After`; at most `expressMaxPending` live express secrets
+      per tenant (1 000 by default): beyond it, anonymous creations get
+      `429 express-secret-limit-reached` (no `Retry-After`). Maintenance mode applies.
+    - **Settings**: `SecretSettings` gains `expressEnabled`, `expressPerHourPerIp`,
+      `expressPerHourPerToken` and `expressMaxPending` (a 2.1 client that omits them in a
+      `PUT` keeps their current values); `getPublicTenant` gains `features.expressSecrets`.
+    - **Administration**: `AdminSecret.creatorKind` gains `anonymous`, `AdminSecret.express`
+      marks express secrets; `lookupTenantSecret` (`POST
+      /admin/tenants/{tenantId}/secrets/lookup`) finds any secret from its link (the token is
+      never stored, logged nor audited); `purgeExpressSecrets` (`POST
+      /admin/tenants/{tenantId}/express-secrets/purge`) deletes every live anonymous express
+      secret at once. Abuse reports may name a secret (`AbuseReport.secretId`).
+      **Relaxations:** `AdminSecret.senderEmail`, `AbuseReport.transferId` and
+      `AbuseReport.senderEmail` are no longer required; they are absent for express secrets
+      and their reports (no creator address, no transfer). The statistics and the monitoring
+      counters of secrets include express secrets.
+    - **Security log and audit**: new security event `express_refused` (`reason` `disabled`,
+      `token` or `limit`), new `rate_limited` scopes `express_ip` and `express_token`; audit
+      `secret.created` with `details.express: true` and `details.creatorKind` `anonymous` or
+      `api_token`, new audit actor kind `anonymous`, new actions `secret.looked_up` and
+      `secret.express_purged`; never any content, key, proof, verifier nor token.
+
   license:
     name: AGPL-3.0-only
     identifier: AGPL-3.0-only
@@ -362,7 +416,7 @@ tags:
   - name: Admin system
     description: Instance-wide operations reserved to the super admin.
   - name: Secrets
-    description: "Since 2.1. One-time secrets sealed in the browser: creation, one-time reading and file download."
+    description: "Since 2.1. One-time secrets sealed in the browser: creation, one-time reading and file download. Since 2.3, express secrets: text only, created without authentication."
   - name: Provisioning
     description: "Since 1.2. Tenant creation by service providers with a provisioning token, on the admin host only."
 
@@ -435,7 +489,7 @@ paths:
         Metric names (all prefixed `transteira_`): `build_info`, `uptime_seconds`, `maintenance`,
         `transfers_total`, `uploaded_bytes_total`, `downloads_total`, `downloaded_bytes_total`,
         `antivirus_detections_total` (per tenant), `secrets_created_total`, `secrets_read_total`,
-        `secrets_locked_total` (per tenant, since 2.1; these three counters are in memory and reset
+        `secrets_locked_total` (per tenant, since 2.1, express secrets included since 2.3; these three counters are in memory and reset
         on a restart, so use `increase()` or `rate()`, while the `secrets*Last24h` fields of
         `/status` come from the database), `storage_used_bytes`, `storage_quota_bytes`,
         `active_transfers`, `secret_file_bytes` (per tenant, since 2.1), `scan_queue_files`,
@@ -677,6 +731,12 @@ paths:
         of the tenant other than this one, `getTenantAsset` and `getTenantLegalDocument` answers
         `503 tenant-in-setup` (no transfer exists while in setup). `branding.faviconUrl` gives the
         favicon of the tenant.
+
+        Since 2.3 `features.expressSecrets` tells the web page whether anonymous express secrets
+        are offered (`enabled`: the tenant setting `expressEnabled` and not the instance kill
+        switch `TT_EXPRESS_SECRETS_DISABLED`), their fixed durations and the client-side text
+        limit (`maxChars`, in Unicode code points). Neither the rate limits nor the tenant cap
+        are disclosed.
       security: []
       parameters:
         - $ref: '#/components/parameters/AcceptLanguage'
@@ -718,6 +778,7 @@ paths:
                       recipientRestrictions: true
                       antivirus: enabled
                       secrets: { enabled: true, durations: [1h, 1d, 7d], defaultDuration: 1d, fileAllowed: true, fileMaxBytes: 10485760, emailAllowed: true }
+                      expressSecrets: { enabled: true, durations: [1h, 1d, 7d], maxChars: 10000 }
                     confidentialityLevels:
                       - key: public
                         label: Public
@@ -2422,6 +2483,242 @@ paths:
                     code: mail-unavailable
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /express-secrets:
+    post:
+      tags: [Secrets]
+      operationId: createExpressSecret
+      summary: Create an express secret (text only, no authentication)
+      description: |
+        Since 2.3. Creates an **express secret** (specification section 22.2): a one-time text
+        secret that anyone who reaches the FQDN of the tenant can create, with no deposit
+        session, no address verification, no invitation and no IP range check. It is the
+        restricted profile of a 2.1 secret described in docs/architecture/e2e-format.md,
+        section 3.3.9: the text is sealed by the client exactly as for `createSecret`, without
+        passphrase (so `K'` is derived with an empty salt), without file, link delivery only,
+        no read receipt and no mail. The server receives the sealed text and the two verifiers,
+        never the key nor the plaintext. The answer is the `id` and the `token` of the secret,
+        created directly `active`; the client composes the link
+        `https://<fqdn>/s/<token>#k=<key>` itself, the key never being sent here. The
+        recipient reads it once through the page `/s/<token>`, `getSecretLink` and
+        `revealSecret`, exactly like a 2.1 secret (destroyed at the first read or at expiry),
+        except that the reading is blocked while the express service is closed (see
+        `getSecretLink`), and may report it (`reportSecretAbuse`).
+
+        **Credentials.** No credential is needed (`security: {}`): such a call is an
+        **anonymous** creation. An API token of the tenant may be given instead
+        (`Authorization: Bearer`): the creation is then attributed to the token, limited per
+        token instead of per IP, and allowed even when the anonymous mode of the tenant is off.
+        An unknown, revoked or expired token (or a token of another tenant) is
+        `401 invalid-credentials` and written to the security log (`api_token_invalid`), never
+        downgraded to an anonymous creation; the lock of a client after repeated invalid tokens
+        applies (`429 rate-limited`, scope `api_token`); a valid token used from an IP outside
+        its `allowedCidrs` is `403 ip-not-allowed` (security log `deposit_refused`,
+        `reason=ip`), as for `createSecret`. A token needs the explicit opt-in
+        `expressAllowed` (off by default, set by the admins on the token): without it the call
+        is `403 express-token-not-allowed` (security log `express_refused`, `reason=token`). No session and no CSRF token: a deposit session
+        cookie sent along is ignored. The operation is protected from cross-site use like
+        `revealSecret`: an `Origin` header other than `https://<entity host>` or a
+        `Sec-Fetch-Site` other than `same-origin` gets `403 csrf-invalid`; requests without
+        these headers (scripts, API clients) are not affected.
+
+        **Switches**, checked after the maintenance mode and the setup state (`503`) and
+        before the body:
+        - the instance kill switch `TT_EXPRESS_SECRETS_DISABLED=true` refuses every express
+          creation, with or without a token: `403 express-secrets-disabled`;
+        - otherwise an anonymous call on a tenant whose `expressEnabled` is off (the default)
+          is `403 express-secrets-disabled`; a call with a valid token that has
+          `expressAllowed` is accepted whatever `expressEnabled` says.
+        Both refusals write the security event `express_refused` (`reason=disabled`). The
+        `secrets-disabled` switch of the 2.1 module (`SecretSettings.enabled`) does not apply
+        to express secrets, which have their own switch. `features.expressSecrets.enabled` of
+        `getPublicTenant` tells the web page whether the anonymous mode is offered.
+
+        **Body.** Malformed values follow the rule of `createSecret`: any schema violation (a
+        sealed text outside 39 to 53 372 characters or outside base64url, a `verifier` or
+        `keyVerifier` that is not 64 lowercase hex characters, an `expiresIn` other than `1h`,
+        `1d` or `7d`, any other member such as `passphrase`, `file`, `delivery`, `recipient`,
+        `readReceipt` or `senderEmail`) is `400 validation-failed` with field codes;
+        `400 secret-format-invalid` is kept for the keyless checks the schema cannot express
+        (sealed text not canonical base64url, first byte other than 1, and the empty text:
+        exactly 29 decoded bytes, always refused since an express secret has no file). The
+        durations are fixed (`1h`, `1d`, `7d`), independent of the durations the tenant offers
+        to 2.1 secrets. The text is limited to 10 000 Unicode code points by the client: the
+        server only sees the ciphertext and keeps the 2.1 bound on its length (at most 40 029
+        decoded bytes, enough for 10 000 code points of 4 bytes), so it cannot count
+        characters (e2e-format.md, section 3.3.9).
+
+        **Limits.**
+        - Anonymous: at most `expressPerHourPerIp` creations (10 by default) per client
+          (IPv4 address or IPv6 /64) and per tenant in the sliding last hour; beyond,
+          `429 rate-limited` with `Retry-After` (security log `rate_limited`,
+          `scope="express_ip"`).
+        - With a token: at most `expressPerHourPerToken` creations (100 by default) per token
+          in the sliding last hour instead of the per-IP limit; beyond, `429 rate-limited` with
+          `Retry-After` (`scope="express_token"`). The 2.1 per-creator limits of `createSecret`
+          (50 open, 200 per 24 hours) do not apply to express secrets.
+        - Per tenant: at most `expressMaxPending` live (`active`) express secrets (1 000 by
+          default), counted in the creation transaction over all express secrets of the tenant,
+          anonymous and token ones alike. When it is reached, an **anonymous** creation gets
+          `429 express-secret-limit-reached` without `Retry-After` (the secrets free up when
+          they are read or expire, at no predictable time) and writes `express_refused`
+          (`reason=limit`); a creation with a token is still accepted.
+        An express secret has no file, so it never counts in the storage quota. Abuse detection
+        does not count express secrets (they have no creator address).
+
+        **Traces.** Audited as `secret.created` with `details.express: true`,
+        `details.creatorKind` (`anonymous` or `api_token`), `details.delivery: link` and
+        `details.hasFile: false`, the client IP and, for an anonymous creation, the actor
+        kind `anonymous`; with a token, the actor is the token and `api_token.used` is also
+        recorded. Never the text, the key, the verifiers nor the token. The answer is sent with
+        `Cache-Control: no-store`.
+      security:
+        - {}
+        - apiToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExpressSecretCreate' }
+            examples:
+              oneDay:
+                summary: Text sealed in the browser, readable for one day
+                value:
+                  encryptedText: AQvm_LNcuMssDUaZI6WQ3iGRK4gIg8iiNhOpsnYu-dMoF2eTMvmbWpRI1yivl-6L03VwgcaRxEruSIQs7Q
+                  verifier: 2efe6abcc112e614f12b2074e79d465dd5d572d0947646f62ddd9b0d01e3cfb1
+                  keyVerifier: 78de3bf0687a69d48ed14af11c89b1bfdc7f117f378a88bf070c9d1d968a0ca8
+                  expiresIn: 1d
+              oneHour:
+                summary: Created by a script with an API token, readable for one hour
+                value:
+                  encryptedText: AQvm_LNcuMssDUaZI6WQ3iGRK4gIg8iiNhOpsnYu-dMoF2eTMvmbWpRI1yivl-6L03VwgcaRxEruSIQs7Q
+                  verifier: 2efe6abcc112e614f12b2074e79d465dd5d572d0947646f62ddd9b0d01e3cfb1
+                  keyVerifier: 78de3bf0687a69d48ed14af11c89b1bfdc7f117f378a88bf070c9d1d968a0ca8
+                  expiresIn: 1h
+      responses:
+        '201':
+          description: Express secret created and active; its token is shown once.
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecretCreated' }
+              example:
+                id: sec_01JABCS3T4V5W6X7Y8Z9A0B1C2
+                token: tts_Xp4kQ7mZr2Lw9TfB3nHc8VyJd5Gs1KqA6eWu0RtNb7M
+                state: active
+                expiresAt: '2026-11-18T09:00:00Z'
+        '400':
+          description: |
+            The request is invalid: `validation-failed` (any schema violation, including a
+            member an express secret does not accept, such as `passphrase` or `file`) or
+            `secret-format-invalid` (sealed text whose framing the schema cannot check: not
+            canonical, wrong version byte, empty text).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                validationFailed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#validation-failed
+                    title: Validation failed
+                    status: 400
+                    code: validation-failed
+                    errors:
+                      - { field: /expiresIn, code: not-allowed, allowed: [1h, 1d, 7d] }
+                formatInvalid:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#secret-format-invalid
+                    title: Malformed sealed content
+                    status: 400
+                    code: secret-format-invalid
+                    errors:
+                      - { field: /encryptedText, code: invalid-format }
+        '401':
+          description: "`invalid-credentials`: the `Authorization: Bearer` token is malformed, unknown (including a token of another tenant), revoked or expired. Written to the security log (`api_token_invalid`). Never answered to a call without `Authorization` header, which is an anonymous creation."
+          headers:
+            WWW-Authenticate:
+              description: "`Bearer` (RFC 6750): the challenge of the API token scheme."
+              schema: { type: string }
+              example: Bearer
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#invalid-credentials
+                title: Invalid credentials
+                status: 401
+                code: invalid-credentials
+        '403':
+          description: |
+            `express-secrets-disabled`: the instance kill switch `TT_EXPRESS_SECRETS_DISABLED`
+            is on (with or without a token), or the call is anonymous and the tenant has not
+            enabled express secrets (`expressEnabled`); written to the security log
+            (`express_refused`, `reason=disabled`). `express-token-not-allowed` (since 2.3): a
+            valid API token without the opt-in `expressAllowed` (security log `express_refused`,
+            `reason=token`). `ip-not-allowed`: a valid API token used from an IP outside its
+            `allowedCidrs` (security log `deposit_refused`). Or `csrf-invalid`: cross-site
+            request (see the description).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                expressSecretsDisabled:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#express-secrets-disabled
+                    title: Express secrets not available
+                    status: 403
+                    code: express-secrets-disabled
+                expressTokenNotAllowed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#express-token-not-allowed
+                    title: Token not allowed to create express secrets
+                    status: 403
+                    code: express-token-not-allowed
+                ipNotAllowed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#ip-not-allowed
+                    title: Address not allowed for this token
+                    status: 403
+                    code: ip-not-allowed
+                crossSite:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#csrf-invalid
+                    title: Invalid CSRF token
+                    status: 403
+                    code: csrf-invalid
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429':
+          description: |
+            `rate-limited`, with `Retry-After` (and `retryAfterSeconds`): more than
+            `expressPerHourPerIp` anonymous creations from this client (IPv4 address or IPv6
+            /64) in the last hour (security log scope `express_ip`), more than
+            `expressPerHourPerToken` creations with this token (scope `express_token`), or a
+            client locked after repeated invalid tokens (scope `api_token`).
+            `express-secret-limit-reached`, without `Retry-After`: the tenant already holds
+            `expressMaxPending` live express secrets and the call is anonymous (security log
+            `express_refused`, `reason=limit`).
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                rateLimited:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#rate-limited
+                    title: Too many requests
+                    status: 429
+                    code: rate-limited
+                    retryAfterSeconds: 1200
+                limitReached:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#express-secret-limit-reached
+                    title: Too many express secrets pending
+                    status: 429
+                    code: express-secret-limit-reached
+        '503': { $ref: '#/components/responses/MaintenanceMode' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /secret-links/{secretToken}:
     parameters:
       - $ref: '#/components/parameters/SecretToken'
@@ -2447,6 +2744,31 @@ paths:
         first. An unknown token (or the token of a secret still `pending`, or of another tenant)
         gets the same `404 not-found`, and an unknown one is written to the security log
         (`secret_invalid`). Rate limited per client IP.
+
+        Since 2.3 it also serves the **express secrets** (`createExpressSecret`), unchanged: an
+        express secret has no passphrase (no `passphrase` member) and no file (`file: null`).
+        For an express secret the three states of specification section 22.2 are: **pending**
+        (not read yet) = `200` with `state: active`; **read** = `410 secret-gone` with reason
+        `read`; **expired** = `410 secret-gone` with reason `expired` (and `deleted` when an
+        admin deleted it). API clients poll it to know whether an express secret was read; it
+        consumes nothing. The answer carries `express: true` and `anonymous` (created without
+        credential, or with an API token), so that the read page shows a "third-party content,
+        not written by the entity" banner and the link to `reportSecretAbuse`.
+
+        **Read block of a closed express service** (since 2.3). While the instance kill switch
+        `TT_EXPRESS_SECRETS_DISABLED` is on, the status and the reveal of **any** express secret
+        answer `403 express-secrets-disabled`; while the tenant's `expressEnabled` is off, the
+        same applies to the **anonymous** express secrets only (those created with an API token
+        stay readable, since a token may create them while the anonymous mode is off). The 2.1
+        secrets are never affected (`SecretSettings.enabled` does not block their reading). The
+        block consumes nothing, counts no failure (neither the secret nor the per-client
+        failure counter), writes no security event and applies whatever the state of the
+        secret (a tombstone gives no `410` while closed): the secret is readable again if the
+        service is reopened before it expires; the expiry is not suspended. Order of the
+        checks: the per-client rate limits and lock (`429`), then the lookup of the token (an
+        unknown token, one of another tenant or of a pending secret answers `404` **first**,
+        exactly as when the service is open, so that the block is no oracle on tokens), then
+        the block, then the state (`200` or `410`).
       security: []
       responses:
         '200':
@@ -2470,6 +2792,27 @@ paths:
                     expiresAt: '2026-11-10T09:00:00Z'
                     passphrase: { kdf: pbkdf2-sha256, iterations: 600000, salt: fYFgqj_v4D4pjxFwzmjGvQ }
                     file: { size: 2097200 }
+                express:
+                  summary: Anonymous express secret (since 2.3)
+                  value:
+                    state: active
+                    expiresAt: '2026-11-18T09:00:00Z'
+                    file: null
+                    express: true
+                    anonymous: true
+        '403':
+          description: "Since 2.3. `express-secrets-disabled`: an express secret while the express service is closed (instance kill switch, or the tenant's `expressEnabled` off for an anonymous express secret). Nothing is consumed or counted; see the description."
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                expressSecretsDisabled:
+                  summary: Express secret while the express service is closed (since 2.3)
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#express-secrets-disabled
+                    title: Express secrets not available
+                    status: 403
+                    code: express-secrets-disabled
         '404': { $ref: '#/components/responses/NotFound' }
         '410': { $ref: '#/components/responses/SecretGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
@@ -2519,6 +2862,16 @@ paths:
         `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. Audited as
         `secret.revealed` (and `secret.locked`); a read receipt is mailed to the creator when
         requested.
+
+        Since 2.3 it also reveals the **express secrets** (`createExpressSecret`), unchanged:
+        without passphrase both proofs derive from the key alone (e2e-format.md, section
+        3.3.9), the answer carries `encryptedText` only (no file) and no read receipt exists.
+        The read block of a closed express service applies exactly as for `getSecretLink`
+        (`403 express-secrets-disabled` for any express secret under
+        `TT_EXPRESS_SECRETS_DISABLED`, for an anonymous one when `expressEnabled` is off;
+        checked after the cross-site check, the rate limits and the token lookup, before any
+        proof is read: nothing consumed, no attempt counted, no security event). The 2.1
+        secrets are unaffected.
       security: []
       requestBody:
         required: true
@@ -2548,7 +2901,7 @@ paths:
                     fileGrantExpiresAt: '2026-11-09T09:10:00Z'
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '403':
-          description: "`secret-proof-invalid`: a proof does not match. A wrong key proof is not counted and carries no `attemptsRemaining`; a right key proof with a wrong proof (wrong passphrase) is counted and carries `attemptsRemaining`, the attempts left before the secret is locked. Or `csrf-invalid`: cross-site request (see the description)."
+          description: "Since 2.3 also `express-secrets-disabled` (express secret while the express service is closed, checked before any proof: see `getSecretLink`). `secret-proof-invalid`: a proof does not match. A wrong key proof is not counted and carries no `attemptsRemaining`; a right key proof with a wrong proof (wrong passphrase) is counted and carries `attemptsRemaining`, the attempts left before the secret is locked. Or `csrf-invalid`: cross-site request (see the description)."
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -2575,6 +2928,13 @@ paths:
                     title: Invalid CSRF token
                     status: 403
                     code: csrf-invalid
+                expressSecretsDisabled:
+                  summary: Express secret while the express service is closed (since 2.3)
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#express-secrets-disabled
+                    title: Express secrets not available
+                    status: 403
+                    code: express-secrets-disabled
         '404': { $ref: '#/components/responses/NotFound' }
         '410': { $ref: '#/components/responses/SecretGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
@@ -2631,6 +2991,65 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/TooManyStreams' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
+
+  /secret-links/{secretToken}/abuse-reports:
+    parameters:
+      - $ref: '#/components/parameters/SecretToken'
+    post:
+      tags: [Secrets]
+      operationId: reportSecretAbuse
+      summary: Report an abuse on an express secret
+      description: |
+        Since 2.3. The "Report abuse" link of the read page of an **express secret** (third-party
+        content created without authentication): records a report for the delegated admins
+        of the tenant, exactly like `reportAbuse` for a transfer. Same body
+        (`AbuseReportCreate`: a `category` and an optional plain-text `message` of at most 1000
+        characters, control, invisible and bidirectional characters removed, never interpreted
+        as HTML). The report names the secret (`AbuseReport.secretId`, its `sec_` ID), never
+        its token nor its content (the server cannot read it, and the reporter's text is the
+        only description); it has no sender address and its reporter is never verified. The
+        admins are alerted by mail (template `abuse-report`, naming the `sec_` ID) and by the
+        tenant webhooks (event `abuse.reported`, whose `adminUrl` leads to the report);
+        audited as `abuse.reported` (`details.secretId`). They can then delete the secret
+        (`deleteTenantSecret`), find another one from its link (`lookupTenantSecret`), purge
+        every live anonymous express secret (`purgeExpressSecrets`) or turn the anonymous mode
+        off.
+
+        Accepted for an express secret that is `active` or `read` (so that the reader can
+        report after reading). The other tombstones (`expired`, `deleted`, `locked`) answer
+        `410 secret-gone` with the reason. A 2.1 secret (not express) answers `404 not-found`
+        without security event (the token is real); an unknown token, one of another tenant
+        or of a pending secret answers `404 not-found` and writes `secret_invalid`, like the
+        status call. No credential: the token is enough (no key proof is asked, so a report
+        needs only the path of the link, accepted: a report changes nothing by itself).
+        **Not blocked** when the express service is closed (kill switch or `expressEnabled`
+        off): reporting stays possible precisely when the admins closed the service in
+        reaction to an abuse.
+
+        Rate limited like `reportAbuse`: 3 reports per secret per day and 5 per client IP per
+        hour, the latter shared with the transfer reports (`429 rate-limited`; security log
+        `rate_limited`, scopes `abuse_report_link`, whose truncated `transfer` field holds
+        the `sec_` ID, and `abuse_report_ip`). The per-client limits of the secret links also
+        apply (`secret_link_ip`, `secret_link`). Protected from cross-site use like
+        `revealSecret` (JSON body, `Origin` and `Sec-Fetch-Site` checks, `403 csrf-invalid`).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AbuseReportCreate' }
+            example: { category: phishing, message: The text asks me to log in on a fake bank site. }
+      responses:
+        '202':
+          description: Report recorded; the administrators of the entity are alerted.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/SecretGone' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
         '503': { $ref: '#/components/responses/TenantInSetup' }
 
@@ -6378,6 +6797,7 @@ paths:
                   prefix: tt_EXAM
                   allowedCidrs: [10.10.20.15/32]
                   allowedSenders: [reporting@entity-a.example.com]
+                  expressAllowed: false
                   createdBy: admin.entity-a
                   createdAt: '2026-10-01T08:00:00Z'
                   lastUsedAt: '2026-10-19T02:00:12Z'
@@ -6400,6 +6820,10 @@ paths:
         Requires the right to change the tenant; a tenant the admin is not attached to answers
         `404`. Audited as `api_token.created` (never with the secret; the allowed senders are
         recorded as a count only, never the addresses).
+
+        Since 2.3 `expressAllowed` (default false) lets the token create express secrets
+        (`createExpressSecret`); without it such a call gets `403 express-token-not-allowed`.
+        The opt-in does not depend on `allowedSenders` (an express secret has no sender).
       security:
         - adminSession: []
           csrfToken: []
@@ -6415,6 +6839,9 @@ paths:
               anyAddress:
                 summary: Usable from any address (explicit)
                 value: { name: Partner integration, allowedCidrs: [0.0.0.0/0, '::/0'], expiresAt: '2027-06-30T23:59:59Z' }
+              expressSecrets:
+                summary: Ticketing tool creating express secrets (since 2.3)
+                value: { name: Service desk secrets, allowedCidrs: [10.10.30.0/24], expressAllowed: true, expiresAt: null }
       responses:
         '201':
           description: Token created.
@@ -6427,6 +6854,7 @@ paths:
                 prefix: tt_EXAM
                 allowedCidrs: [10.10.20.15/32]
                 allowedSenders: [reporting@entity-a.example.com]
+                expressAllowed: false
                 createdBy: admin.entity-a
                 createdAt: '2026-10-19T16:20:00Z'
                 lastUsedAt: null
@@ -6452,7 +6880,7 @@ paths:
       tags: [Admin operations]
       operationId: updateApiToken
       summary: Rename a token or change its allowed IP ranges or senders
-      description: "Renames an API token or replaces its allowed IP ranges or allowed senders (`allowedSenders: []` allows any internal address again). A revoked token cannot be modified (`409 state-conflict`). Requires the right to change the tenant; a tenant the admin is not attached to, or a token of another tenant, answers `404`. Audited as `api_token.updated` (the allowed senders as a count only)."
+      description: "Renames an API token or replaces its allowed IP ranges or allowed senders (`allowedSenders: []` allows any internal address again); since 2.3 also switches `expressAllowed` (creation of express secrets). A revoked token cannot be modified (`409 state-conflict`). Requires the right to change the tenant; a tenant the admin is not attached to, or a token of another tenant, answers `404`. Audited as `api_token.updated` (the allowed senders as a count only)."
       security:
         - adminSession: []
           csrfToken: []
@@ -6461,7 +6889,13 @@ paths:
         content:
           application/merge-patch+json:
             schema: { $ref: '#/components/schemas/ApiTokenUpdate' }
-            example: { allowedCidrs: [10.10.20.16/32] }
+            examples:
+              cidrs:
+                summary: New allowed IP range
+                value: { allowedCidrs: [10.10.20.16/32] }
+              express:
+                summary: Allow express secrets (since 2.3)
+                value: { expressAllowed: true }
       responses:
         '200':
           description: Updated token.
@@ -6474,6 +6908,7 @@ paths:
                 prefix: tt_EXAM
                 allowedCidrs: [10.10.20.16/32]
                 allowedSenders: [reporting@entity-a.example.com]
+                expressAllowed: false
                 createdBy: admin.entity-a
                 createdAt: '2026-10-01T08:00:00Z'
                 lastUsedAt: '2026-10-19T02:00:12Z'
@@ -7021,7 +7456,9 @@ paths:
         image (base64, existing size limits). **Never exported:** the SMTP password and user
         name, webhook secrets and URLs, API tokens, admins, provisioning data, transfers,
         addresses, invitations, audit and the whole single sign-on configuration. Super admin and delegated admin of the tenant; not an
-        auditor. Audited as `tenant.exported`.
+        auditor. Audited as `tenant.exported`. Since 2.3 `secretSettings` carries the express
+        members (`expressEnabled` as stored, the limits), but an import never enables the
+        anonymous express secrets (see `importTenant`).
       security:
         - adminSession: []
       parameters:
@@ -7084,6 +7521,13 @@ paths:
         `force` (`networkReviewedAt` of `getTenantSetup`). An optional first
         delegated admin is created as for `createTenant`. Audited as
         `tenant.imported` (`sourceVersion` and `exportedAt` of the file in the details).
+
+        Since 2.3 the import **forces `secretSettings.expressEnabled` to false**, whatever the
+        document says (a `true` is accepted and ignored, not refused): opening an anonymous
+        service on a new FQDN must be a deliberate action of its admins
+        (`updateSecretSettings`), never a side effect of a copied configuration (threat model
+        P92). The express limits (`expressPerHourPerIp`, `expressPerHourPerToken`,
+        `expressMaxPending`) are imported as given, or take their defaults when absent.
       security:
         - adminSession: []
           csrfToken: []
@@ -7375,7 +7819,9 @@ paths:
       summary: List the one-time secrets of the tenant
       description: |
         Since 2.1. Lists the secrets of the tenant, most recent first, with filters on state and
-        creator address. Metadata only: never the content, the key, the proof, the verifier nor
+        creator address. Since 2.3 the list includes the express secrets (`express: true`,
+        without `senderEmail`; `creatorKind` `anonymous` or `api_token`); a `sender` filter never
+        matches them. Metadata only: never the content, the key, the proof, the verifier nor
         the token. Ended secrets stay listed as tombstones for 30 days. Readable by the
         delegated admins of the tenant, the super admin and, read-only, an auditor (who may not
         filter by address: `403 read-only-role`). A malformed `cursor` is `400 validation-failed`.
@@ -7410,8 +7856,21 @@ paths:
                     recipient: carol@customer.example.net
                     readReceipt: true
                     hasFile: false
+                    express: false
                     createdAt: '2026-11-09T09:00:00Z'
                     expiresAt: '2026-11-10T09:00:00Z'
+                  - id: sec_01JABCS3T4V5W6X7Y8Z9A0B1C2
+                    state: read
+                    creatorKind: anonymous
+                    express: true
+                    delivery: link
+                    readReceipt: false
+                    hasFile: false
+                    createdAt: '2026-11-08T14:00:00Z'
+                    expiresAt: '2026-11-08T15:00:00Z'
+                    readAt: '2026-11-08T14:12:00Z'
+                    endedAt: '2026-11-08T14:12:00Z'
+                    endReason: read
                 nextCursor: eyJjIjoiMjAyNi0xMS0wOVQwOTowMDowMFoiLCJpIjoic2VjXzAxIn0
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -7444,6 +7903,107 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /admin/tenants/{tenantId}/secrets/lookup:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      tags: [Admin operations]
+      operationId: lookupTenantSecret
+      summary: Find a secret of the tenant from its link
+      description: |
+        Since 2.3. Finds the secret a link points to, typically after an abuse report or a
+        complaint about an express secret: the body carries the `link` as the admin received
+        it, either the full link (`https://<fqdn>/s/<token>#k=<key>`) or the bare `tts_`
+        token. The server extracts the token (the last path segment after `/s/`, or the bare
+        value), **ignores the fragment** (`#k=...`: the key is dropped unread and never
+        reaches any log), ignores the host part, hashes the token with SHA-256 and looks it
+        up among the secrets of this tenant. A value from which no token of the form
+        `tts_` and 43 base62 characters can be extracted is `400 validation-failed` (`/link`,
+        `invalid-format`). The token is **never stored, logged nor audited**; the operation is
+        a `POST` so that it never appears in a URL, a browser history or a proxy log.
+
+        Works for any secret of the tenant, 2.1 and express, live or tombstone (kept 30 days
+        after its end), and answers its metadata (`AdminSecret`, never the content, the key,
+        the verifiers nor the token); a pending 2.1 secret is found too, as in the list. An
+        unknown token or a token of another tenant answers `404 not-found` (no security event:
+        the caller is an authenticated admin). Readable by the delegated admins of the tenant, the super admin
+        and an auditor (a read-only operation despite the `POST`). Audited as
+        `secret.looked_up` (object the `sec_` ID) when a secret is found; a miss is not
+        audited.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SecretLookup' }
+            examples:
+              fullLink:
+                summary: Full link, the fragment is ignored
+                value: { link: 'https://transfer.entity-a.example.com/s/tts_Xp4kQ7mZr2Lw9TfB3nHc8VyJd5Gs1KqA6eWu0RtNb7M#k=ew7WSQ3aQqhKCGs_K2QR3lal5iX7Jr66egxAI_Wmhuk' }
+              bareToken:
+                summary: Bare token
+                value: { link: tts_Xp4kQ7mZr2Lw9TfB3nHc8VyJd5Gs1KqA6eWu0RtNb7M }
+      responses:
+        '200':
+          description: The secret the link points to (metadata only).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSecret' }
+              example:
+                id: sec_01JABCS3T4V5W6X7Y8Z9A0B1C2
+                state: active
+                creatorKind: anonymous
+                express: true
+                delivery: link
+                readReceipt: false
+                hasFile: false
+                createdAt: '2026-11-17T09:00:00Z'
+                expiresAt: '2026-11-18T09:00:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/tenants/{tenantId}/express-secrets/purge:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      tags: [Admin operations]
+      operationId: purgeExpressSecrets
+      summary: Delete every live anonymous express secret of the tenant
+      description: |
+        Since 2.3. Emergency action against an abusive use of the anonymous express secrets
+        (for example the tenant used as a relay for illicit content): deletes, in one call,
+        **every live (`active`) anonymous express secret** of the tenant. Each becomes a
+        `deleted` tombstone (end reason `deleted_by_admin`: its link answers
+        `410 secret-gone`, reason `deleted`), its sealed text and its server key are destroyed
+        (cryptographic erasure, as for `deleteTenantSecret`). Not touched: the express
+        secrets created with an API token, the 2.1 secrets and the tombstones. It does not
+        change `expressEnabled`: turn the anonymous mode off as well to stop new creations.
+
+        No body. Requires the right to change the tenant (delegated admin of the tenant, super
+        admin; an auditor gets `403 read-only-role`). Answers the number of secrets deleted
+        (0 when there was none). Audited **once** as `secret.express_purged` with
+        `details.count` (no `secret.deleted` per secret). Idempotent in effect: a second call
+        deletes the secrets created in between, if any.
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '200':
+          description: Live anonymous express secrets deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExpressSecretPurgeResult' }
+              example: { deleted: 412 }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /admin/tenants/{tenantId}/secret-settings:
     parameters:
       - $ref: '#/components/parameters/TenantId'
@@ -7471,6 +8031,10 @@ paths:
                 fileAllowed: true
                 fileMaxBytes: 10485760
                 emailAllowed: true
+                expressEnabled: false
+                expressPerHourPerIp: 10
+                expressPerHourPerToken: 100
+                expressMaxPending: 1000
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -7490,6 +8054,22 @@ paths:
         `defaultDuration`, when given, must be one of them. `fileMaxBytes` is between 1 MiB and
         25 MiB (ciphertext size). Requires the right to change the tenant. Audited as
         `secret.settings_updated` with the changed member names.
+
+        Since 2.3 the settings also hold the express secrets (`createExpressSecret`):
+        `expressEnabled` (off by default), `expressPerHourPerIp` (1 to 1000, default 10),
+        `expressPerHourPerToken` (1 to 10000, default 100) and `expressMaxPending` (1 to 100000,
+        default 1000). They are **optional in a replacement**: an absent member keeps its
+        current value (so a 2.1 client that does not know them never resets them), a `null`
+        one is `400 validation-failed` (`not-nullable`), a value out of bounds
+        `400 validation-failed` (`out-of-range`). The delegated admins manage them like the other
+        members, `expressEnabled` included; the instance kill switch
+        `TT_EXPRESS_SECRETS_DISABLED` (environment) overrides `expressEnabled` without changing
+        it, and `getSecretSettings` still returns the stored value. Lowering `expressMaxPending`
+        below the current number of live express secrets deletes nothing: anonymous creations are
+        refused until enough of them are read or expire. In the configuration export and
+        import (`secretSettings`), the four members are exported; an import always sets
+        `expressEnabled` to false (`importTenant`) and takes the defaults for the limits it
+        lacks (a 2.1 or 2.2 export).
       security:
         - adminSession: []
           csrfToken: []
@@ -7505,6 +8085,8 @@ paths:
               fileAllowed: true
               fileMaxBytes: 10485760
               emailAllowed: false
+              expressEnabled: true
+              expressPerHourPerIp: 5
       responses:
         '200':
           description: Saved settings.
@@ -7518,6 +8100,10 @@ paths:
                 fileAllowed: true
                 fileMaxBytes: 10485760
                 emailAllowed: false
+                expressEnabled: true
+                expressPerHourPerIp: 5
+                expressPerHourPerToken: 100
+                expressMaxPending: 1000
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/AdminForbidden' }
@@ -10328,6 +10914,9 @@ components:
         - secret-limit-reached
         - secret-format-invalid
         - secret-passphrase-required
+        - express-secrets-disabled
+        - express-secret-limit-reached
+        - express-token-not-allowed
         - internal-error
     Language:
       type: string
@@ -11595,6 +12184,7 @@ components:
         prefix: { type: string, description: "First characters of the token, to recognise it." }
         allowedCidrs: { $ref: '#/components/schemas/AllowedCidrs' }
         allowedSenders: { $ref: '#/components/schemas/AllowedSenders' }
+        expressAllowed: { type: boolean, description: "Since 2.3. The token may create express secrets (`createExpressSecret`); off by default, an explicit opt-in. Always sent by a 2.3 server; absent means false." }
         createdBy: { type: string }
         createdAt: { type: string, format: date-time }
         lastUsedAt:
@@ -11613,6 +12203,7 @@ components:
           allOf: [{ $ref: '#/components/schemas/AllowedSenders' }]
           description: Optional; absent or empty allows any address of the tenant's internal domains.
         expiresAt: { type: [string, 'null'], format: date-time }
+        expressAllowed: { type: boolean, default: false, description: "Since 2.3. Allow the token to create express secrets. Default false." }
       additionalProperties: false
     ApiTokenUpdate:
       type: object
@@ -11626,6 +12217,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 100 }
         allowedCidrs: { $ref: '#/components/schemas/AllowedCidrs' }
         allowedSenders: { $ref: '#/components/schemas/AllowedSenders' }
+        expressAllowed: { type: boolean, description: "Since 2.3. Allow or forbid the creation of express secrets with this token." }
       additionalProperties: false
     ApiTokenCreated:
       allOf:
@@ -11703,6 +12295,7 @@ components:
         identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
         a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
         Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the domain of the recipient (`details.recipientDomain`; the address stays on the secret); `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
+        Since 2.3: `secret.created` of an express secret carries `details.express: true` and `details.creatorKind` `anonymous` (actor kind `anonymous`, id `-`, with the client IP) or `api_token` (actor the token, plus an `api_token.used` entry whose actor is the token, there being no sender address); the express settings changed through `updateSecretSettings` are named in `secret.settings_updated` like the others; `secret.looked_up` (object the found `sec_` ID, actor the admin) never carries the link nor the token; `secret.express_purged` (object kind `tenant`) carries `details.count` and replaces the per-secret `secret.deleted` of the purge; `abuse.reported` on an express secret carries `details.secretId`; `api_token.created` and `api_token.updated` carry `details.expressAllowed` when set or changed.
       enum:
         - transfer.created
         - transfer.finalized
@@ -11815,6 +12408,8 @@ components:
         - secret.deleted
         - secret.locked
         - secret.settings_updated
+        - secret.looked_up
+        - secret.express_purged
     AuditEvent:
       type: object
       required: [id, occurredAt, actor, action, object]
@@ -11831,8 +12426,8 @@ components:
             kind:
               type: string
               x-extensible-enum: true
-              description: "Kind of the actor; since 1.2, `provisioning_token` for the tenants created through the provisioning API."
-              enum: [depositor, recipient, admin, api_token, system, provisioning_token]
+              description: "Kind of the actor; since 1.2, `provisioning_token` for the tenants created through the provisioning API; since 2.3, `anonymous` (id `-`) for an express secret created without credential."
+              enum: [depositor, recipient, admin, api_token, system, provisioning_token, anonymous]
             id: { type: string }
         ip: { type: string }
         action: { $ref: '#/components/schemas/AuditAction' }
@@ -11879,7 +12474,7 @@ components:
           allOf: [{ $ref: '#/components/schemas/ByteSize' }]
           description: "Storage quota of the tenant."
         storageUsedRatio: { type: number, minimum: 0, description: "`storageUsedBytes` / `storageQuotaBytes` (may exceed 1)." }
-        secretsCreated: { type: integer, minimum: 0, description: "Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows." }
+        secretsCreated: { type: integer, minimum: 0, description: "Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows. Since 2.3 express secrets are included." }
         series:
           type: array
           description: |
@@ -12313,7 +12908,7 @@ components:
               secretsCreatedLast24h:
                 type: integer
                 minimum: 0
-                description: "Since 2.1. One-time secrets created during the last 24 hours, among the secret rows still present (an unfinished secret is deleted after one hour, an ended one 30 days after its end)."
+                description: "Since 2.1. One-time secrets created during the last 24 hours, among the secret rows still present (an unfinished secret is deleted after one hour, an ended one 30 days after its end). Since 2.3 express secrets are included."
               secretsReadLast24h: { type: integer, minimum: 0, description: "Since 2.1. One-time secrets read during the last 24 hours." }
               secretsLockedLast24h: { type: integer, minimum: 0, description: "Since 2.1. One-time secrets locked after five wrong passphrase proofs during the last 24 hours." }
 
@@ -12336,6 +12931,7 @@ components:
           description: "`disabled` when files of the tenant are not analysed (instance engine `none` or tenant flag off): the download page tells recipients so."
         linkOnly: { type: boolean, description: "Since 2.0. The tenant allows link-only transfers; the level's linkOnlyAllowed may still forbid them." }
         secrets: { $ref: '#/components/schemas/SecretFeatures' }
+        expressSecrets: { $ref: '#/components/schemas/ExpressSecretFeatures' }
         e2ePolicy:
           allOf: [{ $ref: '#/components/schemas/E2ePolicy' }]
           description: "Since 2.0. End-to-end encryption policy of the tenant (`forbidden` when absent). The policy that applies to a transfer is the `e2ePolicy` of its confidentiality level (`PublicConfidentialityLevel.e2ePolicy`), which a level can only tighten."
@@ -12708,10 +13304,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/Secret'
         - type: object
-          required: [creatorKind, senderEmail]
+          required: [creatorKind]
           properties:
-            creatorKind: { type: string, x-extensible-enum: true, enum: [internal, internal_remote, external, api_token] }
-            senderEmail: { $ref: '#/components/schemas/Email' }
+            creatorKind: { type: string, x-extensible-enum: true, enum: [internal, internal_remote, external, api_token, anonymous], description: "Since 2.3, `anonymous` for an express secret created without credential; an express secret created with an API token is `api_token`." }
+            senderEmail:
+              allOf: [{ $ref: '#/components/schemas/Email' }]
+              description: "The creator address (with an API token, the declared sender). Since 2.3 absent for express secrets, which have no creator address (`anonymous`, and `api_token` with `express: true`); always present otherwise."
+            express: { type: boolean, description: "Since 2.3. An express secret (`createExpressSecret`): text only, link delivery, no passphrase. Always sent by a 2.3 server; absent means false." }
     AdminSecretList:
       type: object
       required: [items]
@@ -12735,6 +13334,8 @@ components:
           properties:
             size: { type: integer, format: int64 }
           additionalProperties: false
+        express: { type: boolean, description: "Since 2.3. An express secret (created through `createExpressSecret`): third-party content not written by the entity; the read page shows a banner saying so and the link to `reportSecretAbuse`. Absent means false." }
+        anonymous: { type: boolean, description: "Since 2.3. Present with `express: true` only: true when the express secret was created without credential, false when it was created with an API token of the tenant." }
     SecretReveal:
       type: object
       description: Since 2.1. The reveal proof.
@@ -12766,6 +13367,10 @@ components:
         fileMaxBytes: { type: integer, format: int64, minimum: 1048576, maximum: 26214400, default: 10485760, description: "Largest ciphertext of a secret file: 1 MiB to 25 MiB, 10 MiB by default." }
         emailAllowed: { type: boolean, description: "E-mail delivery allowed. Default true." }
         emailRequiresPassphrase: { type: boolean, description: "Since 2.1. An e-mail secret must carry a passphrase (`403 secret-passphrase-required` otherwise). Default false; absent in a replacement means false." }
+        expressEnabled: { type: boolean, default: false, description: "Since 2.3. Anonymous express secrets (`createExpressSecret` without credential) are offered on the tenant. Off by default. Independent of `enabled`: it does not govern the 2.1 module, and the 2.1 switch does not govern express secrets. Creations with an API token of the tenant are accepted even when off; the instance kill switch `TT_EXPRESS_SECRETS_DISABLED` refuses both whatever this setting. Always present in answers; absent in a replacement keeps the current value. Forced to false by a configuration import." }
+        expressPerHourPerIp: { type: integer, minimum: 1, maximum: 1000, default: 10, description: "Since 2.3. Anonymous express creations allowed per client (IPv4 address or IPv6 /64) in the sliding last hour, on this tenant. Default 10. Always present in answers; absent in a replacement keeps the current value." }
+        expressPerHourPerToken: { type: integer, minimum: 1, maximum: 10000, default: 100, description: "Since 2.3. Express creations allowed per API token in the sliding last hour (instead of the per-IP limit). Default 100. Always present in answers; absent in a replacement keeps the current value." }
+        expressMaxPending: { type: integer, minimum: 1, maximum: 100000, default: 1000, description: "Since 2.3. Live (`active`) express secrets the tenant may hold, anonymous and token ones together; when reached, anonymous creations are refused (`429 express-secret-limit-reached`), token creations still accepted. Default 1000. Always present in answers; absent in a replacement keeps the current value." }
       additionalProperties: false
     SecretFeatures:
       type: object
@@ -12779,6 +13384,43 @@ components:
         fileMaxBytes: { type: integer, format: int64 }
         emailAllowed: { type: boolean }
         emailRequiresPassphrase: { type: boolean, description: "Since 2.1. An e-mail secret needs a passphrase: the creation form requires one with the e-mail delivery. Absent means false." }
+    ExpressSecretDuration:
+      type: string
+      description: "Since 2.3. Duration code of an express secret, from its creation (it is created `active`): `1h`, `1d` or `7d`. Fixed by the specification (section 22.2), independent of the durations a tenant offers to 2.1 secrets (`SecretSettings.durations`)."
+      enum: ['1h', 1d, 7d]
+    ExpressSecretCreate:
+      type: object
+      description: "Since 2.3. Creation of an express secret: the restricted profile of `SecretCreate` (docs/architecture/e2e-format.md, section 3.3.9). Link delivery, no passphrase, no file, no read receipt, no creator address: any other member is refused (`400 validation-failed`)."
+      required: [encryptedText, verifier, keyVerifier, expiresIn]
+      properties:
+        encryptedText:
+          allOf: [{ $ref: '#/components/schemas/SecretSealedText' }]
+          description: "The text sealed by the client under `K'` derived without passphrase, exactly as for `SecretCreate` (same bounds: 39 to 53 372 characters, `400 secret-format-invalid` for the keyless checks, the empty text included). The 10 000 code point limit of the text is enforced by the client; the server never sees the text."
+        verifier: { type: string, pattern: '^[0-9a-f]{64}$', description: "SHA-256 of the proof derived from `K'` (here from `K` alone, no passphrase), 64 lowercase hex characters." }
+        keyVerifier: { type: string, pattern: '^[0-9a-f]{64}$', description: "SHA-256 of the key proof derived from the key K alone (docs/architecture/e2e-format.md 3.3.4), 64 lowercase hex characters." }
+        expiresIn: { $ref: '#/components/schemas/ExpressSecretDuration' }
+      additionalProperties: false
+    ExpressSecretFeatures:
+      type: object
+      description: "Since 2.3. What the express secret page needs. No limit value is disclosed beyond the text length."
+      required: [enabled, durations, maxChars]
+      properties:
+        enabled: { type: boolean, description: "Anonymous express secrets are offered: `SecretSettings.expressEnabled` of the tenant and the instance kill switch `TT_EXPRESS_SECRETS_DISABLED` off. When false, the page is not offered (an API token can still create express secrets unless the kill switch is on)." }
+        durations: { type: array, minItems: 3, maxItems: 3, items: { $ref: '#/components/schemas/ExpressSecretDuration' }, description: "Always `1h`, `1d`, `7d`." }
+        maxChars: { type: integer, enum: [10000], description: "Largest text, in Unicode code points (what JavaScript `[...text].length` counts), checked by the client before sealing." }
+    SecretLookup:
+      type: object
+      description: "Since 2.3. Body of `lookupTenantSecret`: a secret link as received, or its bare token. The fragment (`#k=...`) is ignored and dropped unread; the token is hashed, never stored, logged nor audited."
+      required: [link]
+      properties:
+        link: { type: string, minLength: 47, maxLength: 2048, description: "Full link `https://<fqdn>/s/<token>[#k=<key>]` or bare token (`tts_` and 43 base62 characters). No token extractable: `400 validation-failed` (`invalid-format`)." }
+      additionalProperties: false
+    ExpressSecretPurgeResult:
+      type: object
+      description: "Since 2.3. Answer of `purgeExpressSecrets`."
+      required: [deleted]
+      properties:
+        deleted: { type: integer, minimum: 0, description: "Live anonymous express secrets deleted by this call." }
     PublicDropLink:
       type: object
       description: Since 2.0. What the landing page of a drop link needs.
@@ -12897,6 +13539,7 @@ components:
         - drop_link_invalid
         - secret_invalid
         - secret_proof_invalid
+        - express_refused
     SecurityEvent:
       type: object
       description: Since 2.0. A line of the security log, kept in the database. Never holds an e-mail address.
@@ -13256,14 +13899,16 @@ components:
       enum: [open, closed]
     AbuseReport:
       type: object
-      required: [id, transferId, senderEmail, reporterVerified, category, status, reportedAt]
+      description: "A report on a transfer (`transferId`) or, since 2.3, on an express secret (`secretId`): exactly one of the two is present."
+      required: [id, reporterVerified, category, status, reportedAt]
       properties:
         id: { type: string }
-        transferId: { type: string, description: "Reported transfer (it may have expired or been deleted since)." }
+        transferId: { type: string, description: "Reported transfer (it may have expired or been deleted since). Since 2.3 absent for a report on an express secret; always present before 2.3." }
+        secretId: { type: string, pattern: '^sec_[0-7][0-9A-HJKMNP-TV-Z]{25}$', description: "Since 2.3. Reported express secret (`reportSecretAbuse`; it may have ended since)." }
         senderEmail:
           type: string
           maxLength: 254
-          description: "Sender of the reported transfer, or the pseudonym `erased-<16 hex>` after a GDPR erasure."
+          description: "Sender of the reported transfer, or the pseudonym `erased-<16 hex>` after a GDPR erasure. Since 2.3 absent for a report on an express secret (no creator address)."
         reportedBy:
           type: [string, 'null']
           maxLength: 254

@@ -9,6 +9,9 @@
 > of the secrets (design validated by human review on 2026-11-09; implemented at step 2 with shared test
 > vectors). Threat model: sections 6.56 to 6.63 (T-339 to T-375), decisions P69 to P83, in
 > particular P82 (this format).
+>
+> **V2.3 (express secrets), since 2.3:** section 3.3.9, a restricted profile of section 3.3
+> (no passphrase, no file, link built by the client); no new primitive.
 
 TTE2 is the format of the optional end-to-end encryption of a transfer (specification section 22).
 The sender's client encrypts every file, the metadata of every file (name, path, media type,
@@ -437,6 +440,110 @@ proof)` for the server (SHA-256, then `subtle.ConstantTimeCompare`); `SecretText
 for the keyless empty-text check of section 4.1. The browser (`web/src/shared/e2e/secret.ts`)
 reproduces them with WebCrypto (`PBKDF2`, `HKDF`, `AES-GCM`, `SHA-256`).
 
+#### 3.3.9 Express secret (since 2.3)
+
+> Since 2.3 (specification section 22.2). **No new primitive, no new derivation, no new
+> vector:** an express secret is a 2.1 secret restricted to one profile, created through
+> `POST /api/v1/express-secrets` (`createExpressSecret`) without authentication (or with an API
+> token of the tenant). API contract: `api/openapi.yaml`; data model:
+> `docs/architecture/data-model-v2.3.md`.
+
+**Profile.** Everything of sections 3.3 to 3.3.4 applies unchanged, with these restrictions:
+
+| Element | Express secret |
+|---|---|
+| `K` (3.3.1) | 32 random bytes, new for every secret; never sent to the server, **not even once** (there is no e-mail delivery, so section 3.3.6 never applies). |
+| Passphrase (3.3.2) | **None.** No descriptor is sent, so `K' = HKDF-SHA-256(IKM = K, salt = empty, info = "transteira/tte2/v1/secret")`. |
+| Text (3.3.3) | The sealed blob under `HKDF(K', no salt, "transteira/tte2/v1/secret/text")`, AAD `"TTE2S"`, fresh 12-byte nonce. **1 to 10 000 Unicode code points**: the empty text is refused (an express secret has no file). |
+| Proofs (3.3.4) | Key proof from `K`, proof from `K'`; without a passphrase both depend on `K` only. The two verifiers are sent, never a proof. |
+| File (3.3.5) | **None**: no stream, no `encryptedMetadata`, no upload. |
+| Delivery | Link only, no read receipt, no mail; created directly `active`. |
+| Durations | `1h`, `1d` or `7d` (`expiresIn`), from the creation. |
+
+**What the client sends.** Exactly one JSON object, nothing else:
+
+```json
+{"encryptedText":"<sealed text, base64url>","verifier":"<64 hex>","keyVerifier":"<64 hex>","expiresIn":"1d"}
+```
+
+Any other member (`passphrase`, `file`, `delivery`, `recipient`, `readReceipt`, `senderEmail`)
+is refused by the schema (`400 validation-failed`). As in 3.3.4, the creating client should open
+its own sealed text with its `K'` before sending.
+
+**Link.** The server answers the secret `id` and `token` (`tts_` and 43 base62 characters,
+shown once, stored as its SHA-256) with `state: active` and `expiresAt`. The **client composes
+the link itself**, exactly in the form of section 3.3.1:
+
+    https://<fqdn>/s/<token>#k=<key>
+
+where `<key>` is `K` encoded as in section 1 (43 canonical base64url characters) and `<fqdn>` is
+the host the creation request was sent to: `location.host` for the web page (the page is served
+by the tenant FQDN), the configured base URL for an API client or the command-line client. The
+server never sees the fragment and never composes an express link (there is no `send` call).
+The recipient opens it like any 2.1 link: `GET /secret-links/{token}` returns no `passphrase`
+member and `file: null`, then `POST /secret-links/{token}/reveal` with the key proof and the
+proof returns `encryptedText`, once. The status also carries `express: true` and `anonymous`
+(public flags, not sealed: the rule of section 3.3 holds), for the "third-party content" banner
+of the read page. While the express service is closed (instance kill switch, or the tenant's
+anonymous mode off for an anonymous secret) the status and the reveal answer
+`403 express-secrets-disabled` before any proof is read: nothing is consumed, so the same link
+works again if the service reopens before the expiry.
+
+**Text limit: 10 000 Unicode code points, counted by the client.** The unit is the one of
+section 3.3.3: **Unicode code points of the text as typed** (Unicode scalar values; no
+normalization, no trimming, line breaks counted as they are). In JavaScript this is
+`[...text].length` (the string iterator walks code points, so a character outside the Basic
+Multilingual Plane, such as most emoji, counts as one); in Go `utf8.RuneCountInString(text)`
+on valid UTF-8. A JavaScript string containing a lone surrogate is refused before counting
+(`text.isWellFormed()`), since the plaintext must be valid UTF-8 (`TextEncoder` would silently
+turn it into U+FFFD). Reasons for this unit:
+
+- it is the unit of the 2.1 secrets (3.3.3) and of the transfer message (3.2): one rule for all
+  sealed texts, the same `ErrInvalidSecret` check in `OpenSecret`;
+- it bounds the ciphertext: at most 4 UTF-8 bytes per code point, so 10 000 code points fit in
+  the 40 000 plaintext bytes of section 3.3.3, and the server bound of the sealed string (39 to
+  53 372 characters) needs no change;
+- UTF-16 code units (`text.length`, and the `maxlength` attribute of a `textarea`) would count
+  an emoji twice and refuse texts that the 2.1 rule accepts; grapheme clusters would leave the
+  byte size unbounded (a cluster may hold any number of combining marks). The page therefore
+  counts with `[...text].length` and does not rely on `maxlength` (if it sets one as a coarse
+  guard, it must be at least 20 000, the largest UTF-16 length of 10 000 code points).
+
+**Why the server cannot enforce it.** The server only receives the ciphertext: it checks the
+length of the sealed string (the 2.1 bound, at most 40 029 decoded bytes) and the keyless
+framing, never the number of characters. A modified client could therefore store up to 40 000
+bytes of text (for example 40 000 ASCII characters): the storage stays bounded exactly as for a
+2.1 secret, and the recipient's client applies the rule of 3.3.3 when it opens the text
+(`ErrInvalidSecret` beyond 10 000 code points), so such a secret is unreadable and harms only
+its creator. `features.expressSecrets.maxChars` of `GET /tenant` publishes the limit (always
+10 000) for the page and the API clients.
+
+**Server checks** (section 4.1, applied as for `createSecret`):
+
+- schema level (`400 validation-failed`): `encryptedText` outside 39 to 53 372 characters or
+  outside base64url; `verifier` or `keyVerifier` other than 64 lowercase hexadecimal
+  characters; `expiresIn` other than `1h`, `1d`, `7d`; any member outside the four above;
+- keyless (`400 secret-format-invalid`): `CheckSecretFraming` beyond the schema (canonical
+  decoding, first byte `0x01`) and the empty text (exactly 29 decoded bytes), always refused
+  since no file can be declared;
+- not applicable: the passphrase descriptor, the file declaration and its upload, the send
+  call and its `fragmentKey`.
+
+At the reveal nothing changes (constant-time comparison of both digests, key proof first, then
+the attempt slot; without a passphrase a wrong `proof` with a right key proof only comes from a
+faulty client and is counted). The rule of section 3.3 holds: before the reveal, nothing sealed
+is returned.
+
+**Threat model note.** The absence of a passphrase is assumed by section 22.2 (one page, one
+text area, one link): the whole protection of the text is `K`, that is the confidentiality of
+the full link, and its single use (a reader who comes second gets `410 secret-gone`, reason
+`read`). The residual risk of backups of section 3.3.7, point 7, applies without the passphrase
+layer: keep the durations short.
+
+**Vectors.** The `secrets` vector without passphrase of section 6 is an express secret (minus
+the file); no new vector is needed. The command-line client and the integration examples
+(`docs/api/`) reproduce 3.3.1 to 3.3.4 with an empty passphrase salt.
+
 ## 4. What the server validates
 
 The server holds no key. During the tus upload of a file of an end-to-end encrypted transfer, it
@@ -496,6 +603,11 @@ the key proof first, then the proof after claiming an attempt slot (section 3.3.
 successful reveal it returns nothing sealed under `K'` or `K` (section 3.3). What the server **cannot** check: that the text is valid UTF-8 within 10 000 code
 points, the passphrase rules, the content of the file metadata, the authenticity of the file
 chunks, and that the verifiers match the sealed text (the creator's client checks it).
+
+Since 2.3 the express secrets (section 3.3.9) go through the same checks at their creation,
+restricted to the text and the two verifiers: schema level for the bounds, the patterns, the
+three durations and any extra member; keyless framing and the empty text (always refused, no
+file) for `400 secret-format-invalid`. The 10 000 code point limit stays a client rule.
 
 ## 5. Known limits
 
