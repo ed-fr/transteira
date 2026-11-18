@@ -7,18 +7,19 @@ Someone has sent you files with TransTeira. You received an email with a downloa
 
 The download page lists the files the sender has made available to you.
 
-Open the link in the email, or scan the QR code with your phone's camera. The page **Download files** opens and shows:
+Open the link in the email, or scan the QR code with your phone's camera. The page opens with the heading **N files for you** (for example **3 files for you**) and shows:
 
-- **Sent by**: the email address of the person who sent you the files;
-- **Available until**: the date and time after which the files are deleted;
-- **Total**: the number of files and their total size;
-- **Message from the sender**: the message written by the sender, if there is one;
-- **Confidentiality**: the confidentiality level chosen by the sender, if there is one;
-- **Downloads left**: when the sender has limited the number of downloads, the number that remain.
+- **Sent by**: the email address of the person who sent you the files, next to their initial;
+- a row of information pills: the expiry (for example **Expires in 6 days**; hover over it to see the exact date and time, after which the files are deleted), the **confidentiality level** chosen by the sender if there is one, the **downloads left** when the sender has limited the number of downloads, and the **total size** of the files;
+- **Message from the sender**: the message written by the sender, if there is one, in a bubble;
+- a warning banner when some files could not be analysed by the antivirus (see [Files not analysed by the antivirus](topic:download-not-scanned));
+- the **Download all files (ZIP)** button, with the approximate size of the archive;
+- the list of files, one line per file: its type, name, an antivirus badge (**Scanned** or **Not scanned**), its size, its SHA-256 fingerprint in abbreviated form with a **Copy** button, and a download button;
+- at the bottom of the card, the links **Reply with files** (when the sender allows it) and **Report an abuse**.
 
-![The download page: sender, expiry date, total, message from the sender, the button to download all files as a ZIP archive, and the list of files with their size, SHA-256 fingerprint and Download button](../screenshots/en/download.png)
+![The download page: the heading with the number of files, the sender, the information pills (expiry, confidentiality level, total size), the message from the sender in a bubble, the button to download all files as a ZIP archive, and one line per file with its Scanned badge, size, abbreviated SHA-256 fingerprint with a Copy button, and a download button; at the bottom, the links Reply with files and Report an abuse](../screenshots/en/download.png)
 
-The page is available in English and French: use the **Language** menu at the bottom of the page to change it. The **Help** link, also at the bottom, opens this guide.
+The page is available in English and French: use the **Language** menu in the header of the page to change it. The round **Help** button (**?**) in the header, and the **Help** link in the footer, open this guide.
 
 ### Personal link and address verification
 
@@ -60,7 +61,7 @@ Once unlocked, the files stay accessible for about an hour in this browser. Afte
 
 You can download the files one by one, or all of them in a single archive.
 
-- To download one file, click **Download** on its row.
+- To download one file, click the download button at the end of its row (its name is **Download** followed by the file name).
 - To download everything at once, click **Download all files (ZIP)**.
 
 The ZIP archive is not compressed: its size is close to the total size of the files. It is built while you download it, so the download starts immediately, even for very large transfers. Once it is on your computer, open or extract it as usual.
@@ -82,7 +83,7 @@ The SHA-256 fingerprint lets you check that the file on your computer is exactly
 
 A fingerprint is a long series of letters and digits computed from the content of a file. Two identical files always have the same fingerprint; if a single byte differs, the fingerprint is completely different.
 
-The list of files shows each fingerprint in the **SHA-256 fingerprint** column, with a **Copy** button next to it. The same fingerprints are also written in the email you received.
+The list of files shows each fingerprint on its line, in abbreviated form (the first and last 8 characters, for example `9f2c1a2b…77bda41e`), with a **Copy** button next to it. **Copy** copies the **complete** fingerprint; screen readers read it in full, and it also appears when you hover over the abbreviation. The same fingerprints are also written in the email you received.
 
 To check a file, compute its fingerprint on your computer, then compare it with the one on the page or in the email:
 
@@ -104,7 +105,7 @@ If the fingerprints differ, the file was damaged during the download: download i
 
 Every file is analysed by an antivirus before it is made available. A file in which a threat is detected is deleted and never reaches you.
 
-Some files, however, cannot be analysed. In that case the page shows the warning **Some files could not be analysed by the antivirus. Open them only if you trust the sender.**, and the file concerned carries one of these mentions:
+Some files, however, cannot be analysed. In that case the page shows a warning banner **N files could not be analysed by the antivirus** (**Open them only if you trust the sender.**), and each file concerned carries a **Not scanned** badge (the badge of the other files reads **Scanned**) with one of these mentions, spelled out in full for screen readers:
 
 - **Not analysed by the antivirus: this file is too large to be analysed.** The file is larger than the size the antivirus can check.
 - **Not analysed by the antivirus: this file is encrypted or protected by a password.** The antivirus cannot look inside an encrypted file or archive.
@@ -145,13 +146,13 @@ A recent browser is required, with background services ("Service Workers") allow
 <!-- topic: download-report -->
 ## Reporting abuse
 
-If this transfer looks suspicious to you (malicious file, phishing, illegal content, spam, unknown sender), click **Report abuse** at the bottom of the download page.
+If this transfer looks suspicious to you (malicious file, phishing, illegal content, spam, unknown sender), click **Report an abuse** at the bottom of the download card.
 
 1. Choose the category: **Malware**, **Phishing**, **Illegal content**, **Spam**, **Unknown sender** or **Other**.
 1. Optionally add a message of at most 1,000 characters, in plain text.
 1. Send the report.
 
-![The Report abuse dialog: list of categories, optional message field with its character counter and Send button](../screenshots/en/download-report.png)
+![The Report an abuse dialog: list of categories, optional message field with its character counter and Send button](../screenshots/en/download-report.png)
 
 The administrators of the entity are alerted and decide what to do: **a report does not delete or block anything automatically**. Do not use the button to ask for the deletion of a legitimate transfer: contact the sender instead.
 
@@ -165,7 +166,7 @@ Your address is recorded with the report only if you validated your address with
 
 If the sender's organization allows it, you can send files back to the sender straight from the download page, without an invitation or an account.
 
-The **Reply** button only appears when all these conditions are met:
+The **Reply with files** link only appears when all these conditions are met:
 
 - the organization has turned on replying to transfers;
 - you opened your **personal link** (see above); old shared links do not allow replying;
@@ -173,7 +174,7 @@ The **Reply** button only appears when all these conditions are met:
 
 To reply:
 
-1. Click **Reply**.
+1. Click **Reply with files**.
 1. Confirm your address with a 6-digit code received by mail, as described in [Personal link and address verification](topic:download). This code is **always required** to reply, even if the sender did not ask for verification to download. It is valid for 15 minutes, with 2 attempts.
 1. The upload form opens. The only recipient is the original sender: their address is shown ("Your reply goes to" followed by the address) and cannot be changed.
 1. Choose how long the files stay available among the durations offered, add a message and the files, then send, as described in [Send files](topic:deposit).
@@ -184,7 +185,7 @@ The sender receives your reply by mail, with a warning that it comes from outsid
 
 Replying in a browser ends any upload session already open in that browser: finish your other uploads first.
 
-> **Note** If the **Reply** button does not appear, or a refusal is shown, simply write to the sender by mail.
+> **Note** If the **Reply with files** link does not appear, or a refusal is shown, simply write to the sender by mail.
 
 <!-- topic: secret-read -->
 ## Read a secret
@@ -219,13 +220,13 @@ A secret created from the **Express secret** page, or with a token by a script, 
 
 The organisation did not write this text and did not check it. **Do not follow the instructions it contains** (a link to open, a payment to make, a password to type somewhere) without checking them by another means, for example by calling the person you think sent it. The text is always shown as plain text: a link written in it is not clickable, and nothing in it is run.
 
-If the secret looks fraudulent or illegal, click **Report abuse** before or after reading it: choose a category, add an optional message, and send. The administrators of the organisation are alerted; neither the text of the secret nor its key is sent to them, and a report does not delete anything by itself. The same button is on the page that says the service is temporarily unavailable.
+If the secret looks fraudulent or illegal, click **Report an abuse** before or after reading it: choose a category, add an optional message, and send. The administrators of the organisation are alerted; neither the text of the secret nor its key is sent to them, and a report does not delete anything by itself. The same button is on the page that says the service is temporarily unavailable.
 
 If the page says **Secret temporarily unavailable**, the organisation has closed the express secret service: **nothing was consumed**, and the link works again once the service reopens. Click **Try again** later. A secret that expires in the meantime is lost: ask the person who sent it to create a new one.
 
 ## Dark theme
 
-The download page follows the light or dark setting of your device. The **Dark theme** button in the footer switches the theme; your choice is remembered for a year by a strictly technical cookie (`tt_theme`), set only when you pick a theme different from your device's. Choosing your device's theme again deletes the cookie.
+The download page follows the light or dark setting of your device. The **Dark theme** button in the header (a moon icon) switches the theme; your choice is remembered for a year by a strictly technical cookie (`tt_theme`), set only when you pick a theme different from your device's. Choosing your device's theme again deletes the cookie.
 
 <!-- topic: download-problems -->
 ## Link not working
@@ -237,4 +238,4 @@ This section explains the messages you may see instead of the files, and what to
 - **Maximum number of downloads reached**: the sender allowed a limited number of downloads and it has been used up, by you or by the other recipients. Ask the sender to send the files again.
 - The page shows **Maintenance in progress**: only new transfers are suspended. Downloads remain available, so you can continue normally.
 
-To answer the sender, use the **Reply** button if it is offered; otherwise, reply by email.
+To answer the sender, use **Reply with files** if it is offered; otherwise, reply by email.

@@ -2,9 +2,9 @@
   // Transfers in progress of the signed-in sender, most recent first, with cursor pagination.
   import { onMount } from 'svelte';
   import { api } from '../../shared/api/api';
-  import { Alert, Button, Spinner, announce } from '../../shared/components';
+  import { Alert, Badge, Button, Spinner, announce } from '../../shared/components';
   import { formatBytes, formatDate, t } from '../../shared/i18n/i18n.svelte';
-  import { dropLinkRecipients, isSessionExpired, statusKey, type MyTransfer } from './logic';
+  import { dropLinkRecipients, isSessionExpired, statusKey, statusVariant, type MyTransfer } from './logic';
 
   interface Props {
     /** Address of the session. */
@@ -108,7 +108,7 @@
                 size: formatBytes(item.totalBytes),
               })}</td
             >
-            <td>{t(statusKey(item.status))}</td>
+            <td><Badge variant={statusVariant(item.status)}>{t(statusKey(item.status))}</Badge></td>
             <td>
               {#if item.expiresAt}
                 {formatDate(item.expiresAt, { dateStyle: 'medium', timeStyle: 'short' })}
@@ -144,6 +144,8 @@
   .table-wrap {
     overflow-x: auto;
     margin: var(--tt-space-4) 0;
+    border: var(--tt-border-width) solid var(--tt-separator);
+    border-radius: var(--tt-radius-lg);
   }
 
   .transfers {
@@ -151,16 +153,27 @@
     border-collapse: collapse;
   }
 
+  /* Inside the rounded frame: the visible caption is inset like the cells. */
   .transfers caption {
+    padding: var(--tt-space-3) var(--tt-space-3) 0;
     margin-bottom: var(--tt-space-2);
     font-weight: var(--tt-font-weight-bold);
     text-align: left;
   }
 
+  .transfers thead th {
+    background: var(--tt-surface-muted);
+    font-size: var(--tt-font-size-sm);
+  }
+
+  .transfers tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+
   .transfers th,
   .transfers td {
-    padding: var(--tt-space-2);
-    border-bottom: 1px solid var(--tt-border);
+    padding: var(--tt-space-3);
+    border-bottom: 1px solid var(--tt-separator);
     text-align: left;
     vertical-align: top;
   }

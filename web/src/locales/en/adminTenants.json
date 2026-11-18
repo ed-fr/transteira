@@ -220,6 +220,7 @@
       "text": "Drop your files and share them securely.",
       "link": "Sample link",
       "button": "Send",
+      "segment": "7 days",
       "light": "Light theme",
       "dark": "Dark theme"
     },

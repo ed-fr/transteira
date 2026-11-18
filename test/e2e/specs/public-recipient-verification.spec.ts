@@ -6,7 +6,15 @@ import type { BrowserContext, Page } from '@playwright/test';
 import { externalEmail, internalEmail, makeFile, sha256 } from '../support/data';
 import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures';
 import { waitForCode, waitForMail } from '../support/mailpit';
-import { download, identify, mailLink, sendTransfer, fillTransfer } from '../support/publicflow';
+import {
+  download,
+  identify,
+  mailLink,
+  openSecurity,
+  sendTransfer,
+  fillTransfer,
+  setOption,
+} from '../support/publicflow';
 
 const VERIFY_TITLE = 'Confirm your address';
 
@@ -20,9 +28,10 @@ async function sendVerified(
   const recipient = externalEmail(`${label}-recipient`);
   await identify(page, origin, internalEmail(`${label}-sender`));
   await fillTransfer(page, { recipients: [recipient], files: [file] });
-  const option = page.getByRole('checkbox', { name: 'Recipients must verify their address by code' });
-  await expect(option).not.toBeChecked();
-  await option.check();
+  const name = 'Recipients must verify their address by code';
+  await openSecurity(page);
+  await expect(page.getByRole('switch', { name })).not.toBeChecked();
+  await setOption(page, name, true);
   await sendTransfer(page);
   const mail = await waitForMail(recipient, { subject: /sent you files via/ });
   return { recipient, link: mailLink(mail, '/d/', origin) };
@@ -61,7 +70,7 @@ test.describe('recipient verification', () => {
     await checkA11y(rpage);
     await rpage.getByLabel(/^Verification code/).fill(code);
     await rpage.getByRole('button', { name: 'Verify', exact: true }).click();
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     const got = await download(rpage, () =>
       rpage.getByRole('link', { name: `Download ${file.name}` }).click(),
     );
@@ -134,6 +143,6 @@ test.describe('recipient verification', () => {
     const fresh = await requestCode(rpage, recipient);
     await rpage.getByLabel(/^Verification code/).fill(fresh);
     await rpage.getByRole('button', { name: 'Verify', exact: true }).click();
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
   });
 });

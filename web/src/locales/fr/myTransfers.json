@@ -1,6 +1,5 @@
 {
   "title": "Mes envois",
-  "homeLink": "Mes envois",
   "notice": {
     "expiredSession": "Votre session a expiré. Demandez un nouveau lien d’accès pour continuer.",
     "invalidLink": "Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau."

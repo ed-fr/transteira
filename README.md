@@ -246,9 +246,9 @@ novelties of 2.0 and the one-time secrets of 2.1, filmed on a demo instance.
 
 | | |
 |---|---|
-| ![Identification of the sender: the 6-digit verification code sent by email is entered on the page](docs/user/screenshots/en/deposit-code.png) | ![New transfer form of an entity: a recipient, a message, the availability of 7 days selected and the optional password](docs/user/screenshots/en/deposit-form.png) |
-| **Email verification** by one-time code, no account | **New transfer**: recipients, message, expiry, password |
-| ![Transfer sent: the recipients have been notified, and each file is listed with its antivirus status and SHA-256 fingerprint](docs/user/screenshots/en/deposit-sent.png) | ![Download page of a transfer: sender, message, download of all files as a ZIP archive, and for each file its size, SHA-256 fingerprint and antivirus status](docs/user/screenshots/en/download.png) |
+| ![Identification of the sender: the 6-digit verification code sent by email is entered on the page](docs/user/screenshots/en/deposit-code.png) | ![New transfer form of an entity, in two columns: the drop zone and the file cards on the left; the sender banner, the recipient chips, the message and the confidentiality level on the right](docs/user/screenshots/en/deposit-form.png) |
+| **Email verification** by one-time code, no account | **New transfer**: files, recipients, message, confidentiality level |
+| ![Transfer sent: the recipients have been notified, and each file is listed with its antivirus status and SHA-256 fingerprint](docs/user/screenshots/en/deposit-sent.png) | ![Download page of a transfer: the number of files for you, the sender, information pills, message, download of all files as a ZIP archive, and for each file its Scanned badge, size and abbreviated SHA-256 fingerprint](docs/user/screenshots/en/download.png) |
 | **Transfer sent**, with antivirus status and fingerprints | **Download page**: each file or a ZIP archive |
 | ![Branding of an entity in the administration: primary and accent colours with their contrast ratio checked against the accessibility levels](docs/user/screenshots/en/admin-tenant-branding.png) | ![Statistics of an entity in the administration: key figures of the period and storage used against the quota](docs/user/screenshots/en/admin-stats.png) |
 | **Branding per entity**, with contrast checks | **Statistics** and storage quota |

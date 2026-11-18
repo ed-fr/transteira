@@ -64,27 +64,29 @@ Quelques règles s’appliquent aux codes :
 
 Vous n’avez pas à saisir un code à chaque fois. En tant qu’utilisateur interne, une fois un code saisi sur un navigateur, celui-ci vous reconnaît. Un code vous est redemandé sur un autre ordinateur ou un autre navigateur, après 12 mois sans utiliser le service, et toujours lorsque vous déposez avec une invitation.
 
-Une fois que vous êtes identifié, le haut de la page affiche **Identifié comme** suivi de votre adresse, ainsi qu’un bouton **Terminer la session**. Cliquez dessus quand vous avez fini, surtout sur un ordinateur partagé. La session se termine aussi d’elle-même au bout de quelques heures (4 heures, sauf réglage différent de votre organisation) ; la page affiche alors **Votre session a expiré. Identifiez-vous de nouveau pour continuer.**
+Une fois que vous êtes identifié, le formulaire de transfert affiche un bandeau vert **De** avec une coche, votre adresse et un bouton **Changer** (son nom complet est **Changer d’adresse (termine la session)**). Cliquez dessus pour terminer la session, surtout sur un ordinateur partagé ; sur le récapitulatif final, un bouton **Terminer la session** fait la même chose. La session se termine aussi d’elle-même au bout de quelques heures (4 heures, sauf réglage différent de votre organisation) ; la page affiche alors **Votre session a expiré. Identifiez-vous de nouveau pour continuer.**
 
 <!-- topic: deposit-options -->
 ### Remplir le transfert
 
 Le formulaire **Nouveau transfert** décrit ce que vous envoyez, à qui et pour combien de temps.
 
-![Formulaire Nouveau transfert avec un destinataire, un message, la durée 7 jours sélectionnée et le champ Mot de passe](../screenshots/fr/deposit-form.png)
+![Formulaire Nouveau transfert en deux colonnes : la zone de dépôt, les cartes de fichiers et la jauge de volume à gauche ; le bandeau de l’expéditeur, les étiquettes de destinataires, le message, le niveau de confidentialité à droite](../screenshots/fr/deposit-form.png)
 
 Remplissez les champs :
 
-- **Destinataires** : une ou plusieurs adresses, séparées par des virgules ou des retours à la ligne. Si vous en saisissez trop, le formulaire vous indique le maximum.
+- **Destinataires** : saisissez une adresse puis appuyez sur Entrée ou sur la virgule pour en faire une étiquette ; vous pouvez aussi coller une liste entière (séparée par des virgules, des points-virgules ou des retours à la ligne). Chaque étiquette a un bouton **Retirer**, et la touche Retour arrière dans le champ vide sélectionne la dernière étiquette. Une adresse que le service refuse s’affiche en étiquette rouge, avec la raison. Si vous en saisissez trop, le formulaire vous indique le maximum.
+- **Lien seul (aucun mail aux destinataires)** : un interrupteur juste sous les destinataires, proposé si votre organisation l’autorise : voir [Envoyer avec un lien seul](topic:link-only).
 - **Message** : facultatif. Il est envoyé aux destinataires avec le lien.
-- **Disponible pendant** : **1 jour**, **7 jours** ou **30 jours**. La durée court à partir du moment où le transfert devient disponible, c’est-à-dire après l’analyse antivirus.
-- **Mot de passe** : facultatif, sans règle de complexité. Transmettez-le aux destinataires par un autre canal (téléphone, SMS), jamais dans le même mail. Après 3 mots de passe erronés, le transfert est bloqué pendant 15 minutes.
-- **Supprimer le transfert après le premier téléchargement** : le transfert est supprimé pour tous les destinataires dès que l’un d’eux a téléchargé tous les fichiers, soit en une archive ZIP, soit fichier par fichier. La suppression intervient quelques minutes plus tard.
-- **Niveau de confidentialité** : si votre organisation propose plusieurs niveaux, choisissez celui qui correspond à la sensibilité des fichiers ; sa description s’affiche sous le niveau. Un niveau peut imposer des règles : restreindre les durées disponibles, rendre le mot de passe obligatoire, imposer la suppression après le premier téléchargement, limiter les destinataires à l’organisation ou plafonner le nombre maximal de téléchargements. Le formulaire limite alors les choix ou renseigne les options à votre place, et vous explique pourquoi. Si votre organisation n’a qu’un niveau, le sélecteur n’est pas affiché mais ses règles s’appliquent quand même.
-- **Les destinataires doivent vérifier leur adresse par un code** : proposé si votre organisation l’offre. Chaque destinataire reçoit alors un lien personnel et doit saisir un code envoyé à sa propre adresse avant de télécharger : un lien transféré à quelqu’un d’autre est inutilisable. Demandez à vos destinataires de ne pas transférer leur lien. Un niveau de confidentialité peut rendre cette option obligatoire : elle est alors cochée et non modifiable. Les destinataires qui n’ont pas téléchargé les fichiers reçoivent un mail de rappel la veille de l’expiration du transfert.
-- **Nombre maximal de téléchargements** : facultatif, de 1 à 1000. Le transfert compte chaque début de téléchargement, tous destinataires confondus (un téléchargement interrompu puis repris compte une fois). Une fois le nombre atteint, le transfert ne peut plus être téléchargé et il est supprimé quelques minutes plus tard. Laissez le champ vide pour ne pas limiter, sauf si le niveau choisi impose un plafond.
-- **Chiffrer de bout en bout dans mon navigateur** : proposé si votre organisation l’autorise (ou imposé, ou absent si elle l’interdit). Vos fichiers sont chiffrés avant de quitter votre ordinateur : voir [Chiffrer de bout en bout](topic:deposit-e2e). Cette option n’existe pas pour un envoi par lien de dépôt.
-- **Fichiers à envoyer** : faites glisser vos fichiers sur la zone **Glissez-déposez des fichiers ici, ou** cliquez sur **choisissez des fichiers**. Pour retirer un fichier de la liste, utilisez le bouton de retrait à côté de son nom. Sous la liste, le formulaire affiche **Total :** suivi de la taille de vos fichiers et de la taille autorisée.
+- **Disponible pendant** : choix segmentés **1 jour**, **7 jours** ou **30 jours**. La durée court à partir du moment où le transfert devient disponible, c’est-à-dire après l’analyse antivirus.
+- **Niveau de confidentialité** : si votre organisation propose plusieurs niveaux, ils sont présentés en choix segmentés, à côté de la durée (un niveau peut la restreindre). Choisissez celui qui correspond à la sensibilité des fichiers ; la description du niveau choisi s’affiche sous les choix. Un niveau peut imposer des règles : restreindre les durées disponibles, rendre le mot de passe obligatoire, imposer la suppression après le premier téléchargement, limiter les destinataires à l’organisation ou plafonner le nombre maximal de téléchargements. Le formulaire limite alors les choix ou renseigne les options à votre place, et vous explique pourquoi. Si votre organisation n’a qu’un niveau, le choix n’est pas affiché mais ses règles s’appliquent quand même.
+- **Options de sécurité** : un bloc que vous ouvrez avec le bouton de son titre, qui indique le nombre d’options actives (par exemple **Options de sécurité 1 active**). Il est fermé par défaut, et s’ouvre de lui-même quand une option est activée, quand le niveau choisi ou votre organisation en impose une, ou quand l’un de ses champs est en erreur. Chaque option est un interrupteur ; une option imposée par le niveau est activée et verrouillée, avec la raison affichée à côté :
+- **Protéger par un mot de passe** (Options de sécurité) : facultatif, sans règle de complexité. Activer l’interrupteur fait apparaître le champ **Mot de passe** (avec **Afficher**/**Masquer**). Transmettez le mot de passe aux destinataires par un autre canal (téléphone, SMS), jamais dans le même mail. Après 3 mots de passe erronés, le transfert est bloqué pendant 15 minutes.
+- **Les destinataires doivent vérifier leur adresse par un code** (Options de sécurité) : proposé si votre organisation l’offre. Chaque destinataire reçoit alors un lien personnel et doit saisir un code envoyé à sa propre adresse avant de télécharger : un lien transféré à quelqu’un d’autre est inutilisable. Demandez à vos destinataires de ne pas transférer leur lien. Un niveau de confidentialité peut rendre cette option obligatoire : l’interrupteur est alors activé et verrouillé. Les destinataires qui n’ont pas téléchargé les fichiers reçoivent un mail de rappel la veille de l’expiration du transfert.
+- **Supprimer le transfert après le premier téléchargement** (Options de sécurité) : le transfert est supprimé pour tous les destinataires dès que l’un d’eux a téléchargé tous les fichiers, soit en une archive ZIP, soit fichier par fichier. La suppression intervient quelques minutes plus tard.
+- **Limiter le nombre de téléchargements** (Options de sécurité) : facultatif. Activer l’interrupteur fait apparaître le champ **Nombre maximal de téléchargements**, de 1 à 1000. Le transfert compte chaque début de téléchargement, tous destinataires confondus (un téléchargement interrompu puis repris compte une fois). Une fois le nombre atteint, le transfert ne peut plus être téléchargé et il est supprimé quelques minutes plus tard. Avec l’interrupteur désactivé, il n’y a pas de limite, sauf si le niveau choisi impose un plafond : l’interrupteur est alors activé et verrouillé.
+- **Chiffrer de bout en bout dans mon navigateur** (Options de sécurité) : proposé si votre organisation l’autorise (ou imposé, ou absent si elle l’interdit). Vos fichiers sont chiffrés avant de quitter votre ordinateur : voir [Chiffrer de bout en bout](topic:deposit-e2e). Cette option n’existe pas pour un envoi par lien de dépôt.
+- **Fichiers à envoyer** : faites glisser vos fichiers sur la zone de dépôt, ou cliquez sur **Choisir des fichiers**. Pour retirer un fichier de la liste, utilisez le bouton de retrait de sa carte. Une jauge sous la liste indique le nombre de fichiers et leur taille totale par rapport à la limite du transfert ; si vous la dépassez, la jauge devient rouge et affiche **Limite dépassée**.
 
 <!-- rules: levels -->
 
@@ -92,7 +94,7 @@ Un transfert peut contenir jusqu’à 20 Go au total ; votre organisation a pu f
 
 <!-- rules: limits -->
 
-Pour envoyer un dossier entier, faites-le glisser sur la zone, ou cliquez sur **Ajouter un dossier** (le chemin accessible au clavier) et choisissez-le. L’arborescence est conservée : la liste affiche le dossier avant chaque nom de fichier (par exemple `photos/2026/`), et les destinataires retrouvent la même arborescence dans l’archive ZIP. Avant d’envoyer, vérifiez la liste :
+Pour envoyer un dossier entier, faites-le glisser sur la zone de dépôt, ou cliquez sur **Choisir un dossier** (le chemin accessible au clavier) et choisissez-le. L’arborescence est conservée : la liste affiche le dossier avant chaque nom de fichier (par exemple `photos/2026/`), et les destinataires retrouvent la même arborescence dans l’archive ZIP. Avant d’envoyer, vérifiez la liste :
 
 - les fichiers système (`.DS_Store`, `Thumbs.db`, `desktop.ini`) sont écartés automatiquement, et le formulaire indique combien ;
 - les autres fichiers cachés et les fichiers placés dans des dossiers cachés (dont le nom commence par un point, comme `.env` ou `.git`) sont conservés mais signalés **Caché** : retirez avec le bouton de retrait ceux que vous ne voulez pas envoyer ;
@@ -100,9 +102,9 @@ Pour envoyer un dossier entier, faites-le glisser sur la zone, ou cliquez sur **
 - un fichier dont le nom ou le dossier n’est pas accepté (caractères interdits comme `\` ou `:`, nom réservé par Windows, chemin de dossier trop long ou imbriqué sur plus de 16 niveaux) n’est pas ajouté, et le formulaire le liste avec la raison : renommez-le, puis ajoutez-le de nouveau ;
 - les limites de nombre de fichiers et de taille totale s’appliquent à l’ensemble des fichiers des dossiers.
 
-Si votre organisation ne propose pas les dossiers, le bouton **Ajouter un dossier** n’est pas affiché : sélectionnez les fichiers, ou compressez le dossier en fichier ZIP et envoyez ce fichier.
+Si votre organisation ne propose pas les dossiers, le bouton **Choisir un dossier** n’est pas affiché : sélectionnez les fichiers, ou compressez le dossier en fichier ZIP et envoyez ce fichier.
 
-Quand tout est prêt, cliquez sur **Envoyer**. Deux messages peuvent refuser le transfert :
+Quand tout est prêt, cliquez sur le bouton **Envoyer** en bas du formulaire, qui indique aussi le volume total (par exemple **Envoyer · 4,2 Go**). Deux messages peuvent refuser le transfert :
 
 - un message indiquant que le niveau de confidentialité choisi exige un champ, n’autorise pas une valeur, n’autorise que des destinataires de l’organisation ou fixe un maximum plus bas : corrigez le champ nommé dans le message, ou choisissez un autre niveau ;
 - **Ce service n’autorise pas l’envoi vers le domaine de cette adresse.** : votre organisation n’autorise pas ce domaine de destinataire. Retirez l’adresse, ou interrogez votre administrateur.
@@ -168,7 +170,7 @@ Si l’option est désactivée, le dépôt depuis l’extérieur est refusé ave
 <!-- when: transferReply -->
 ## Recevoir une réponse
 
-Si votre organisation l’a activé, vos destinataires peuvent vous renvoyer des fichiers depuis la page de téléchargement avec le bouton **Répondre**, sans invitation. Cela ne concerne que les transferts que vous avez envoyés vous-même (page web ou jeton d’API), jamais ceux d’un invité externe, et seulement via le lien personnel de chaque destinataire.
+Si votre organisation l’a activé, vos destinataires peuvent vous renvoyer des fichiers depuis la page de téléchargement avec le lien **Répondre avec des fichiers**, sans invitation. Cela ne concerne que les transferts que vous avez envoyés vous-même (page web ou jeton d’API), jamais ceux d’un invité externe, et seulement via le lien personnel de chaque destinataire.
 
 Une réponse arrive comme un transfert ordinaire : vous recevez le mail de notification habituel et la page de téléchargement s’ouvre de la même façon. Elle porte toutefois un **avertissement** : la réponse vient de l’extérieur de l’organisation et l’adresse de son auteur a été vérifiée par un code, mais cela ne garantit pas que les fichiers sont sûrs. Soyez prudent avec les fichiers inattendus, ouvrez-les seulement si vous attendiez cette réponse, et en cas de doute contactez l’auteur par un autre moyen. Le même avertissement figure en haut de la page de téléchargement. Les fichiers sont analysés par l’antivirus comme tous les dépôts ; ceux qui ne peuvent pas l’être sont signalés.
 
@@ -179,10 +181,10 @@ Vous seul recevez la réponse : l’expéditeur d’origine est son unique desti
 
 L’option **Lien seul** (sans envoi de mail aux destinataires) vous permet de transmettre vous-même le lien de téléchargement, par exemple par une messagerie instantanée. Elle n’est proposée que si votre organisation l’autorise, et seulement aux utilisateurs internes (y compris depuis l’extérieur lorsque l’organisation le permet) et aux jetons d’API. Une personne invitée, une réponse à un transfert ou un lien de dépôt ne peuvent pas l’utiliser. Le niveau de confidentialité choisi doit lui aussi l’autoriser.
 
-Dans le formulaire [Nouveau transfert](topic:deposit-options), cochez **Lien seul** :
+Dans le formulaire [Nouveau transfert](topic:deposit-options), activez l’interrupteur **Lien seul (aucun mail aux destinataires)**, sous les destinataires :
 
 - les **Destinataires** deviennent facultatifs. S’ils sont renseignés, ils sont enregistrés mais **ne reçoivent aucun mail** ;
-- l’option est incompatible avec la vérification du destinataire : cocher l’une décoche l’autre ;
+- l’option est incompatible avec la vérification du destinataire : activer l’une désactive l’autre ;
 - l’analyse antivirus et les autres règles s’appliquent comme d’habitude.
 
 Quand vous cliquez sur **Envoyer**, le lien s’affiche **une seule fois**, à la fin du dépôt. Cliquez sur **Copier le lien** et conservez-le avant de quitter la page : il ne figure ni dans le mail de confirmation, ni dans [Mes envois](topic:my-transfers). Le lien ne fonctionne que lorsque l’analyse antivirus est terminée ; le mail de confirmation vous prévient alors. Comme toute personne qui détient le lien peut télécharger, transmettez-le par un canal de confiance et protégez le transfert par un mot de passe communiqué séparément.
@@ -198,9 +200,9 @@ Si vous perdez le lien, ouvrez [Mes envois](topic:my-transfers) et cliquez sur *
 
 Le chiffrement de bout en bout protège vos fichiers même contre le serveur. Vos fichiers sont chiffrés **dans votre navigateur**, avant l’envoi. La clé n’est jamais transmise au serveur : lui-même ne peut donc pas les lire. Seules les personnes à qui vous donnez la clé peuvent les ouvrir.
 
-Dans le formulaire [Nouveau transfert](topic:deposit-options), cochez **Chiffrer de bout en bout dans mon navigateur**. Selon les règles de votre organisation et du niveau de confidentialité choisi, la case est proposée, déjà cochée et non modifiable (chiffrement imposé), ou absente (chiffrement interdit). Elle n’est jamais proposée pour un envoi par lien de dépôt.
+Dans le formulaire [Nouveau transfert](topic:deposit-options), ouvrez **Options de sécurité** et activez l’interrupteur **Chiffrer de bout en bout dans mon navigateur**. Selon les règles de votre organisation et du niveau de confidentialité choisi, l’interrupteur est proposé, déjà activé et verrouillé (chiffrement imposé), ou absente (chiffrement interdit). Elle n’est jamais proposée pour un envoi par lien de dépôt.
 
-![Formulaire Nouveau transfert avec la case Chiffrer de bout en bout dans mon navigateur cochée](../screenshots/fr/deposit-e2e-option.png)
+![Formulaire Nouveau transfert avec le bloc Options de sécurité ouvert et l’interrupteur Chiffrer de bout en bout dans mon navigateur activé](../screenshots/fr/deposit-e2e-option.png)
 
 Quand vous cliquez sur **Envoyer** :
 
@@ -221,7 +223,7 @@ Pour un envoi en [lien seul](topic:link-only), l’écran affiche le **lien comp
 - **Pas d’analyse antivirus.** Le serveur ne peut pas lire les fichiers : ils ne sont jamais analysés. Ils sont marqués « non analysé : chiffré de bout en bout », pour vous et pour les destinataires.
 - **Pas d’archive ZIP côté serveur.** Les destinataires déchiffrent dans leur navigateur, qui construit l’archive lui-même.
 - Le serveur voit toujours la taille et le nombre des fichiers, l’expéditeur, les destinataires et les dates.
-- Un navigateur récent est nécessaire (chiffrement, tâches en arrière-plan et flux de données). Sans lui, la case n’est pas utilisable.
+- Un navigateur récent est nécessaire (chiffrement, tâches en arrière-plan et flux de données). Sans lui, l’interrupteur n’est pas utilisable.
 
 <!-- topic: secret-share -->
 ## Partager un secret
@@ -237,7 +239,7 @@ Une fois identifié sur la page d’envoi (voir [Vous identifier par un code](to
 1. Indiquez comment le destinataire reçoit le lien : **Je copie le lien moi-même**, ou **Envoyer le lien par mail** à une seule adresse (si votre organisation l’autorise).
 1. Ajoutez une **Phrase de passe** si vous le souhaitez. Le destinataire en aura besoin pour lire le secret, et elle n’est jamais envoyée au serveur. Transmettez-la **par un autre canal** que le lien (téléphone, SMS, de vive voix) : si le lien est envoyé par mail, une phrase de passe peut être obligatoire. Préférez une phrase de passe longue, de plusieurs mots.
 1. Joignez au besoin un **Fichier** : un petit fichier seulement (la taille maximale est indiquée sous le champ). Il est chiffré dans votre navigateur et n’est donc pas analysé par l’antivirus ; le destinataire en est prévenu.
-1. Cochez **Me prévenir par mail quand le secret est lu** pour recevoir un accusé de lecture. Vous êtes aussi prévenu si le secret expire sans avoir été lu, ou s’il est verrouillé après trop de phrases de passe erronées.
+1. Activez **Me prévenir par mail quand le secret est lu** pour recevoir un accusé de lecture. Vous êtes aussi prévenu si le secret expire sans avoir été lu, ou s’il est verrouillé après trop de phrases de passe erronées.
 1. Cliquez sur **Créer le secret**.
 
 Si l’envoi du fichier ou du mail échoue après la création du secret, le formulaire affiche **Le secret n’est pas terminé**. Cliquez sur **Réessayer** (rien n’est rechiffré) ou sur **Recommencer**. Un secret inachevé n’est conservé qu’une heure, puis il est purgé : s’il a expiré, le formulaire vous invite à le créer de nouveau.
@@ -357,7 +359,7 @@ Vous ne pouvez télécharger les preuves d’un transfert que tant qu’il exist
 
 Une invitation permet à une personne extérieure à votre organisation de vous envoyer des fichiers.
 
-Seuls les utilisateurs internes identifiés sur la page d’envoi peuvent inviter. Une fois identifié, cliquez sur **Inviter une personne à vous envoyer des fichiers** en haut de la page.
+Seuls les utilisateurs internes identifiés sur la page d’envoi peuvent inviter. Une fois identifié, cliquez sur **Inviter une personne à vous envoyer des fichiers**, affiché sous le bandeau de l’expéditeur du formulaire.
 
 ![Formulaire Inviter une personne externe avec l’adresse mail de la personne, un message facultatif et la langue du mail d’invitation](../screenshots/fr/invite.png)
 
@@ -450,10 +452,10 @@ Votre organisation rédige les documents légaux du service.
 
 En bas de page, les liens **Mentions légales** et **Politique de confidentialité** ouvrent ces documents (un lien n’apparaît que si le document a été rédigé). Si un document manque, la page affiche **Ce document n’a pas été publié par ce service.**
 
-![Page Mentions légales de l’entité, avec en bas les liens Mentions légales et Aide et la liste Langue](../screenshots/fr/legal-notice.png)
+![Page Mentions légales de l’entité, avec en bas les liens Mentions légales et Aide, et dans l’en-tête les boutons Langue, Thème sombre et Aide](../screenshots/fr/legal-notice.png)
 
-Le service n’utilise que des cookies techniques, sans aucune mesure d’audience. Le bas de page contient aussi la liste **Langue**, le bouton **Thème sombre** et un lien **Aide** vers l’aide de l’écran en cours.
+Le service n’utilise que des cookies techniques, sans aucune mesure d’audience. L’en-tête contient la liste **Langue**, le bouton **Thème sombre** et un lien rond **Aide** (**?**) vers l’aide de l’écran en cours ; le bas de page répète un lien **Aide** et affiche « Propulsé par TransTeira ».
 
 ### Thème sombre
 
-Les pages suivent par défaut le réglage clair ou sombre de votre appareil. Le bouton **Thème sombre** du bas de page change le thème à tout moment. Votre choix est mémorisé pendant un an par un cookie strictement technique (`tt_theme`), posé uniquement lorsque vous choisissez un thème différent de celui de votre appareil. Si vous rechoisissez le thème de votre appareil, le cookie est supprimé : les pages suivent de nouveau votre appareil. Les deux thèmes respectent les mêmes exigences d’accessibilité (RGAA).
+Les pages suivent par défaut le réglage clair ou sombre de votre appareil. Le bouton **Thème sombre** de l’en-tête (une icône de lune) change le thème à tout moment. Votre choix est mémorisé pendant un an par un cookie strictement technique (`tt_theme`), posé uniquement lorsque vous choisissez un thème différent de celui de votre appareil. Si vous rechoisissez le thème de votre appareil, le cookie est supprimé : les pages suivent de nouveau votre appareil. Les deux thèmes respectent les mêmes exigences d’accessibilité (RGAA).

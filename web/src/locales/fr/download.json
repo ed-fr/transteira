@@ -1,33 +1,50 @@
 {
   "title": "Télécharger les fichiers",
   "sender": "Envoyé par",
-  "expires": "Disponible jusqu’au",
-  "total": "Total",
-  "totalValue": {
-    "one": "{count} fichier, {size}",
-    "other": "{count} fichiers, {size}"
+  "heading": {
+    "one": "{count} fichier pour vous",
+    "other": "{count} fichiers pour vous"
   },
   "message": "Message de l’expéditeur",
+  "pills": {
+    "label": "À propos de ce transfert",
+    "expires": "Expire {relative}",
+    "until": "(jusqu’au {date})",
+    "level": "Confidentialité :",
+    "downloadsLeft": {
+      "one": "{count} téléchargement restant",
+      "other": "{count} téléchargements restants"
+    },
+    "total": "{size} au total"
+  },
   "deleteAfterFirst": "Ce transfert est supprimé après son premier téléchargement complet. Pour être sûr de récupérer tous les fichiers, téléchargez-les en une fois avec l’archive ZIP.",
   "noFiles": "Aucun fichier n’est disponible dans ce transfert.",
   "integrity": "L’empreinte SHA-256 permet de vérifier qu’un fichier téléchargé est intact : comparez-la avec l’empreinte calculée sur votre ordinateur.",
   "archive": {
     "button": "Télécharger tous les fichiers (ZIP)",
-    "hint": "L’archive n’est pas compressée : sa taille est proche de la taille totale des fichiers."
+    "hint": "Archive non compressée, environ {size}"
   },
   "files": {
     "caption": "Fichiers de ce transfert",
-    "name": "Nom",
-    "size": "Taille",
-    "sha256": "Empreinte SHA-256",
-    "action": "Lien de téléchargement",
-    "download": "Télécharger",
-    "downloadName": "{name}",
-    "copySha": "Copier l’empreinte SHA-256 de {name}",
+    "downloadFile": "Télécharger {name}",
     "unavailable": "Lien indisponible"
   },
   "scan": {
-    "summary": "Certains fichiers n’ont pas pu être analysés par l’antivirus. Ne les ouvrez que si vous faites confiance à l’expéditeur.",
+    "summaryTitle": {
+      "one": "{count} fichier n’a pas pu être analysé par l’antivirus",
+      "other": "{count} fichiers n’ont pas pu être analysés par l’antivirus"
+    },
+    "summaryText": {
+      "one": "Ne l’ouvrez que si vous faites confiance à l’expéditeur.",
+      "other": "Ne les ouvrez que si vous faites confiance à l’expéditeur."
+    },
+    "badge": {
+      "clean": "Analysé",
+      "tooLarge": "Non analysé : trop volumineux",
+      "encrypted": "Non analysé : chiffré",
+      "disabled": "Non analysé : antivirus désactivé",
+      "e2e": "Non analysé : chiffré de bout en bout"
+    },
     "notScannedTooLarge": "Non analysé par l’antivirus : ce fichier est trop volumineux pour être analysé.",
     "notScannedEncrypted": "Non analysé par l’antivirus : ce fichier est chiffré ou protégé par un mot de passe.",
     "notScannedDisabled": "Non analysé par l’antivirus : l’analyse antivirus est désactivée."
@@ -52,26 +69,21 @@
     "title": "Transfert plus disponible",
     "text": "Ce transfert a expiré ou a été supprimé. Demandez à l’expéditeur de renvoyer les fichiers."
   },
-  "level": "Confidentialité",
-  "downloadsRemaining": "Téléchargements restants",
   "maxDownloads": {
     "title": "Nombre maximal de téléchargements atteint",
     "text": "Ce transfert a atteint son nombre maximal de téléchargements et ne peut plus être téléchargé. Demandez à l’expéditeur de renvoyer les fichiers."
   },
   "reply": {
-    "button": "Répondre",
+    "button": "Répondre avec des fichiers",
     "hint": "Renvoyez des fichiers à {email}.",
-    "starting": "Ouverture de la réponse…",
     "notice": "Ce transfert est une réponse envoyée depuis l’extérieur de {tenant} : l’adresse de l’expéditeur a été vérifiée par un code, mais la personne ne fait pas partie de l’organisation. Soyez prudent avec les fichiers que vous n’attendiez pas.",
     "notAllowed": "Il n’est pas possible de répondre à ce transfert.",
     "depositNotAllowed": "Vous ne pouvez pas envoyer de fichiers à cette adresse.",
-    "gone": "Le transfert auquel vous voulez répondre n’est plus disponible.",
     "maintenance": "Le service est en maintenance : les réponses sont impossibles pour le moment. Réessayez plus tard.",
     "rateLimited": "Trop de demandes. Patientez un instant puis réessayez.",
     "page": {
       "title": "Répondre à un transfert",
       "back": "Retour à la page de téléchargement",
-      "to": "Votre réponse sera envoyée à {recipient}.",
       "unavailable": "Votre session de réponse a expiré ou n’est plus valide. Recommencez la réponse depuis la page de téléchargement.",
       "doneBack": "Retour à la page de téléchargement"
     }

@@ -78,6 +78,12 @@
     font-size: var(--tt-font-size-sm);
   }
 
+  /* Public pages (CLAUDE.md section 13.2): a target of at least 44 px, even when small. */
+  :global(.tt-page--public) .tt-copy {
+    min-width: var(--tt-control-height);
+    min-height: var(--tt-control-height);
+  }
+
   .tt-copy__failed {
     display: block;
     margin-top: var(--tt-space-1);

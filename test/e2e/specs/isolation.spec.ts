@@ -294,7 +294,7 @@ test.describe('tenant isolation (public hosts)', () => {
     expect(await page.content()).not.toContain('entity-a-report.txt');
 
     await page.goto(`${a.origin}${path}`);
-    await expect(page.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     await expect(page.getByText('entity-a-report.txt').first()).toBeVisible();
   });
 });

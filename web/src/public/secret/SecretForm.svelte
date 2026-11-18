@@ -10,10 +10,11 @@
   import {
     Alert,
     Button,
-    Checkbox,
     FileDrop,
     FileList,
     RadioGroup,
+    SegmentedControl,
+    Switch,
     TextArea,
     TextField,
   } from '../../shared/components';
@@ -185,13 +186,12 @@
       bind:value={secret.form.text}
     />
 
-    <RadioGroup
+    <SegmentedControl
       legend={t('secretCreate.duration.legend')}
       hint={t('secretCreate.duration.hint')}
       name={ids.expiresIn}
       options={durationOptions}
       required
-      inline
       disabled={busy}
       error={say(errors.expiresIn)}
       bind:value={secret.form.expiresIn}
@@ -277,7 +277,7 @@
       />
     {/if}
 
-    <Checkbox
+    <Switch
       id="tt-secret-read-receipt"
       label={t('secretCreate.readReceipt.label')}
       hint={t('secretCreate.readReceipt.hint')}

@@ -68,7 +68,7 @@
     <Alert severity="error">{t(`upload.error.${snapshot.error.code}`)}</Alert>
   {/if}
 
-  <FileList files={snapshot.files} label={t('deposit.upload.files')}>
+  <FileList files={snapshot.files} label={t('deposit.upload.files')} variant="cards">
     {#snippet details(file)}
       <ProgressBar label={fileText(file)} value={file.uploadedBytes} max={file.size || 1} />
     {/snippet}

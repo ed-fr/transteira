@@ -1,6 +1,5 @@
 {
   "title": "My transfers",
-  "homeLink": "My transfers",
   "notice": {
     "expiredSession": "Your session has expired. Request a new access link to continue.",
     "invalidLink": "This link has expired or has already been used. Request a new one."

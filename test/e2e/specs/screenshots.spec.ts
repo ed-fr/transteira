@@ -398,16 +398,40 @@ async function heading(page: Page, lang: Lang, key?: string, vars?: Record<strin
   await expect(h1.first()).toBeVisible({ timeout: 30_000 });
 }
 
+/** Types one recipient in the chips field and commits it with Enter. */
+async function addRecipient(page: Page, lang: Lang, address: string): Promise<void> {
+  const field = page.getByRole('textbox', { name: startsWith(msg(lang, 'deposit.form.recipients.label')) });
+  await field.fill(address);
+  await field.press('Enter');
+}
+
+/** Opens the "Security options" block of the deposit form (closed by default). */
+async function openSecurity(page: Page, lang: Lang): Promise<void> {
+  const trigger = page.getByRole('button', { name: startsWith(msg(lang, 'deposit.form.security.title')) });
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+}
+
 /**
  * Values that change at every run, as [pattern, how to neutralise it]: identifiers (prefix and
  * ULID or random suffix: ten_..., trf_..., mk_...), SHA-256 fingerprints and other hexadecimal
  * digests, API token prefixes and secrets, dates and times (server timestamps).
  */
-const VOLATILE: readonly [string, 'id' | 'hex' | 'token' | 'digits' | 'ip'][] = [
+const VOLATILE: readonly [string, 'id' | 'hex' | 'token' | 'digits' | 'ip' | 'relative'][] = [
   [/\b[a-z]{2,4}_(?=[0-9A-Za-z]*\d)[0-9A-Za-z]{12,}\b/.source, 'id'],
   // SHA-256 fingerprints, pseudonyms of erased addresses and other digests (letters and digits).
   [/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{12,}\b/.source, 'hex'],
   [/\b[0-9a-f]{8}(?:-[0-9a-f]{4,})+\b/.source, 'hex'],
+  // Abbreviated fingerprints of the download page and of the done step (8 characters, an
+  // ellipsis, 8 characters): the abbreviation is shorter than the full-digest rule above.
+  [/\b[0-9a-f]{8}…[0-9a-f]{8}\b/.source, 'hex'],
+  // Relative expiry of the download page ("Expires in 6 days"), which depends on the day the
+  // capture runs: replaced by a fixed text.
+  [
+    /\bExpires (?:now|tomorrow|in \d+ (?:minutes?|hours?|days?))|\bExpire (?:maintenant|demain|après-demain|dans \d+ (?:minutes?|heures?|jours?))/
+      .source,
+    'relative',
+  ],
   [/\btt_[A-Za-z0-9_-]{4,}/.source, 'token'],
   // Dates (10/24/26, 24/10/2026, 2026-10-24, Oct 24, 2026) and times (7:58 PM, 19:58:50); the
   // lookarounds keep IPv4 addresses and IPv6 examples (2001:db8::) out.
@@ -440,6 +464,8 @@ async function neutraliseVolatileText(page: Page): Promise<void> {
             if (kind === 'id')
               return m.replace(/_(.*)$/, (_all, rest: string) => `_${'0'.repeat(rest.length)}`);
             if (kind === 'hex') return m.replace(/[0-9a-f]/g, '0');
+            if (kind === 'relative')
+              return m.startsWith('Expires') ? 'Expires in 7 days' : 'Expire dans 7 jours';
             if (kind === 'token') return `tt_${'X'.repeat(m.length - 3)}`;
             if (kind === 'ip') return fixedIps.includes(m) ? m : '000.000.000.000';
             return m.replace(/\d/g, '0');
@@ -584,6 +610,8 @@ async function shoot(
     const active = document.activeElement;
     if (active instanceof HTMLElement && !active.closest('[role="dialog"]')) active.blur();
   });
+  // No hover state left by the previous click (the pointer stays where it was).
+  await page.mouse.move(0, 0);
   await page.screenshot({
     path: screenshotFile(lang, name),
     animations: 'disabled',
@@ -615,9 +643,7 @@ test.describe('depositor', () => {
       await page.getByRole('button', { name: msg(lang, 'deposit.code.submit'), exact: true }).click();
 
       await heading(page, lang, 'deposit.form.title');
-      await page
-        .getByRole('textbox', { name: startsWith(msg(lang, 'deposit.form.recipients.label')) })
-        .fill(RECIPIENT[lang]);
+      await addRecipient(page, lang, RECIPIENT[lang]);
       await page.getByLabel(startsWith(msg(lang, 'deposit.form.message.label'))).fill(MESSAGES[lang]);
       const files =
         lang === 'en'
@@ -633,22 +659,20 @@ test.describe('depositor', () => {
         .getByLabel(startsWith(msg(lang, 'deposit.form.files.label')))
         .setInputFiles(files.map((f) => ({ name: f.name, mimeType: f.mimeType, buffer: f.buffer })));
       for (const f of files) await expect(page.getByText(f.name).first()).toBeVisible();
-      // The capture (one viewport, 1280 x 800) starts at the confidentiality level and shows the options that
-      // follow it (duration, password, maximum number of downloads).
-      await page
-        .getByRole('group', { name: msg(lang, 'deposit.form.level.legend') })
-        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+      // The capture (one viewport, 1280 x 800) starts at the top of the page: header, sender, files and recipients.
+      await page.evaluate(() => window.scrollTo(0, 0));
       await shoot(page, lang, 'deposit-form');
 
       // The recipient verification option, checked (it applies to this transfer too).
-      const verification = page.getByRole('checkbox', {
+      await openSecurity(page, lang);
+      const verification = page.getByRole('switch', {
         name: startsWith(msg(lang, 'deposit.form.recipientVerification.label')),
       });
       await verification.check();
       await verification.evaluate((el) => el.scrollIntoView({ block: 'center' }));
       await shoot(page, lang, 'deposit-form-verification');
 
-      await page.getByRole('button', { name: msg(lang, 'deposit.form.submit'), exact: true }).click();
+      await page.getByRole('button', { name: startsWith(msg(lang, 'deposit.form.submit')) }).click();
       await heading(page, lang, 'deposit.done.title');
       await shoot(page, lang, 'deposit-sent');
 
@@ -680,7 +704,7 @@ test.describe('depositor', () => {
         await page.getByRole('button', { name: msg(lang, 'deposit.code.submit'), exact: true }).click();
         await heading(page, lang, 'deposit.form.title');
         await page
-          .getByRole('checkbox', { name: startsWith(msg(lang, 'deposit.form.linkOnly.label')) })
+          .getByRole('switch', { name: startsWith(msg(lang, 'deposit.form.linkOnly.label')) })
           .check();
         const file = lang === 'en' ? 'meeting-notes.pdf' : 'compte-rendu.pdf';
         await page
@@ -689,7 +713,7 @@ test.describe('depositor', () => {
             { name: file, mimeType: 'application/pdf', buffer: makeFile(file, 96 * 1024).buffer },
           ]);
         await expect(page.getByText(file).first()).toBeVisible();
-        await page.getByRole('button', { name: msg(lang, 'deposit.form.submit'), exact: true }).click();
+        await page.getByRole('button', { name: startsWith(msg(lang, 'deposit.form.submit')) }).click();
         await heading(page, lang, 'deposit.done.title');
         await expect(page.locator('.tt-done-link')).toBeVisible();
         await shoot(page, lang, 'deposit-link-only', [page.locator('.tt-done-link')]);
@@ -721,9 +745,7 @@ test.describe('depositor', () => {
           .fill(await waitForCode(email, after));
         await page.getByRole('button', { name: msg(lang, 'deposit.code.submit'), exact: true }).click();
         await heading(page, lang, 'deposit.form.title');
-        await page
-          .getByRole('textbox', { name: startsWith(msg(lang, 'deposit.form.recipients.label')) })
-          .fill(recipients[lang]);
+        await addRecipient(page, lang, recipients[lang]);
         const file = lang === 'en' ? 'board-minutes.pdf' : 'proces-verbal.pdf';
         await page
           .getByLabel(startsWith(msg(lang, 'deposit.form.files.label')))
@@ -731,12 +753,13 @@ test.describe('depositor', () => {
             { name: file, mimeType: 'application/pdf', buffer: makeFile(file, 96 * 1024).buffer },
           ]);
         await expect(page.getByText(file).first()).toBeVisible();
-        const option = page.getByRole('checkbox', { name: startsWith(msg(lang, 'deposit.e2e.label')) });
+        await openSecurity(page, lang);
+        const option = page.getByRole('switch', { name: startsWith(msg(lang, 'deposit.e2e.label')) });
         await option.check();
         await option.evaluate((el) => el.scrollIntoView({ block: 'center' }));
         await shoot(page, lang, 'deposit-e2e-option');
 
-        await page.getByRole('button', { name: msg(lang, 'deposit.form.submit'), exact: true }).click();
+        await page.getByRole('button', { name: startsWith(msg(lang, 'deposit.form.submit')) }).click();
         await heading(page, lang, 'deposit.done.title');
         const key = page.getByTestId('deposit-e2e-key');
         await expect(key).toBeVisible();
@@ -748,7 +771,7 @@ test.describe('depositor', () => {
         const notification = await waitForMail(recipients[lang]);
         const rpage = await openPage(newContext, lang);
         await rpage.goto(mailLink(notification, '/d/', ORIGINS.a));
-        await heading(rpage, lang, 'download.title');
+        await heading(rpage, lang, 'download.heading', { count: '1' });
         await expect(rpage.locator('#tt-e2e-key')).toBeVisible();
         await shoot(rpage, lang, 'download-e2e-key');
       }
@@ -792,7 +815,7 @@ test.describe('recipient', () => {
     for (const lang of LANGS) {
       const page = await openPage(newContext, lang);
       await page.goto(`${ORIGINS.a}${data.download[lang]}`);
-      await heading(page, lang, 'download.title');
+      await heading(page, lang, 'download.heading', { count: String(apiFiles(lang).length) });
       await expect(page.getByText(apiFiles(lang)[0]!.name).first()).toBeVisible();
       await shoot(page, lang, 'download');
     }
@@ -814,7 +837,7 @@ test.describe('recipient', () => {
     for (const lang of LANGS) {
       const page = await openPage(newContext, lang);
       await page.goto(`${ORIGINS.a}${data.download[lang]}`);
-      await heading(page, lang, 'download.title');
+      await heading(page, lang, 'download.heading', { count: String(apiFiles(lang).length) });
       await page.getByRole('button', { name: msg(lang, 'download.report.button'), exact: true }).click();
       await expect(page.getByRole('dialog', { name: msg(lang, 'download.report.title') })).toBeVisible();
       await shoot(page, lang, 'download-report');
@@ -845,7 +868,7 @@ test.describe('recipient', () => {
         );
         const page = await openPage(newContext, lang);
         await page.goto(`${ORIGINS.a}${await recipientPath(t, REPLY_RECIPIENT[lang])}`);
-        await heading(page, lang, 'download.title');
+        await heading(page, lang, 'download.heading', { count: String(apiFiles(lang).length) });
         const reply = page.getByRole('button', { name: msg(lang, 'download.reply.button'), exact: true });
         await expect(reply).toBeVisible();
         await shoot(page, lang, 'download-reply');

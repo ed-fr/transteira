@@ -11,7 +11,7 @@ import { ORIGINS, STORAGE_DELEGATE } from '../support/env';
 import { externalEmail, internalEmail, makeFile, sha256 } from '../support/data';
 import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures';
 import { waitForMail } from '../support/mailpit';
-import { fillTransfer, identify, mailLink, sendTransfer, download } from '../support/publicflow';
+import { fillTransfer, identify, mailLink, sendTransfer, download, setOption } from '../support/publicflow';
 import { delegateApi, loadState } from '../support/state';
 
 interface LevelList {
@@ -131,16 +131,16 @@ test.describe('confidentiality levels and recipient rules', () => {
     await checkA11y(page);
 
     await fillTransfer(page, { recipients: [recipient], files: [file] });
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await page.getByRole('button', { name: /^Send(\s|$)/ }).click();
     await expect(page.getByText('The chosen confidentiality level requires a password.')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Transfer sent' })).toHaveCount(0);
 
     await page.locator('#tt-deposit-max-downloads').fill('3');
     await page.locator('#tt-deposit-password').fill(password);
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(
-      page.getByText('The chosen confidentiality level allows at most 2 downloads.'),
-    ).toBeVisible();
+    await page.getByRole('button', { name: /^Send(\s|$)/ }).click();
+    await expect(page.locator('#tt-deposit-max-downloads-error')).toHaveText(
+      /The chosen confidentiality level allows at most 2 downloads\./,
+    );
 
     await page.locator('#tt-deposit-max-downloads').fill('2');
     await sendTransfer(page);
@@ -158,10 +158,10 @@ test.describe('confidentiality levels and recipient rules', () => {
     await expect(rpage.getByText('Restricted', { exact: true })).toHaveCount(0);
     await rpage.getByLabel(/^Password/).fill(password);
     await rpage.getByRole('button', { name: 'Unlock' }).click();
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     await expect(rpage.getByText('Restricted', { exact: true })).toBeVisible();
     await expect(rpage.getByText('Downloads left')).toBeVisible();
-    await expect(rpage.locator('dd', { hasText: /^2$/ })).toBeVisible();
+    await expect(rpage.getByText('2 downloads left')).toBeVisible();
     await checkA11y(rpage);
     const got = await download(rpage, () =>
       rpage.getByRole('link', { name: `Download ${file.name}` }).click(),
@@ -180,7 +180,7 @@ test.describe('confidentiality levels and recipient rules', () => {
     await identify(page, tenant.origin, internalEmail('deny-sender'));
     const denied = `someone-${crypto.randomBytes(3).toString('hex')}@denied.example.com`;
     await fillTransfer(page, { recipients: [denied], files: [makeFile('denied.bin', 1024)] });
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await page.getByRole('button', { name: /^Send(\s|$)/ }).click();
     await expect(
       page.getByText(`${denied}: This service does not allow sending to the domain of this address.`),
     ).toBeVisible();
@@ -204,6 +204,7 @@ test.describe('confidentiality levels and recipient rules', () => {
 
     await identify(page, tenant.origin, sender);
     await fillTransfer(page, { recipients: [recipient], files: [first, second] });
+    await setOption(page, 'Limit the number of downloads', true);
     await page.locator('#tt-deposit-max-downloads').fill('1');
     await sendTransfer(page);
     const mail = await waitForMail(recipient, { subject: /sent you files via/ });
@@ -211,8 +212,8 @@ test.describe('confidentiality levels and recipient rules', () => {
 
     const rpage = await (await newContext()).newPage();
     await rpage.goto(link);
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
-    await expect(rpage.locator('dd', { hasText: /^1$/ })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
+    await expect(rpage.getByText('1 download left')).toBeVisible();
     const hrefOf = async (name: string): Promise<string> =>
       new URL(
         (await rpage.getByRole('link', { name: `Download ${name}` }).getAttribute('href')) ?? '',

@@ -120,3 +120,45 @@ export function formatDateIn(
   }
   return new Intl.DateTimeFormat(locale, options).format(date);
 }
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+/** Converts a date argument (Date, ISO string or epoch milliseconds) to epoch milliseconds. */
+function epochOf(d: Date | string | number): number {
+  return (d instanceof Date ? d : new Date(d)).getTime();
+}
+
+/**
+ * Formats a date relative to now ("in 6 days", "tomorrow", "in 3 hours", "5 minutes ago") with
+ * Intl.RelativeTimeFormat (numeric: "auto"): "now" under half a minute, minutes under one hour,
+ * hours under one day, days (rounded to the nearest day) beyond. now defaults to the current time; an invalid date gives "".
+ */
+export function formatRelativeIn(
+  locale: string,
+  d: Date | string | number,
+  now: Date | string | number = Date.now(),
+): string {
+  const target = epochOf(d);
+  const from = epochOf(now);
+  if (Number.isNaN(target) || Number.isNaN(from)) {
+    return '';
+  }
+  const diff = target - from;
+  const abs = Math.abs(diff);
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  // Rounded half away from zero, so that the past and the future round alike.
+  const count = (unit: number): number => Math.sign(diff) * Math.round(abs / unit);
+  if (abs < MINUTE_MS / 2) {
+    // "now" (0 minutes would read "this minute").
+    return format.format(0, 'second');
+  }
+  if (abs < HOUR_MS) {
+    return format.format(count(MINUTE_MS), 'minute');
+  }
+  if (abs < DAY_MS) {
+    return format.format(count(HOUR_MS), 'hour');
+  }
+  return format.format(count(DAY_MS), 'day');
+}

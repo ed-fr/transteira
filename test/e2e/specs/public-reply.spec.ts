@@ -36,7 +36,7 @@ async function sendTo(
 
 /** From the download page, starts the reply and confirms the code, up to the reply form. */
 async function startReply(page: Page, recipient: string): Promise<void> {
-  await page.getByRole('button', { name: 'Reply', exact: true }).click();
+  await page.getByRole('button', { name: 'Reply with files', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Confirm your address to reply', level: 1 })).toBeVisible();
   await checkA11y(page);
   const after = Date.now();
@@ -73,7 +73,7 @@ test.describe('public: reply to a transfer', () => {
     // The recipient opens their link from outside and sees the reply button.
     const rpage = await (await newContext({ clientIp: externalIp() })).newPage();
     await rpage.goto(link);
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     await expect(rpage.getByText(`Send files back to ${sender}.`)).toBeVisible();
     await checkA11y(rpage);
     await startReply(rpage, recipient);
@@ -89,7 +89,7 @@ test.describe('public: reply to a transfer', () => {
     await checkA11y(rpage);
     await expectCleanStorage(rpage);
     await rpage.getByRole('button', { name: 'Back to the download page' }).click();
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
 
     // The sender receives the reply, flagged as coming from outside.
     const notification = await waitForMail(sender, { subject: /sent you files via/ });
@@ -100,9 +100,9 @@ test.describe('public: reply to a transfer', () => {
     // The download page of the reply warns the sender and offers no reply to a reply.
     const spage = await (await newContext()).newPage();
     await spage.goto(mailLink(notification, '/d/', tenant.origin));
-    await expect(spage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(spage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     await expect(spage.getByText(`This transfer is a reply sent from outside ${tenant.name}`)).toBeVisible();
-    await expect(spage.getByRole('button', { name: 'Reply', exact: true })).toHaveCount(0);
+    await expect(spage.getByRole('button', { name: 'Reply with files', exact: true })).toHaveCount(0);
     await checkA11y(spage);
     const got = await download(spage, () =>
       spage.getByRole('link', { name: `Download ${answer.name}` }).click(),
@@ -137,7 +137,7 @@ test.describe('public: reply to a transfer', () => {
 
     const rpage = await (await newContext({ clientIp: externalIp() })).newPage();
     await rpage.goto(link);
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     await startReply(rpage, recipient);
     await fillTransfer(rpage, { files: [infected] });
     await sendTransfer(rpage, 'refused');
@@ -155,8 +155,8 @@ test.describe('public: reply to a transfer', () => {
     );
     const rpage = await (await newContext({ clientIp: externalIp() })).newPage();
     await rpage.goto(link);
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
-    await expect(rpage.getByRole('button', { name: 'Reply', exact: true })).toHaveCount(0);
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('button', { name: 'Reply with files', exact: true })).toHaveCount(0);
     await checkA11y(rpage);
   });
 

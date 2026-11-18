@@ -8,7 +8,7 @@
   // focus moves to the heading of the section (the delete button of the row is gone).
   import { onMount, tick } from 'svelte';
   import { api } from '../../shared/api/api';
-  import { Alert, Button, Dialog, announce } from '../../shared/components';
+  import { Alert, Badge, Button, Dialog, announce } from '../../shared/components';
   import { formatBytes, formatDate, i18n, t } from '../../shared/i18n/i18n.svelte';
   import { problemMessage } from '../../shared/api/problem';
   import { isSessionExpired } from './logic';
@@ -19,6 +19,7 @@
     secretListSilent,
     secretDeliveryKey,
     secretStateKey,
+    secretStateVariant,
     type MySecret,
   } from './secrets';
 
@@ -175,7 +176,7 @@
                   </span>
                 {/if}
               </td>
-              <td>{t(secretStateKey(item.state))}</td>
+              <td><Badge variant={secretStateVariant(item.state)}>{t(secretStateKey(item.state))}</Badge></td>
               <td>
                 {#if item.expiresAt}
                   {when(item.expiresAt)}
@@ -242,6 +243,8 @@
   .table-wrap {
     overflow-x: auto;
     margin: var(--tt-space-4) 0;
+    border: var(--tt-border-width) solid var(--tt-separator);
+    border-radius: var(--tt-radius-lg);
   }
 
   .secrets {
@@ -249,10 +252,19 @@
     border-collapse: collapse;
   }
 
+  .secrets thead th {
+    background: var(--tt-surface-muted);
+    font-size: var(--tt-font-size-sm);
+  }
+
+  .secrets tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+
   .secrets th,
   .secrets td {
-    padding: var(--tt-space-2);
-    border-bottom: 1px solid var(--tt-border);
+    padding: var(--tt-space-3);
+    border-bottom: 1px solid var(--tt-separator);
     text-align: left;
     vertical-align: top;
   }

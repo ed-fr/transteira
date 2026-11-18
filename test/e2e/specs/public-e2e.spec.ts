@@ -21,7 +21,16 @@ import {
 } from '../support/data';
 import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures';
 import { waitForMail } from '../support/mailpit';
-import { download, fillTransfer, identify, mailLink } from '../support/publicflow';
+import {
+  addRecipients,
+  download,
+  fileItem,
+  fillTransfer,
+  identify,
+  mailLink,
+  openSecurity,
+  setOption,
+} from '../support/publicflow';
 import { escapeRegExp, re } from '../support/regexp';
 import { loadState, superAdminApi } from '../support/state';
 import { readStoredZip } from '../support/zip';
@@ -108,7 +117,7 @@ async function shownKey(page: Page): Promise<string> {
 
 /** Sends the filled form and waits for the last step of an end-to-end encrypted transfer. */
 async function sendAndWaitKey(page: Page, timeout = 90_000): Promise<string> {
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await page.getByRole('button', { name: /^Send(\s|$)/ }).click();
   await expect(page.getByRole('heading', { name: 'Transfer sent', level: 1 })).toBeVisible({ timeout });
   await expect(page.getByTestId('deposit-e2e-key-section')).toBeVisible();
   return shownKey(page);
@@ -131,9 +140,11 @@ async function smallEncryptedDeposit(
     ...(opts.message !== undefined ? { message: opts.message } : {}),
   };
   await fillTransfer(page, input);
-  await page.locator('#tt-deposit-e2e').check();
-  if (opts.maxDownloads !== undefined)
+  await setOption(page, 'Encrypt end to end in my browser', true);
+  if (opts.maxDownloads !== undefined) {
+    await setOption(page, 'Limit the number of downloads', true);
     await page.locator('#tt-deposit-max-downloads').fill(String(opts.maxDownloads));
+  }
   const key = await sendAndWaitKey(page);
   const mail = await waitForMail(recipient, {
     subject: new RegExp(`^${escapeRegExp(sender)} sent you files via`),
@@ -164,17 +175,18 @@ test.describe('public: end-to-end encryption', () => {
     await identify(page, tenant.origin, sender);
     await page.locator('input[webkitdirectory]').setInputFiles(tree.folder);
     // A 64 MiB file is passed by path (Playwright refuses buffers above 50 MB).
-    await page.getByRole('textbox', { name: /^Recipients/ }).fill(recipient);
+    await addRecipients(page, [recipient]);
     await page.getByLabel(/^Message/).fill(message);
     await page.getByLabel(/^Files to send/).setInputFiles(writeTemp(tree.root, big));
     await expect(page.getByRole('list', { name: 'Selected files' }).getByRole('listitem')).toHaveCount(2);
+    await openSecurity(page);
     const option = page.locator('#tt-deposit-e2e');
     await expect(option).toBeVisible();
     await expect(option).not.toBeChecked();
     await expect(page.getByLabel('Encrypt end to end in my browser')).toBeEnabled();
     await checkA11y(page);
-    await option.check();
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await setOption(page, 'Encrypt end to end in my browser', true);
+    await page.getByRole('button', { name: /^Send(\s|$)/ }).click();
     // The browser reads the files once before creating the transfer.
     // The step can be over within milliseconds: only its presence is asserted (the labelled bar is
     // covered by the unit tests of the component).
@@ -207,17 +219,17 @@ test.describe('public: end-to-end encryption', () => {
     watch.attach(rctx);
     const rpage = await rctx.newPage();
     await rpage.goto(`${link}#k=${key}`);
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     await expect(rpage.getByText(message)).toBeVisible();
     // The key is removed from the address bar once read; a reload asks for it again.
     expect(await rpage.evaluate(() => location.hash)).toBe('');
     await expect(
       rpage.getByText(/not analysed|could not be analysed|cannot analyse this file/).first(),
     ).toBeVisible();
-    const table = rpage.getByRole('table', { name: 'Files of this transfer' });
-    await expect(table.getByRole('row', { name: re('big-archive.bin') })).toBeVisible();
-    await expect(table.getByRole('row', { name: re('project/docs/inner.txt') })).toBeVisible();
-    await expect(table.getByText(big.sha256)).toBeVisible();
+    await expect(fileItem(rpage, 'big-archive.bin')).toBeVisible();
+    await expect(fileItem(rpage, 'project/docs/inner.txt')).toBeVisible();
+    // The page shows an abbreviation; the full fingerprint is visually hidden but present.
+    await expect(fileItem(rpage, 'big-archive.bin').getByText(big.sha256)).toBeAttached();
     await checkA11y(rpage);
 
     const one = await download(rpage, () => fileButton(rpage, 'big-archive.bin').click());
@@ -254,7 +266,7 @@ test.describe('public: end-to-end encryption', () => {
 
     const rpage = await (await newContext()).newPage();
     await rpage.goto(link);
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     const field = rpage.locator('#tt-e2e-key');
     await expect(field).toBeVisible();
     await expect(rpage.getByRole('textbox', { name: /^Decryption key/ })).toBeVisible();
@@ -273,15 +285,12 @@ test.describe('public: end-to-end encryption', () => {
     await field.fill(crypto.randomBytes(32).toString('base64url'));
     await rpage.locator('#tt-e2e-key-submit').click();
     await expect(rpage.getByText('This key does not open this transfer')).toBeVisible();
-    await expect(rpage.getByRole('table', { name: 'Files of this transfer' })).toHaveCount(0);
+    await expect(rpage.getByRole('list', { name: 'Files of this transfer' })).toHaveCount(0);
 
     // The complete link, pasted in the field, opens it.
     await field.fill(`${link}#k=${key}`);
     await rpage.locator('#tt-e2e-key-submit').click();
-    const row = rpage.getByRole('table', { name: 'Files of this transfer' }).getByRole('row', {
-      name: re(file.name),
-    });
-    await expect(row).toBeVisible();
+    await expect(fileItem(rpage, file.name)).toBeVisible();
     await expect(rpage.getByText('hidden message')).toBeVisible();
     const got = await download(rpage, () => fileButton(rpage, file.name).click());
     expect(sha256(got.data)).toBe(file.sha256);
@@ -314,9 +323,9 @@ test.describe('public: end-to-end encryption', () => {
       } else await route.continue();
     });
     await identify(page, tenant.origin, sender);
-    await page.getByRole('textbox', { name: /^Recipients/ }).fill(recipient);
+    await addRecipients(page, [recipient]);
     await page.getByLabel(/^Files to send/).setInputFiles(paths);
-    await page.locator('#tt-deposit-e2e').check();
+    await setOption(page, 'Encrypt end to end in my browser', true);
     const key1 = await sendAndWaitKey(page, 120_000);
     expect(aborted).toBe(1);
     await expectCleanStorage(page);
@@ -338,10 +347,10 @@ test.describe('public: end-to-end encryption', () => {
       return route.abort('connectionreset');
     });
     await page.getByRole('button', { name: 'New transfer' }).click();
-    await page.getByRole('textbox', { name: /^Recipients/ }).fill(recipient2);
+    await addRecipients(page, [recipient2]);
     await page.getByLabel(/^Files to send/).setInputFiles(paths);
-    await page.locator('#tt-deposit-e2e').check();
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await setOption(page, 'Encrypt end to end in my browser', true);
+    await page.getByRole('button', { name: /^Send(\s|$)/ }).click();
     await expect(page.getByText('Connection lost, trying again…')).toBeVisible({ timeout: 90_000 });
     expect(await page.evaluate(() => Object.keys(sessionStorage))).toContain('tt.upload');
     blocking = false;
@@ -407,9 +416,7 @@ test.describe('public: end-to-end encryption', () => {
     await expect(rpage.locator('#tt-e2e-key')).toBeVisible();
     await rpage.locator('#tt-e2e-key').fill(key);
     await rpage.locator('#tt-e2e-key-submit').click();
-    await expect(
-      rpage.getByRole('table', { name: 'Files of this transfer' }).getByRole('row', { name: re(file.name) }),
-    ).toBeVisible();
+    await expect(fileItem(rpage, file.name)).toBeVisible();
     const got = await download(rpage, () => fileButton(rpage, file.name).click());
     expect(sha256(got.data)).toBe(file.sha256);
   });

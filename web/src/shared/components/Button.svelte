@@ -136,4 +136,10 @@
   .tt-button[aria-busy='true'] {
     cursor: progress;
   }
+
+  /* Public pages (CLAUDE.md section 13.2): every button is a target of at least 44 px. */
+  :global(.tt-page--public) .tt-button--small,
+  :global(.tt-page--public) .tt-button--link {
+    min-height: var(--tt-control-height);
+  }
 </style>

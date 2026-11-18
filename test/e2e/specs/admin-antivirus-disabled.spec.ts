@@ -7,7 +7,7 @@ import { internalEmail, makeFile } from '../support/data';
 import { ORIGINS, STORAGE_SUPER } from '../support/env';
 import { checkA11y, expect, test } from '../support/fixtures';
 import { waitForMail } from '../support/mailpit';
-import { deposit, identify, mailLink } from '../support/publicflow';
+import { deposit, fileItem, identify, mailLink } from '../support/publicflow';
 import { superAdminApi } from '../support/state';
 
 test.describe('admin: antivirus of an entity', () => {
@@ -49,10 +49,7 @@ test.describe('admin: antivirus of an entity', () => {
       const notification = await waitForMail(recipient, { subject: /sent you files via/ });
       const rpage = await (await newContext()).newPage();
       await rpage.goto(mailLink(notification, '/d/', tenant.origin));
-      const table = rpage.getByRole('table', { name: 'Files of this transfer' });
-      await expect(table.getByRole('row', { name: /unscanned-report/ })).toContainText(
-        'antivirus analysis is disabled',
-      );
+      await expect(fileItem(rpage, /unscanned-report/)).toContainText('antivirus analysis is disabled');
       await checkA11y(rpage);
 
       // Enabling again needs no confirmation.

@@ -216,7 +216,7 @@ test.describe('public contextual help', () => {
     state,
   }) => {
     await page.goto(`${state.tenants.a.origin}${await downloadPage(state.apiTokenA, 'help-download')}`);
-    await expect(page.getByRole('heading', { name: msg('en', 'download.title'), level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^\d+ files? for you$/u, level: 1 })).toBeVisible();
     await footerHelp(page).click();
     await expectHelpSection(page, 'en', 'recipient', 'download', '');
     await expectGuideImagesLoaded(page, guideImages('en', 'recipient'));

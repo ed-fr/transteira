@@ -5,6 +5,11 @@
   //
   // logoUrl and backgroundUrl come from the API (PublicTenant.branding): they are checked here
   // with safeApiHref (src/shared/safe/href.ts); a missing or rejected URL omits the image.
+  //
+  // Variants (CLAUDE.md section 13.2): "default" (the administration, unchanged: .tt-card, wide
+  // for .tt-card--wide) and "public" (.tt-page--public: glass header actions, the public card
+  // .tt-pcard sized by cardSize: narrow, medium, split or wide; see styles/layout.css). Without a
+  // background image the page is .tt-page--plain, where the glass tokens map to the surface colours.
   import type { Snippet } from 'svelte';
   import { t } from '../i18n/i18n.svelte';
   import { safeApiHref } from '../safe/href';
@@ -17,8 +22,12 @@
     logoUrl?: string | null | undefined;
     /** Background image URL from the API; plain background when absent or rejected. */
     backgroundUrl?: string | null | undefined;
-    /** Wider card (administration tables, download page with many files). */
+    /** Wider card (variant "default" only: administration tables). */
     wide?: boolean;
+    /** Frame of the page: "default" (administration) or "public" (tenant pages, section 13.2). */
+    variant?: 'default' | 'public';
+    /** Width of the public card (variant "public" only); narrow by default. */
+    cardSize?: 'narrow' | 'medium' | 'split' | 'wide';
     /** Id of the main landmark, target of the skip link. */
     mainId?: string;
     /**
@@ -42,6 +51,8 @@
     logoUrl,
     backgroundUrl,
     wide = false,
+    variant = 'default',
+    cardSize = 'narrow',
     mainId = 'main',
     brand,
     header,
@@ -65,7 +76,7 @@
 </script>
 
 <a class="skip-link" href="#{mainId}" onclick={skipToMain}>{t('components.layout.skipLink')}</a>
-<div class="tt-page" class:tt-page--plain={!background}>
+<div class="tt-page" class:tt-page--plain={!background} class:tt-page--public={variant === 'public'}>
   {#if background}
     <img class="tt-page__background" src={background} alt="" aria-hidden="true" />
     <div class="tt-page__veil"></div>
@@ -86,9 +97,15 @@
     {#if banner}
       <div class="tt-page__banner">{@render banner()}</div>
     {/if}
-    <div class="tt-card" class:tt-card--wide={wide}>
-      {@render children()}
-    </div>
+    {#if variant === 'public'}
+      <div class="tt-pcard tt-pcard--{cardSize}">
+        {@render children()}
+      </div>
+    {:else}
+      <div class="tt-card" class:tt-card--wide={wide}>
+        {@render children()}
+      </div>
+    {/if}
   </main>
   {#if footer}{@render footer()}{/if}
 </div>

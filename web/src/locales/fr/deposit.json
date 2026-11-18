@@ -48,6 +48,18 @@
   },
   "form": {
     "title": "Nouveau transfert",
+    "subtitle": {
+      "limit": "Jusqu’à {max} par envoi",
+      "serverEncryption": "chiffrés sur le serveur",
+      "e2eEncryption": "chiffrés de bout en bout dans votre navigateur",
+      "antivirus": "analysés par l’antivirus"
+    },
+    "from": {
+      "label": "De",
+      "identified": "Identifié comme",
+      "change": "Changer",
+      "changeDetail": "d’adresse (termine la session)"
+    },
     "summary": {
       "one": "{count} champ demande votre attention :",
       "other": "{count} champs demandent votre attention :"
@@ -56,10 +68,9 @@
     "submitting": "Préparation du transfert…",
     "recipients": {
       "label": "Destinataires",
-      "hint": "Une ou plusieurs adresses électroniques, séparées par des virgules ou des retours à la ligne.",
+      "hint": "Appuyez sur Entrée ou tapez une virgule après chaque adresse. Vous pouvez aussi coller une liste.",
       "external": "Les fichiers seront envoyés à {invitedBy}, qui vous a invité.",
       "reply": "Votre réponse sera envoyée à {recipient}.",
-      "addressError": "{address} : {message}",
       "tooMany": "Saisissez au plus {max} destinataires.",
       "domainRefused": "Ce service n’autorise pas l’envoi vers le domaine de cette adresse.",
       "dropLink": "Les fichiers seront envoyés à : {label}.",
@@ -81,12 +92,13 @@
       }
     },
     "password": {
+      "switch": "Protéger par un mot de passe",
+      "switchHint": "Les destinataires en auront besoin pour télécharger les fichiers : transmettez-le par un autre canal (téléphone, SMS), jamais dans le même courriel.",
       "label": "Mot de passe",
-      "hint": "Facultatif. Les destinataires en auront besoin pour télécharger les fichiers : transmettez-le par un autre canal (téléphone, SMS), jamais dans le même courriel.",
       "show": "Afficher",
       "hide": "Masquer",
-      "requiredHint": "Exigé par le niveau de confidentialité choisi. Les destinataires en auront besoin pour télécharger les fichiers : transmettez-le par un autre canal (téléphone, SMS), jamais dans le même courriel.",
-      "requiredByLevel": "Le niveau de confidentialité choisi exige un mot de passe."
+      "requiredByLevel": "Le niveau de confidentialité choisi exige un mot de passe.",
+      "empty": "Saisissez un mot de passe, ou désactivez la protection."
     },
     "deleteAfterFirstDownload": {
       "label": "Supprimer le transfert après le premier téléchargement",
@@ -103,18 +115,34 @@
         "one": "{count} nom de fichier n’est pas accepté : renommez le fichier puis ajoutez-le de nouveau.",
         "other": "{count} noms de fichiers ne sont pas acceptés : renommez les fichiers puis ajoutez-les de nouveau."
       },
-      "total": "Total : {total} sur {max} autorisés."
+      "removed": "Fichier retiré : {name}."
     },
     "level": {
       "legend": "Niveau de confidentialité",
       "hint": "Le niveau fixe des règles pour ce transfert (durée, mot de passe, destinataires…).",
-      "none": "Aucun niveau de confidentialité n’est actuellement disponible pour vous : aucun transfert ne peut être envoyé. Contactez votre administrateur."
+      "none": "Aucun niveau de confidentialité n’est actuellement disponible pour vous : aucun transfert ne peut être envoyé. Contactez votre administrateur.",
+      "expiryChanged": {
+        "one": "La durée est maintenant de {count} jour.",
+        "other": "La durée est maintenant de {count} jours."
+      },
+      "securityChanged": {
+        "one": "{count} option de sécurité en vigueur.",
+        "other": "{count} options de sécurité en vigueur."
+      }
     },
     "maxDownloads": {
+      "switch": "Limiter le nombre de téléchargements",
+      "switchHint": "Une fois la limite atteinte, le transfert ne peut plus être téléchargé et il est supprimé.",
       "label": "Nombre maximal de téléchargements",
-      "hint": "Facultatif, de 1 à {max}. Une fois atteint, le transfert ne peut plus être téléchargé et il est supprimé.",
-      "invalid": "Saisissez un nombre entier entre 1 et {max}, ou laissez le champ vide.",
-      "exceeded": "Le niveau de confidentialité choisi autorise au plus {max} téléchargements."
+      "fieldHint": "De 1 à {max}.",
+      "capHint": "De 1 à {max}. Laissé vide, le maximum du niveau s’applique.",
+      "cappedByLevel": {
+        "one": "Le niveau de confidentialité choisi autorise au plus {count} téléchargement.",
+        "other": "Le niveau de confidentialité choisi autorise au plus {count} téléchargements."
+      },
+      "invalid": "Saisissez un nombre entier entre 1 et {max}.",
+      "exceeded": "Le niveau de confidentialité choisi autorise au plus {max} téléchargements.",
+      "empty": "Saisissez un nombre de téléchargements, ou désactivez la limite."
     },
     "rules": {
       "required": "Le niveau de confidentialité choisi exige ce champ.",
@@ -134,6 +162,14 @@
       "label": "Lien seul (aucun mail aux destinataires)",
       "hint": "Aucun mail n’est envoyé : le lien vous est affiché une seule fois à la fin de l’envoi et vous le transmettez vous-même.",
       "blockedByVerification": "Non disponible : le niveau de confidentialité choisi impose la vérification des destinataires."
+    },
+    "security": {
+      "title": "Options de sécurité",
+      "count": {
+        "one": "{count} active",
+        "other": "{count} actives"
+      },
+      "lockedByLevel": "Imposé par le niveau de confidentialité choisi."
     }
   },
   "upload": {
@@ -203,7 +239,7 @@
   "e2e": {
     "label": "Chiffrer de bout en bout dans mon navigateur",
     "hint": "Les fichiers, leurs noms et le message sont chiffrés dans votre navigateur avant l’envoi : le serveur ne peut pas les lire. Ils ne sont pas analysés par l’antivirus. À la fin, vous obtenez une clé de déchiffrement : transmettez-la aux destinataires par un autre canal (téléphone, SMS), jamais dans le même mail. Sans elle, les fichiers ne peuvent pas être ouverts.",
-    "requiredHint": "Imposé par votre organisation pour ce transfert. Les fichiers, leurs noms et le message sont chiffrés dans votre navigateur et ne sont pas analysés par l’antivirus. À la fin, vous obtenez une clé de déchiffrement à transmettre aux destinataires par un autre canal.",
+    "locked": "Imposé par votre organisation pour ce transfert.",
     "required": "Ce transfert doit être chiffré de bout en bout.",
     "forbidden": "Le chiffrement de bout en bout n’est pas autorisé pour ce transfert.",
     "unsupported": "Ce navigateur ne peut pas chiffrer les fichiers (une connexion sécurisée et un navigateur récent sont nécessaires). Utilisez un autre navigateur.",

@@ -46,7 +46,11 @@
       "too-deep": "folders nested too deeply (16 levels at most)",
       "path-too-long": "folder path too long",
       "too-many": "too many files in the transfer"
-    }
+    },
+    "heroTitle": "Drag and drop your files here",
+    "heroTitleFolders": "Drag and drop your files or folders here",
+    "chooseFiles": "Choose files",
+    "chooseFolder": "Choose a folder"
   },
   "fileList": {
     "label": "Selected files",
@@ -95,5 +99,38 @@
   },
   "help": {
     "label": "Help"
+  },
+  "volumeGauge": {
+    "label": "Volume of the transfer",
+    "summary": {
+      "one": "{count} file · {size}",
+      "other": "{count} files · {size}"
+    },
+    "percent": "{percent}% of the limit",
+    "value": "{size} of {limit}",
+    "over": "Over the limit of {limit}"
+  },
+  "hash": {
+    "label": "SHA-256",
+    "copy": "Copy the SHA-256 fingerprint of {name}"
+  },
+  "recipientInput": {
+    "list": "Recipients added",
+    "remove": "Remove {address}",
+    "invalid": "not accepted",
+    "issue": "{address}: {reason}",
+    "added": {
+      "one": "{count} recipient added: {addresses}.",
+      "other": "{count} recipients added: {addresses}."
+    },
+    "invalidAdded": {
+      "one": "{count} address is not valid: {addresses}.",
+      "other": "{count} addresses are not valid: {addresses}."
+    },
+    "duplicates": {
+      "one": "{count} address already in the list was ignored: {addresses}.",
+      "other": "{count} addresses already in the list were ignored: {addresses}."
+    },
+    "removed": "Recipient removed: {address}."
   }
 }

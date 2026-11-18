@@ -7,18 +7,19 @@ Quelqu’un vous a envoyé des fichiers avec TransTeira. Vous avez reçu un mail
 
 La page de téléchargement présente les fichiers que l’expéditeur a mis à votre disposition.
 
-Ouvrez le lien du mail, ou scannez le QR code avec l’appareil photo de votre téléphone. La page **Télécharger les fichiers** s’ouvre et affiche :
+Ouvrez le lien du mail, ou scannez le QR code avec l’appareil photo de votre téléphone. La page s’ouvre avec le titre **N fichiers pour vous** (par exemple **3 fichiers pour vous**) et affiche :
 
-- **Envoyé par** : l’adresse mail de la personne qui vous a envoyé les fichiers ;
-- **Disponible jusqu’au** : la date et l’heure après lesquelles les fichiers sont supprimés ;
-- **Total** : le nombre de fichiers et leur taille totale ;
-- **Message de l’expéditeur** : le message rédigé par l’expéditeur, s’il y en a un ;
-- **Confidentialité** : le niveau de confidentialité choisi par l’expéditeur, s’il y en a un ;
-- **Téléchargements restants** : quand l’expéditeur a limité le nombre de téléchargements, le nombre qui reste.
+- **Envoyé par** : l’adresse mail de la personne qui vous a envoyé les fichiers, à côté de son initiale ;
+- une rangée de pastilles d’information : l’expiration (par exemple **Expire dans 6 jours** ; survolez-la pour voir la date et l’heure exactes après lesquelles les fichiers sont supprimés), le **niveau de confidentialité** choisi par l’expéditeur, s’il y en a un, les **téléchargements restants** quand l’expéditeur a limité leur nombre, et la **taille totale** des fichiers ;
+- **Message de l’expéditeur** : le message rédigé par l’expéditeur, s’il y en a un, dans une bulle ;
+- un bandeau d’avertissement quand certains fichiers n’ont pas pu être analysés par l’antivirus (voir [Fichiers non analysés par l’antivirus](topic:download-not-scanned)) ;
+- le bouton **Télécharger tous les fichiers (ZIP)**, avec la taille approximative de l’archive ;
+- la liste des fichiers, une ligne par fichier : son type, son nom, un badge antivirus (**Analysé** ou **Non analysé**), sa taille, son empreinte SHA-256 abrégée avec un bouton **Copier**, et un bouton de téléchargement ;
+- en bas de la carte, les liens **Répondre avec des fichiers** (quand l’expéditeur l’autorise) et **Signaler un abus**.
 
-![La page de téléchargement : expéditeur, date d’expiration, total, message de l’expéditeur, bouton pour télécharger tous les fichiers en archive ZIP et liste des fichiers avec leur taille, leur empreinte SHA-256 et un bouton Télécharger](../screenshots/fr/download.png)
+![La page de téléchargement : le titre avec le nombre de fichiers, l’expéditeur, les pastilles d’information (expiration, niveau de confidentialité, taille totale), le message de l’expéditeur dans une bulle, le bouton pour télécharger tous les fichiers en archive ZIP, et une ligne par fichier avec son badge Analysé, sa taille, son empreinte SHA-256 abrégée avec un bouton Copier et un bouton de téléchargement ; en bas, les liens Répondre avec des fichiers et Signaler un abus](../screenshots/fr/download.png)
 
-La page est disponible en français et en anglais : utilisez le menu **Langue** en bas de la page pour en changer. Le lien **Aide**, également en bas de la page, ouvre ce guide.
+La page est disponible en français et en anglais : utilisez le menu **Langue** dans l’en-tête de la page pour en changer. Le bouton rond **Aide** (**?**) de l’en-tête, et le lien **Aide** du bas de page, ouvrent ce guide.
 
 ### Lien personnel et vérification de l’adresse
 
@@ -60,7 +61,7 @@ Une fois le transfert déverrouillé, les fichiers restent accessibles pendant e
 
 Vous pouvez télécharger les fichiers un par un, ou tous ensemble dans une seule archive.
 
-- Pour télécharger un fichier, cliquez sur **Télécharger** sur sa ligne.
+- Pour télécharger un fichier, cliquez sur le bouton de téléchargement à la fin de sa ligne (son nom est **Télécharger** suivi du nom du fichier).
 - Pour tout télécharger en une fois, cliquez sur **Télécharger tous les fichiers (ZIP)**.
 
 L’archive ZIP n’est pas compressée : sa taille est proche de la taille totale des fichiers. Elle est construite pendant le téléchargement, si bien que celui-ci commence immédiatement, même pour de très gros transferts. Une fois l’archive sur votre ordinateur, ouvrez-la ou extrayez-la comme d’habitude.
@@ -82,7 +83,7 @@ L’empreinte SHA-256 permet de vérifier que le fichier présent sur votre ordi
 
 Une empreinte est une longue suite de lettres et de chiffres calculée à partir du contenu d’un fichier. Deux fichiers identiques ont toujours la même empreinte ; si un seul octet diffère, l’empreinte est complètement différente.
 
-La liste des fichiers affiche chaque empreinte dans la colonne **Empreinte SHA-256**, avec un bouton **Copier** à côté. Les mêmes empreintes figurent aussi dans le mail que vous avez reçu.
+La liste des fichiers affiche chaque empreinte sur sa ligne, sous forme abrégée (les 8 premiers et les 8 derniers caractères, par exemple `9f2c1a2b…77bda41e`), avec un bouton **Copier** à côté. **Copier** copie l’empreinte **complète** ; les lecteurs d’écran la lisent en entier, et elle s’affiche aussi au survol de l’abréviation. Les mêmes empreintes figurent aussi dans le mail que vous avez reçu.
 
 Pour vérifier un fichier, calculez son empreinte sur votre ordinateur, puis comparez-la avec celle de la page ou du mail :
 
@@ -104,7 +105,7 @@ Si les empreintes diffèrent, le fichier a été abîmé pendant le télécharge
 
 Chaque fichier est analysé par un antivirus avant d’être mis à disposition. Un fichier dans lequel une menace est détectée est supprimé et ne vous parvient jamais.
 
-Certains fichiers ne peuvent toutefois pas être analysés. Dans ce cas, la page affiche l’avertissement **Certains fichiers n’ont pas pu être analysés par l’antivirus. Ne les ouvrez que si vous faites confiance à l’expéditeur.**, et le fichier concerné porte l’une de ces mentions :
+Certains fichiers ne peuvent toutefois pas être analysés. Dans ce cas, la page affiche un bandeau d’avertissement **N fichiers n’ont pas pu être analysés par l’antivirus** (**Ne les ouvrez que si vous faites confiance à l’expéditeur.**), et chaque fichier concerné porte un badge **Non analysé** (celui des autres fichiers indique **Analysé**) avec l’une de ces mentions, énoncées en entier pour les lecteurs d’écran :
 
 - **Non analysé par l’antivirus : ce fichier est trop volumineux pour être analysé.** Le fichier dépasse la taille que l’antivirus peut contrôler.
 - **Non analysé par l’antivirus : ce fichier est chiffré ou protégé par un mot de passe.** L’antivirus ne peut pas examiner le contenu d’un fichier ou d’une archive chiffrés.
@@ -165,7 +166,7 @@ Votre adresse n’est enregistrée avec le signalement que si vous avez validé 
 
 Si l’organisation de l’expéditeur l’a autorisé, vous pouvez lui renvoyer des fichiers directement depuis la page de téléchargement, sans invitation ni compte.
 
-Le bouton **Répondre** n’apparaît que si toutes ces conditions sont réunies :
+Le lien **Répondre avec des fichiers** n’apparaît que si toutes ces conditions sont réunies :
 
 - l’organisation a activé la réponse aux transferts ;
 - vous avez ouvert votre **lien personnel** (voir ci-dessus) ; les anciens liens partagés ne permettent pas de répondre ;
@@ -173,7 +174,7 @@ Le bouton **Répondre** n’apparaît que si toutes ces conditions sont réunies
 
 Pour répondre :
 
-1. Cliquez sur **Répondre**.
+1. Cliquez sur **Répondre avec des fichiers**.
 1. Confirmez votre adresse avec un code à 6 chiffres reçu par mail, comme décrit dans [Lien personnel et vérification de l’adresse](topic:download). Ce code est **toujours demandé** pour répondre, même si l’expéditeur n’avait pas demandé de vérification pour télécharger. Il est valable 15 minutes, avec 2 essais.
 1. Le formulaire d’envoi s’ouvre. Le seul destinataire est l’expéditeur d’origine : il est affiché (« Votre réponse sera envoyée à » suivi de son adresse) et ne peut pas être modifié.
 1. Choisissez la durée de disponibilité parmi celles proposées, ajoutez un message et les fichiers, puis envoyez, comme décrit dans [Envoyer des fichiers](topic:deposit).
@@ -184,7 +185,7 @@ L’expéditeur reçoit votre réponse par mail, avec un avertissement lui indiq
 
 Répondre depuis un navigateur met fin à tout envoi de fichiers déjà ouvert dans ce même navigateur : terminez d’abord vos autres envois.
 
-> **Note** Si le bouton **Répondre** n’apparaît pas, ou si un refus s’affiche, écrivez simplement à l’expéditeur par mail.
+> **Note** Si le lien **Répondre avec des fichiers** n’apparaît pas, ou si un refus s’affiche, écrivez simplement à l’expéditeur par mail.
 
 <!-- topic: secret-read -->
 ## Lire un secret
@@ -225,7 +226,7 @@ Si la page indique **Secret temporairement indisponible**, l’organisation a fe
 
 ## Thème sombre
 
-La page de téléchargement suit le réglage clair ou sombre de votre appareil. Le bouton **Thème sombre** du bas de page change le thème ; votre choix est mémorisé pendant un an par un cookie strictement technique (`tt_theme`), posé uniquement si vous choisissez un thème différent de celui de votre appareil. Rechoisir le thème de votre appareil supprime le cookie.
+La page de téléchargement suit le réglage clair ou sombre de votre appareil. Le bouton **Thème sombre** de l’en-tête (une icône de lune) change le thème ; votre choix est mémorisé pendant un an par un cookie strictement technique (`tt_theme`), posé uniquement si vous choisissez un thème différent de celui de votre appareil. Rechoisir le thème de votre appareil supprime le cookie.
 
 <!-- topic: download-problems -->
 ## Le lien ne fonctionne pas
@@ -237,4 +238,4 @@ Cette section explique les messages que vous pouvez voir à la place des fichier
 - **Nombre maximal de téléchargements atteint** : l’expéditeur avait autorisé un nombre limité de téléchargements et il est épuisé, par vous ou par les autres destinataires. Demandez à l’expéditeur de renvoyer les fichiers.
 - La page affiche **Maintenance en cours** : seuls les nouveaux transferts sont suspendus. Les téléchargements restent disponibles, vous pouvez donc continuer normalement.
 
-Pour répondre à l’expéditeur, utilisez le bouton **Répondre** s’il est proposé ; sinon, répondez-lui par mail.
+Pour répondre à l’expéditeur, utilisez **Répondre avec des fichiers** s’il est proposé ; sinon, répondez-lui par mail.

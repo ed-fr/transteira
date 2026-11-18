@@ -54,3 +54,22 @@ export function secretDeleteFailure(err: unknown): SecretDeleteFailure {
 export function secretListSilent(err: unknown): boolean {
   return err instanceof ApiProblem && (err.status === 404 || err.code === 'secrets-disabled');
 }
+
+/** Badge colour family of a secret state (the text always carries the meaning). */
+export function secretStateVariant(state: string): 'success' | 'info' | 'warning' | 'danger' | 'neutral' {
+  switch (state) {
+    case 'active':
+      return 'success';
+    case 'pending':
+      return 'info';
+    case 'read':
+      return 'neutral';
+    case 'locked':
+      return 'danger';
+    case 'expired':
+    case 'deleted':
+      return 'warning';
+    default:
+      return 'neutral';
+  }
+}

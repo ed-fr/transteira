@@ -46,7 +46,11 @@
       "too-deep": "dossiers imbriqués trop profondément (16 niveaux au plus)",
       "path-too-long": "chemin de dossier trop long",
       "too-many": "trop de fichiers dans le transfert"
-    }
+    },
+    "heroTitle": "Glissez-déposez vos fichiers ici",
+    "heroTitleFolders": "Glissez-déposez vos fichiers ou dossiers ici",
+    "chooseFiles": "Choisir des fichiers",
+    "chooseFolder": "Choisir un dossier"
   },
   "fileList": {
     "label": "Fichiers sélectionnés",
@@ -95,5 +99,38 @@
   },
   "help": {
     "label": "Aide"
+  },
+  "volumeGauge": {
+    "label": "Volume de l’envoi",
+    "summary": {
+      "one": "{count} fichier · {size}",
+      "other": "{count} fichiers · {size}"
+    },
+    "percent": "{percent} % de la limite",
+    "value": "{size} sur {limit}",
+    "over": "Limite de {limit} dépassée"
+  },
+  "hash": {
+    "label": "SHA-256",
+    "copy": "Copier l’empreinte SHA-256 de {name}"
+  },
+  "recipientInput": {
+    "list": "Destinataires ajoutés",
+    "remove": "Retirer {address}",
+    "invalid": "refusée",
+    "issue": "{address} : {reason}",
+    "added": {
+      "one": "{count} destinataire ajouté : {addresses}.",
+      "other": "{count} destinataires ajoutés : {addresses}."
+    },
+    "invalidAdded": {
+      "one": "{count} adresse n’est pas valide : {addresses}.",
+      "other": "{count} adresses ne sont pas valides : {addresses}."
+    },
+    "duplicates": {
+      "one": "{count} adresse déjà présente a été ignorée : {addresses}.",
+      "other": "{count} adresses déjà présentes ont été ignorées : {addresses}."
+    },
+    "removed": "Destinataire retiré : {address}."
   }
 }

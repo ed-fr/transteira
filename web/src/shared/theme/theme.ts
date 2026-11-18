@@ -3,10 +3,15 @@
 // not govern, and only after strict #RRGGBB validation: an invalid colour keeps the default.
 // They go to intermediate --tt-brand-* properties, which each palette of tokens.css (light and
 // dark) maps to its tokens with its own accessible defaults: the link and focus colours exist
-// once per theme, since a primary readable on white may not be on the dark background.
+// once per theme, since a primary readable on white may not be on the dark background. The focus
+// and graphic colour of a theme must reach 3:1 on its surface and on its muted surface (focus
+// rings and switches also sit on --tt-surface-muted); this stricter internal rule does not change
+// the contrast pairs reported by the API (internal/branding).
 import {
   DARK_BACKGROUND,
+  DARK_MUTED_BACKGROUND,
   LIGHT_BACKGROUND,
+  LIGHT_MUTED_BACKGROUND,
   MIN_RATIO_AA,
   MIN_RATIO_NON_TEXT,
   TEXT_ON_PRIMARY,
@@ -61,10 +66,24 @@ export function textColorOn(background: Readonly<Rgb>): Readonly<Rgb> {
 }
 
 /**
+ * Reports whether a colour may serve as focus indicator and graphic colour in a theme: at least
+ * 3:1 (WCAG 1.4.11) on both the surface and the muted surface of that theme.
+ */
+export function reachesNonTextContrast(
+  color: Readonly<Rgb>,
+  surface: Readonly<Rgb>,
+  muted: Readonly<Rgb>,
+): boolean {
+  return (
+    contrastRatio(color, surface) >= MIN_RATIO_NON_TEXT && contrastRatio(color, muted) >= MIN_RATIO_NON_TEXT
+  );
+}
+
+/**
  * Computes the theme of a tenant. Invalid colours yield null (default kept). In each theme, the
  * primary colour is also used for links when it reaches AA on the background of that theme, and
- * for the focus indicator when it reaches 3:1 (WCAG 1.4.11); otherwise the accessible defaults
- * of the theme stay.
+ * for the focus indicator and the graphics when it reaches 3:1 (WCAG 1.4.11) on the background
+ * and on the muted background of that theme; otherwise the accessible defaults of the theme stay.
  */
 export function computeTenantTheme(colors: TenantColors): TenantTheme {
   const primary = parseHexColor(colors.primaryColor);
@@ -86,8 +105,16 @@ export function computeTenantTheme(colors: TenantColors): TenantTheme {
     theme['--tt-brand-on-primary'] = toHex(textColorOn(primary));
     theme['--tt-brand-link-light'] = light >= MIN_RATIO_AA ? hex : null;
     theme['--tt-brand-link-dark'] = dark >= MIN_RATIO_AA ? hex : null;
-    theme['--tt-brand-focus-light'] = light >= MIN_RATIO_NON_TEXT ? hex : null;
-    theme['--tt-brand-focus-dark'] = dark >= MIN_RATIO_NON_TEXT ? hex : null;
+    theme['--tt-brand-focus-light'] = reachesNonTextContrast(
+      primary,
+      LIGHT_BACKGROUND,
+      LIGHT_MUTED_BACKGROUND,
+    )
+      ? hex
+      : null;
+    theme['--tt-brand-focus-dark'] = reachesNonTextContrast(primary, DARK_BACKGROUND, DARK_MUTED_BACKGROUND)
+      ? hex
+      : null;
   }
   if (accent !== null) {
     theme['--tt-brand-accent'] = toHex(accent);

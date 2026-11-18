@@ -4,6 +4,7 @@
 import type { ProblemFieldError } from '../../shared/api/client';
 import { normalizeField } from '../../shared/api/problem';
 import type { components } from '../../shared/api/schema';
+import { parseRecipients } from '../../shared/components/recipients';
 import { EMAIL_MAX_LENGTH, isEmail } from '../../shared/validation/email';
 
 export { EMAIL_MAX_LENGTH, isEmail };
@@ -33,31 +34,9 @@ export interface Message {
   params?: Record<string, string | number>;
 }
 
-/**
- * Splits the recipients field into addresses: separated by commas, semicolons or line breaks,
- * trimmed, "Name <address>" reduced to the address, empty entries dropped, duplicates
- * (case-insensitive) removed while keeping the first spelling and the order.
- */
-export function parseRecipients(text: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const part of text.split(/[,;\r\n]+/)) {
-    let address = part.trim();
-    const bracket = /<([^<>]*)>/.exec(address);
-    if (bracket !== null) {
-      address = (bracket[1] ?? '').trim();
-    }
-    if (address === '') {
-      continue;
-    }
-    const folded = address.toLowerCase();
-    if (!seen.has(folded)) {
-      seen.add(folded);
-      out.push(address);
-    }
-  }
-  return out;
-}
+// The recipients field is split by the shared logic of the recipient input (comma, semicolon or
+// line break; "Name <address>" reduced to the address; case-insensitive duplicates removed).
+export { parseRecipients };
 
 // C0 and C1 controls, and the bidirectional formatting characters the server rejects.
 const FORBIDDEN_NAME_CHARS = new RegExp(
@@ -206,21 +185,15 @@ export function mapServerErrors(errors: readonly ProblemFieldError[] | undefined
   return out;
 }
 
-/** One error of a recipient address, for display. */
-export interface RecipientIssue {
-  address: string;
-  message: Message;
-}
-
-/** Errors of individual recipients ("recipients.<n>"), with the address they concern. */
-export function recipientIssues(errors: FormErrors, recipients: readonly string[]): RecipientIssue[] {
-  const out: RecipientIssue[] = [];
-  recipients.forEach((address, i) => {
+/** Errors of individual recipients ("recipients.<n>"), by index in the list of count addresses. */
+export function recipientIssueMap(errors: FormErrors, count: number): Map<number, Message> {
+  const out = new Map<number, Message>();
+  for (let i = 0; i < count; i++) {
     const message = errors[`recipients.${i}`];
     if (message !== undefined) {
-      out.push({ address, message });
+      out.set(i, message);
     }
-  });
+  }
   return out;
 }
 
@@ -379,18 +352,40 @@ export function keepMaxDownloads(
 }
 
 /**
+ * Cap of the maximum number of downloads set by the level, undefined when the level sets none
+ * (an empty field then means "no limit"; under a cap it means the cap, applied by the server).
+ */
+export function levelDownloadsCap(rules: LevelRules | undefined): number | undefined {
+  const cap = rules?.maxDownloads;
+  return cap === null || cap === undefined ? undefined : maxDownloadsCap(rules);
+}
+
+/** State of the security switches of the form, for validatePolicy. */
+export interface PolicyOptions {
+  /** The password switch is on: an empty password is refused. */
+  passwordOn?: boolean | undefined;
+  /** The download limit switch is on: an empty field is refused, unless the level caps downloads. */
+  maxDownloadsOn?: boolean | undefined;
+}
+
+/**
  * Errors of the fields tied to the chosen level and to the download limit: password required by
- * the level, maximum number of downloads (only when the option is offered).
+ * the level, maximum number of downloads (only when the option is offered). With opts, a switch
+ * turned on with its field left empty is refused too (except under a level cap, where an empty
+ * field means the cap).
  */
 export function validatePolicy(
   password: string,
   maxDownloadsText: string,
   rules: LevelRules | undefined,
   maxDownloadsOffered: boolean,
+  opts: PolicyOptions = {},
 ): FormErrors {
   const errors: FormErrors = {};
   if (rules?.requirePassword === true && password === '') {
     errors['password'] = { key: 'deposit.form.password.requiredByLevel' };
+  } else if (opts.passwordOn === true && password === '') {
+    errors['password'] = { key: 'deposit.form.password.empty' };
   }
   if (maxDownloadsOffered) {
     const parsed = parseMaxDownloads(maxDownloadsText, maxDownloadsCap(rules));
@@ -399,9 +394,33 @@ export function validatePolicy(
         parsed.code === 'max-exceeded'
           ? { key: 'deposit.form.maxDownloads.exceeded', params: { max: maxDownloadsCap(rules) } }
           : { key: 'deposit.form.maxDownloads.invalid', params: { max: maxDownloadsCap(rules) } };
+    } else if (
+      opts.maxDownloadsOn === true &&
+      parsed.value === undefined &&
+      levelDownloadsCap(rules) === undefined
+    ) {
+      errors['maxDownloads'] = { key: 'deposit.form.maxDownloads.empty' };
     }
   }
   return errors;
+}
+
+/** Fields of the "Security options" block of the form (opened when one of them is in error). */
+export const SECURITY_FIELDS: readonly FormField[] = [
+  'password',
+  'maxDownloads',
+  'recipientVerification',
+  'endToEnd',
+];
+
+/** The field belongs to the "Security options" block. */
+export function isSecurityField(field: FormField): boolean {
+  return SECURITY_FIELDS.includes(field);
+}
+
+/** One of the fields of the "Security options" block has an error. */
+export function hasSecurityError(errors: FormErrors): boolean {
+  return invalidFields(errors).some(isSecurityField);
 }
 
 /**

@@ -9,7 +9,8 @@ export interface CountdownClock {
   clearInterval(handle: unknown): void;
 }
 
-const browserClock: CountdownClock = {
+/** The clock and timers of the browser. */
+export const browserClock: CountdownClock = {
   now: () => Date.now(),
   setInterval: (fn, ms) => setInterval(fn, ms),
   clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),

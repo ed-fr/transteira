@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ApiProblem, NetworkError, type Problem } from '../../shared/api/client';
+import { lookup, type Messages } from '../../shared/i18n/messages';
 import {
   canReply,
   downloadView,
+  expiryView,
   inviteFailure,
   isNetworkFailure,
   isNoSession,
@@ -11,12 +13,16 @@ import {
   looksLikeEmail,
   needsVerification,
   normalizeCode,
+  notScannedCount,
   replyFailure,
+  scanBadge,
+  senderInitial,
   unlockFailure,
   verificationConfirmFailure,
   verificationStartFailure,
   type PublicFile,
   type PublicTransfer,
+  type ScanStatus,
   RECHECK_INTERVAL_MS,
   shouldRecheck,
 } from './outcomes';
@@ -189,6 +195,7 @@ describe('downloadView', () => {
     expect(view.archiveHref).toBe('/api/v1/downloads/dl_x/archive');
     expect(view.totalBytes).toBe(200);
     expect(view.hasUnscanned).toBe(false);
+    expect(view.notScanned).toBe(0);
     expect(view.deleteAfterFirstDownload).toBe(false);
   });
 
@@ -203,6 +210,7 @@ describe('downloadView', () => {
     expect(view.archiveHref).toBeUndefined();
     expect(view.totalBytes).toBe(15);
     expect(view.hasUnscanned).toBe(true);
+    expect(view.notScanned).toBe(1);
     expect(view.deleteAfterFirstDownload).toBe(true);
   });
 
@@ -210,6 +218,11 @@ describe('downloadView', () => {
     const view = downloadView(transfer({ files: [file({ scanStatus: 'not_scanned_e2e' })] }));
     expect(view.hasUnscanned).toBe(true);
     expect(view.archiveHref).toBeUndefined();
+  });
+
+  it('keeps the folder of a file', () => {
+    const view = downloadView(transfer({ files: [file({ path: 'project/docs' }), file({ id: 'fil_2' })] }));
+    expect(view.files.map((f) => f.path)).toEqual(['project/docs', undefined]);
   });
 
   it('has no archive link without files', () => {
@@ -227,6 +240,119 @@ describe('isNotScanned', () => {
     expect(isNotScanned('not_scanned_encrypted')).toBe(true);
     expect(isNotScanned('not_scanned_e2e')).toBe(true);
     expect(isNotScanned('clean')).toBe(false);
+  });
+});
+
+describe('notScannedCount', () => {
+  it('counts the files delivered without analysis', () => {
+    expect(notScannedCount([])).toBe(0);
+    expect(
+      notScannedCount([
+        { scanStatus: 'clean' },
+        { scanStatus: 'not_scanned_too_large' },
+        { scanStatus: 'not_scanned_e2e' },
+        { scanStatus: 'infected' },
+      ]),
+    ).toBe(2);
+  });
+});
+
+describe('scanBadge', () => {
+  it('marks a clean file as scanned, without detail', () => {
+    expect(scanBadge('clean')).toEqual({
+      variant: 'success',
+      label: 'download.scan.badge.clean',
+      detail: undefined,
+    });
+  });
+
+  it('gives the reason of every file delivered without analysis, with its explanation', () => {
+    expect(scanBadge('not_scanned_too_large')).toEqual({
+      variant: 'warning',
+      label: 'download.scan.badge.tooLarge',
+      detail: 'download.scan.notScannedTooLarge',
+    });
+    expect(scanBadge('not_scanned_encrypted')).toEqual({
+      variant: 'warning',
+      label: 'download.scan.badge.encrypted',
+      detail: 'download.scan.notScannedEncrypted',
+    });
+    expect(scanBadge('not_scanned_disabled')).toEqual({
+      variant: 'warning',
+      label: 'download.scan.badge.disabled',
+      detail: 'download.scan.notScannedDisabled',
+    });
+    expect(scanBadge('not_scanned_e2e')).toEqual({
+      variant: 'warning',
+      label: 'download.scan.badge.e2e',
+      detail: 'download.e2e.notScanned',
+    });
+  });
+
+  it('uses keys translated in every language', () => {
+    const bundles = import.meta.glob<Messages>('../../locales/*/download.json', {
+      eager: true,
+      import: 'default',
+    });
+    const statuses: ScanStatus[] = [
+      'clean',
+      'not_scanned_too_large',
+      'not_scanned_encrypted',
+      'not_scanned_disabled',
+      'not_scanned_e2e',
+    ];
+    expect(Object.keys(bundles)).toHaveLength(2);
+    for (const [path, bundle] of Object.entries(bundles)) {
+      for (const status of statuses) {
+        const badge = scanBadge(status);
+        for (const key of [badge?.label, badge?.detail].filter((k) => k !== undefined)) {
+          expect(typeof lookup({ download: bundle }, key), `${path}: ${key}`).toBe('string');
+        }
+      }
+    }
+  });
+
+  it('has no badge for the statuses a download link never lists', () => {
+    for (const status of ['pending', 'scanning', 'infected', 'scan_error'] as const) {
+      expect(scanBadge(status)).toBeUndefined();
+    }
+  });
+});
+
+describe('senderInitial', () => {
+  it('takes the first letter or digit, uppercase', () => {
+    expect(senderInitial('bob@entity-a.example.com')).toBe('B');
+    expect(senderInitial('_x.y@example.com')).toBe('X');
+    expect(senderInitial('+42@example.com')).toBe('4');
+    expect(senderInitial('élodie@example.fr')).toBe('É');
+  });
+
+  it('is empty without a letter or digit', () => {
+    expect(senderInitial('')).toBe('');
+    expect(senderInitial('+-_@.')).toBe('');
+  });
+});
+
+describe('expiryView', () => {
+  const now = Date.parse('2026-11-18T10:00:00Z');
+
+  it('gives the date, its ISO value and the date to express relative to now', () => {
+    const view = expiryView('2026-11-24T10:00:00+00:00', now);
+    expect(view?.datetime).toBe('2026-11-24T10:00:00.000Z');
+    expect(view?.date.getTime()).toBe(Date.parse('2026-11-24T10:00:00Z'));
+    expect(view?.relative.getTime()).toBe(Date.parse('2026-11-24T10:00:00Z'));
+  });
+
+  it('expresses a passed expiry as now', () => {
+    const view = expiryView('2026-11-18T09:00:00Z', now);
+    expect(view?.date.getTime()).toBe(Date.parse('2026-11-18T09:00:00Z'));
+    expect(view?.relative.getTime()).toBe(now);
+    expect(expiryView('2026-11-18T10:00:00Z', now)?.relative.getTime()).toBe(now);
+  });
+
+  it('is undefined for an invalid date or clock', () => {
+    expect(expiryView('not a date', now)).toBeUndefined();
+    expect(expiryView('2026-11-24T10:00:00Z', Number.NaN)).toBeUndefined();
   });
 });
 

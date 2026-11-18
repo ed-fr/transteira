@@ -5,8 +5,8 @@
 import { externalEmail, internalEmail, makeFile, sha256, textFile } from '../support/data';
 import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures';
 import { listMails, waitForMail } from '../support/mailpit';
-import { deposit, download, identify, mailLink } from '../support/publicflow';
-import { escapeRegExp, re } from '../support/regexp';
+import { deposit, download, expectDownloadPage, fileItem, identify, mailLink } from '../support/publicflow';
+import { escapeRegExp } from '../support/regexp';
 import { readStoredZip } from '../support/zip';
 
 test.describe('public: deposit then download', () => {
@@ -61,14 +61,14 @@ test.describe('public: deposit then download', () => {
     const rctx = await newContext();
     const rpage = await rctx.newPage();
     await rpage.goto(link);
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     await expect(rpage.getByText(sender, { exact: true })).toBeVisible();
     await expect(rpage.getByText('Here are the files we discussed.')).toBeVisible();
-    await expect(rpage.getByText('3 files,')).toBeVisible();
-    const table = rpage.getByRole('table', { name: 'Files of this transfer' });
+    await expectDownloadPage(rpage, 3);
+    await expect(rpage.getByText(/^[\d.,\s]+\S* in total$/)).toBeVisible();
     for (const f of files) {
-      const row = table.getByRole('row', { name: re(f.name) });
-      await expect(row.getByText(f.sha256)).toBeVisible();
+      // The page shows an abbreviation; the full fingerprint is visually hidden but present.
+      await expect(fileItem(rpage, f.name).getByText(f.sha256)).toBeAttached();
     }
     // Every file was analysed: no "not analysed" warning.
     await expect(rpage.getByText(/could not be analysed by the antivirus/)).toHaveCount(0);

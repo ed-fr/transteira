@@ -4,6 +4,10 @@
   // button opening a dialog with the category (radio list) and an optional message (at most 1000
   // characters, counter). Works on the password and verification pages, without unlocking. The
   // report of a secret carries neither its key nor its text (abuseReport.ts).
+  // Since 2.3 the trigger has two looks (variant): the default secondary button in its own
+  // paragraph (secret pages), or an inline button styled as a text link in --tt-text, underlined,
+  // at least 44 px high, for the bottom strip of the download page (on --tt-surface-muted, where
+  // links never take the tenant colour). Both are real buttons named "Report an abuse".
   import { api } from '../../shared/api/api';
   import { Alert, Button, Dialog, RadioGroup, TextArea, announce } from '../../shared/components';
   import { t } from '../../shared/i18n/i18n.svelte';
@@ -27,9 +31,11 @@
     target?: ReportTarget;
     /** Id of the button opening the dialog. */
     id?: string;
+    /** Look of the trigger: a secondary button (default) or an inline text link. */
+    variant?: 'button' | 'link';
   }
 
-  let { token, target = 'transfer', id }: Props = $props();
+  let { token, target = 'transfer', id, variant = 'button' }: Props = $props();
 
   let open = $state(false);
   let category = $state<AbuseCategory | undefined>();
@@ -79,9 +85,15 @@
   }
 </script>
 
-<p class="tt-report">
-  <Button {id} variant="secondary" small onclick={show}>{t('download.report.button')}</Button>
-</p>
+{#if variant === 'link'}
+  <span class="tt-report-inline">
+    <Button {id} variant="link" class="tt-report__link" onclick={show}>{t('download.report.button')}</Button>
+  </span>
+{:else}
+  <p class="tt-report">
+    <Button {id} variant="secondary" small onclick={show}>{t('download.report.button')}</Button>
+  </p>
+{/if}
 
 <Dialog bind:open title={t('download.report.title')} hideCloseButton={sending}>
   {#if done}
@@ -135,5 +147,10 @@
 <style>
   .tt-report {
     margin-top: var(--tt-space-6);
+  }
+
+  /* Text link look on a muted surface: --tt-text, underlined (never the tenant link colour). */
+  .tt-report-inline :global(.tt-report__link) {
+    color: var(--tt-text);
   }
 </style>

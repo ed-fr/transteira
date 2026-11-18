@@ -14,6 +14,7 @@ import { languageValues } from '../api/schema';
 import {
   formatBytesIn,
   formatDateIn,
+  formatRelativeIn,
   groupLoaders,
   interpolate,
   isPluralGroup,
@@ -27,6 +28,7 @@ import {
 export {
   formatBytesIn,
   formatDateIn,
+  formatRelativeIn,
   groupLoaders,
   interpolate,
   isPluralGroup,
@@ -71,6 +73,11 @@ export interface I18n {
   formatBytes(n: number): string;
   /** Formats a date (Date, ISO string or epoch milliseconds) for the active language. */
   formatDate(d: Date | string | number, options?: Intl.DateTimeFormatOptions): string;
+  /**
+   * Formats a date relative to now (or to the given now) for the active language: "in 6 days",
+   * "tomorrow", "in 3 hours" (see formatRelativeIn).
+   */
+  formatRelative(d: Date | string | number, now?: Date | string | number): string;
   /** Formats a number for the active language. */
   formatNumber(n: number, options?: Intl.NumberFormatOptions): string;
 }
@@ -142,6 +149,9 @@ export function createI18n(options: I18nOptions): I18n {
     formatDate(d, opts) {
       return formatDateIn(tag(), d, opts);
     },
+    formatRelative(d, now) {
+      return formatRelativeIn(tag(), d, now);
+    },
     formatNumber(n, opts) {
       return new Intl.NumberFormat(tag(), opts).format(n);
     },
@@ -178,6 +188,14 @@ export function formatBytes(n: number): string {
 /** Formats a date for the current language. */
 export function formatDate(d: Date | string | number, options?: Intl.DateTimeFormatOptions): string {
   return i18n.formatDate(d, options);
+}
+
+/**
+ * Formats a date relative to now for the current language ("in 6 days", "tomorrow"); now is
+ * injectable (tests, a shared clock).
+ */
+export function formatRelative(d: Date | string | number, now?: Date | string | number): string {
+  return i18n.formatRelative(d, now);
 }
 
 /** Formats a number for the current language. */

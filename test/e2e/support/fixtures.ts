@@ -302,3 +302,81 @@ export async function expectCleanStorage(page: Page, opts: { allowSession?: stri
     'unexpected sessionStorage keys',
   ).toEqual([]);
 }
+
+/**
+ * Checks the size of the click targets of the page (RGAA / WCAG 2.5.8, 44 px on the public
+ * pages): every visible button, link outside running text, select, input, [role=tab] and
+ * [role=switch] must measure at least min px in both directions, and fails listing the
+ * offenders. Rules:
+ *  - a visually hidden input (a native control laid under its label, or the file input) and a
+ *    small checkbox or radio are measured through its associated <label> (or the closest label-like wrapper) instead;
+ *  - a link inside a sentence (a paragraph or list item with other text) is exempt (WCAG
+ *    "inline" exception), as is the skip link (shown on focus only) and a control that is
+ *    itself 1 px wide because it is clipped (visually hidden text);
+ *  - hidden controls (display none, visibility hidden, aria-hidden subtree) are ignored.
+ */
+export async function checkTargetSize(page: Page, min = 44): Promise<void> {
+  const offenders = await page.evaluate((limit) => {
+    const sel = 'button, a[href], select, input, [role="tab"], [role="switch"]';
+    const out: string[] = [];
+    const visible = (el: Element): boolean => {
+      // Not rendered (display none on the element or an ancestor, closed dialog) or hidden.
+      if (!el.checkVisibility({ visibilityProperty: true })) return false;
+      return !el.closest('[hidden], [aria-hidden="true"], [inert]');
+    };
+    const describe = (el: Element): string => {
+      const label =
+        el.getAttribute('aria-label') ?? (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+      const id = el.id ? `#${el.id}` : '';
+      return `${el.tagName.toLowerCase()}${id} "${label}"`;
+    };
+    const isVisuallyHidden = (r: DOMRect): boolean => r.width <= 2 || r.height <= 2;
+    const labelOf = (el: Element): Element | null => {
+      // The largest visible label wins (a visually hidden label may also name the control).
+      const labels = Array.from((el as HTMLInputElement).labels ?? []);
+      labels.sort((a, b) => {
+        const ra = a.getBoundingClientRect();
+        const rb = b.getBoundingClientRect();
+        return rb.width * rb.height - ra.width * ra.height;
+      });
+      return labels[0] ?? el.closest('label');
+    };
+    const inline = (el: Element): boolean => {
+      if (el.tagName !== 'A') return false;
+      const parent = el.parentElement;
+      if (!parent) return false;
+      const own = Array.from(parent.childNodes)
+        .filter((n) => n !== el)
+        .map((n) => (n.nodeType === Node.TEXT_NODE ? (n.textContent ?? '') : ''))
+        .join('')
+        .trim();
+      return own.length > 0;
+    };
+    const measure = (target: Element, who: Element): void => {
+      const r = target.getBoundingClientRect();
+      if (r.width + 0.5 < limit || r.height + 0.5 < limit) {
+        out.push(`${describe(who)} is ${Math.round(r.width)}x${Math.round(r.height)}`);
+      }
+    };
+    for (const el of Array.from(document.querySelectorAll(sel))) {
+      if (!visible(el)) continue;
+      if (el.matches('.skip-link')) continue;
+      const input = el as HTMLInputElement;
+      if (el.tagName === 'INPUT' && ['hidden'].includes(input.type)) continue;
+      if (inline(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (el.tagName === 'INPUT' || el.getAttribute('role') === 'switch') {
+        const boxed = el.tagName === 'INPUT' && ['checkbox', 'radio'].includes(input.type) && r.width < limit;
+        if (isVisuallyHidden(r) || boxed) {
+          const label = labelOf(el);
+          if (label && visible(label)) measure(label, el);
+          continue;
+        }
+      }
+      if (r.width === 0 && r.height === 0) continue;
+      measure(el, el);
+    }
+    return out;
+  }, min);
+  expect(offenders, `click targets smaller than ${min}px on ${page.url()}`).toEqual([]);
+}

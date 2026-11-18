@@ -1,10 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseHexColor, type Rgb } from './contrast';
+import {
+  DARK_BACKGROUND,
+  DARK_MUTED_BACKGROUND,
+  LIGHT_BACKGROUND,
+  LIGHT_MUTED_BACKGROUND,
+  parseHexColor,
+  type Rgb,
+} from './contrast';
 import {
   DARK_TEXT,
   THEME_PROPERTIES,
   applyTenantTheme,
   computeTenantTheme,
+  reachesNonTextContrast,
   resetTenantTheme,
   textColorOn,
   type ThemeTarget,
@@ -57,6 +65,17 @@ describe('textColorOn', () => {
   });
 });
 
+describe('reachesNonTextContrast', () => {
+  it('requires 3:1 on both the surface and the muted surface', () => {
+    expect(reachesNonTextContrast(color('#888888'), LIGHT_BACKGROUND, LIGHT_MUTED_BACKGROUND)).toBe(true);
+    expect(reachesNonTextContrast(color('#909090'), LIGHT_BACKGROUND, LIGHT_MUTED_BACKGROUND)).toBe(false);
+    expect(reachesNonTextContrast(color('#CCCCCC'), LIGHT_BACKGROUND, LIGHT_MUTED_BACKGROUND)).toBe(false);
+    expect(reachesNonTextContrast(color('#767676'), DARK_BACKGROUND, DARK_MUTED_BACKGROUND)).toBe(true);
+    expect(reachesNonTextContrast(color('#5A6B8C'), DARK_BACKGROUND, DARK_MUTED_BACKGROUND)).toBe(false);
+    expect(reachesNonTextContrast(color('#333333'), DARK_BACKGROUND, DARK_MUTED_BACKGROUND)).toBe(false);
+  });
+});
+
 describe('computeTenantTheme', () => {
   it('derives every light property from a dark primary, and keeps the dark defaults', () => {
     // #1D4ED8: 6.70:1 on white, 2.65:1 on the dark background.
@@ -82,16 +101,29 @@ describe('computeTenantTheme', () => {
   });
 
   it('uses the primary for focus but not for links between 3:1 and 4.5:1', () => {
-    // #888888: about 3.54:1 on white, 5.00:1 on the dark background.
+    // #888888: about 3.54:1 on white (3.22:1 on the muted surface), 5.00:1 on the dark background.
     const light = computeTenantTheme({ primaryColor: '#888888', accentColor: '#000000' });
     expect(light['--tt-brand-link-light']).toBeNull();
     expect(light['--tt-brand-focus-light']).toBe('#888888');
     expect(light['--tt-brand-link-dark']).toBe('#888888');
-    // #5A6B8C: about 5.36:1 on white, 3.31:1 on the dark background.
-    const dark = computeTenantTheme({ primaryColor: '#5A6B8C', accentColor: '#000000' });
-    expect(dark['--tt-brand-link-light']).toBe('#5A6B8C');
+    // #767676: about 4.54:1 on white, 3.91:1 on the dark background (3.23:1 on its muted surface).
+    const dark = computeTenantTheme({ primaryColor: '#767676', accentColor: '#000000' });
+    expect(dark['--tt-brand-link-light']).toBe('#767676');
     expect(dark['--tt-brand-link-dark']).toBeNull();
-    expect(dark['--tt-brand-focus-dark']).toBe('#5A6B8C');
+    expect(dark['--tt-brand-focus-dark']).toBe('#767676');
+  });
+
+  it('keeps the default focus when the primary misses 3:1 on the muted surface', () => {
+    // #909090: 3.19:1 on white but 2.90:1 on the light muted surface (#f3f4f6).
+    const light = computeTenantTheme({ primaryColor: '#909090', accentColor: '#000000' });
+    expect(light['--tt-brand-focus-light']).toBeNull();
+    expect(light['--tt-brand-primary']).toBe('#909090');
+    // #5A6B8C: 3.31:1 on the dark background but 2.74:1 on the dark muted surface (#1f2937); its
+    // link colour on white (5.36:1) is not affected.
+    const dark = computeTenantTheme({ primaryColor: '#5A6B8C', accentColor: '#000000' });
+    expect(dark['--tt-brand-focus-dark']).toBeNull();
+    expect(dark['--tt-brand-link-light']).toBe('#5A6B8C');
+    expect(dark['--tt-brand-focus-light']).toBe('#5A6B8C');
   });
 
   it.each(['red', '#FFF', 'url(x)', '#123456;color:red', ''])('ignores the invalid colour %j', (bad) => {

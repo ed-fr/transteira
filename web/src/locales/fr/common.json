@@ -1,10 +1,5 @@
 {
   "appName": "TransTeira",
-  "languageName": {
-    "fr": "Français",
-    "en": "English"
-  },
-  "language": "Langue",
   "notFound": {
     "title": "Page introuvable",
     "text": "La page que vous cherchez n’existe pas ou n’est plus disponible."
@@ -56,5 +51,11 @@
     "deliveryPending": "Disponible après le premier téléchargement.",
     "deliveryFor": "Télécharger la preuve de remise pour {recipient}",
     "done": "Preuve téléchargée."
+  },
+  "header": {
+    "myTransfers": "Mes envois"
+  },
+  "footer": {
+    "poweredBy": "Propulsé par TransTeira"
   }
 }

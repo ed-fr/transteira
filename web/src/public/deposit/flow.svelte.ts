@@ -40,6 +40,7 @@ import {
   type SenderTransfer,
 } from '../../shared/upload/finalize';
 import { fullName, withPath, type AcceptedFile } from '../../shared/components/folders';
+import { commitRecipients, joinRecipients, type RecipientCommit } from '../../shared/components/recipients';
 import { decodeBase64Url, encodeBase64Url } from '../../shared/e2e/base64url';
 import { sealMessage, sealMetadata } from '../../shared/e2e/sealed';
 import {
@@ -75,6 +76,7 @@ import {
   keepExpiry,
   keepMaxDownloads,
   levelByKey,
+  levelDownloadsCap,
   mapRecipientDomainErrors,
   mapRuleErrors,
   mapServerErrors,
@@ -161,13 +163,20 @@ export interface DepositFile extends Blob {
 
 /** Values of the deposit form, bound by the form screen. */
 export interface DepositForm {
+  /** Committed recipients (the chips), separated by commas or line breaks. */
   recipientsText: string;
+  /** Address being typed in the recipient input, not yet committed to recipientsText. */
+  recipientDraft: string;
   message: string;
   expiryDays: number | undefined;
   password: string;
+  /** The "Protect with a password" switch is on (turning it off clears the password). */
+  passwordOn: boolean;
   deleteAfterFirstDownload: boolean;
-  /** Maximum number of downloads as typed; empty for no limit. */
+  /** Maximum number of downloads as typed; empty for no limit (or the cap of the level). */
   maxDownloadsText: string;
+  /** The "Limit the number of downloads" switch is on (turning it off clears the field). */
+  maxDownloadsOn: boolean;
   /** Every recipient proves their address by code (a per-recipient link each). */
   recipientVerification: boolean;
   /** Link-only transfer: no mail to the recipients, the sender passes the link on (since 2.0). */
@@ -330,11 +339,14 @@ function emptyForm(expiryDays: readonly number[] = [], levels: readonly PublicLe
   const level = defaultLevel(levels);
   return {
     recipientsText: '',
+    recipientDraft: '',
     message: '',
     expiryDays: keepExpiry(undefined, effectiveExpiryDays(expiryDays, level?.rules)),
     password: '',
+    passwordOn: false,
     deleteAfterFirstDownload: false,
     maxDownloadsText: '',
+    maxDownloadsOn: false,
     recipientVerification: false,
     linkOnly: false,
     endToEnd: false,
@@ -661,9 +673,98 @@ export class DepositFlow {
     return this.form.files.reduce((sum, f) => sum + (e2e ? encryptedSize(f.size) : f.size), 0);
   }
 
-  /** Addresses parsed from the recipients field. */
-  get recipients(): string[] {
+  /** Committed addresses (the chips of the recipient input), without the draft. */
+  get committedRecipients(): string[] {
     return parseRecipients(this.form.recipientsText);
+  }
+
+  /**
+   * Commits the address being typed to the recipients (on Enter, a separator, a paste, when the
+   * input loses the focus, and before a submission): the draft is emptied, the addresses already
+   * in the list are left out and reported.
+   */
+  commitRecipientDraft(): RecipientCommit {
+    const commit = commitRecipients(this.committedRecipients, this.form.recipientDraft);
+    this.form.recipientDraft = '';
+    if (commit.added.length > 0) {
+      this.form.recipientsText = joinRecipients(commit.list);
+    }
+    return commit;
+  }
+
+  /**
+   * Removes the committed recipient at index. The errors of individual recipients refer to the
+   * indexes of the list: they are cleared.
+   */
+  removeRecipient(index: number): void {
+    const list = this.committedRecipients;
+    if (index < 0 || index >= list.length) return;
+    this.form.recipientsText = joinRecipients(list.filter((_a, i) => i !== index));
+    this.#clearErrors((k) => k.startsWith('recipients.'));
+  }
+
+  // ---- Security options ------------------------------------------------------------------
+
+  /** The chosen level requires a password: the switch is on and locked. */
+  get passwordRequired(): boolean {
+    return this.rules?.requirePassword === true;
+  }
+
+  /** The password switch is on: chosen, imposed by the level, or a password is typed. */
+  get passwordEnabled(): boolean {
+    return this.passwordRequired || this.form.passwordOn || this.form.password !== '';
+  }
+
+  /** Turns the password switch on or off; off clears the password and its error. */
+  setPasswordOn(on: boolean): void {
+    this.form.passwordOn = on;
+    if (!on && !this.passwordRequired) {
+      this.form.password = '';
+      this.#clearErrors((k) => k === 'password');
+    }
+  }
+
+  /** Cap of the downloads set by the chosen level, undefined when none (see levelDownloadsCap). */
+  get levelDownloadsCap(): number | undefined {
+    return this.maxDownloadsOffered ? levelDownloadsCap(this.rules) : undefined;
+  }
+
+  /** The download limit switch is on: chosen, imposed by a cap of the level, or a value is typed. */
+  get maxDownloadsEnabled(): boolean {
+    return (
+      this.maxDownloadsOffered &&
+      (this.levelDownloadsCap !== undefined ||
+        this.form.maxDownloadsOn ||
+        String(this.form.maxDownloadsText ?? '').trim() !== '')
+    );
+  }
+
+  /** Turns the download limit switch on or off; off clears the field and its error. */
+  setMaxDownloadsOn(on: boolean): void {
+    this.form.maxDownloadsOn = on;
+    if (!on && this.levelDownloadsCap === undefined) {
+      this.form.maxDownloadsText = '';
+      this.#clearErrors((k) => k === 'maxDownloads');
+    }
+  }
+
+  /** Number of security options in effect, shown next to the "Security options" block. */
+  get activeSecurityCount(): number {
+    let count = 0;
+    if (this.passwordEnabled) count++;
+    if (this.recipientVerificationEffective) count++;
+    if (this.deleteAfterFirstEffective) count++;
+    if (this.maxDownloadsEnabled) count++;
+    if (this.e2eEffective) count++;
+    return count;
+  }
+
+  /**
+   * The antivirus is mentioned under the title of the form: the tenant analyses its files and the
+   * transfer is not end-to-end encrypted (the server cannot analyse such files).
+   */
+  get antivirusMentioned(): boolean {
+    return this.tenant.features?.antivirus === 'enabled' && !this.e2eEffective;
   }
 
   /** Text of the current step error. */
@@ -875,6 +976,8 @@ export class DepositFlow {
   async submitTransfer(): Promise<void> {
     const session = this.session;
     if (this.busy || session === undefined) return;
+    // The address still being typed belongs to the transfer.
+    this.commitRecipientDraft();
     const needRecipients =
       session.kind !== 'external' && session.kind !== 'reply' && session.kind !== 'drop_link';
     const linkOnly = this.linkOnlyEffective;
@@ -890,7 +993,16 @@ export class DepositFlow {
         needRecipients,
         linkOnly,
       ),
-      ...validatePolicy(this.form.password, this.form.maxDownloadsText, this.rules, this.maxDownloadsOffered),
+      ...validatePolicy(
+        this.form.password,
+        this.form.maxDownloadsText,
+        this.rules,
+        this.maxDownloadsOffered,
+        {
+          passwordOn: this.form.passwordOn,
+          maxDownloadsOn: this.form.maxDownloadsOn,
+        },
+      ),
     };
     this.stepError = undefined;
     this.notice = undefined;
@@ -912,7 +1024,7 @@ export class DepositFlow {
       }),
     };
     if (needRecipients) {
-      const recipients = parseRecipients(this.form.recipientsText);
+      const recipients = this.committedRecipients;
       // A link-only transfer may have none; the field is then left out.
       if (!linkOnly || recipients.length > 0) body.recipients = recipients;
     }
@@ -1414,11 +1526,14 @@ export class DepositFlow {
   }
 
   #clearFileErrors(): void {
+    this.#clearErrors((k) => k === 'files' || k.startsWith('files.'));
+  }
+
+  /** Removes the form errors whose path matches (the object is kept when none does). */
+  #clearErrors(matches: (path: string) => boolean): void {
     const errors = this.formErrors;
-    if (Object.keys(errors).some((k) => k === 'files' || k.startsWith('files.'))) {
-      this.formErrors = Object.fromEntries(
-        Object.entries(errors).filter(([k]) => k !== 'files' && !k.startsWith('files.')),
-      );
+    if (Object.keys(errors).some(matches)) {
+      this.formErrors = Object.fromEntries(Object.entries(errors).filter(([k]) => !matches(k)));
     }
   }
 

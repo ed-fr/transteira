@@ -64,27 +64,29 @@ A few rules apply to the codes:
 
 You do not have to enter a code every time. As an internal user, once you have entered a code on a browser, that browser remembers you. A code is asked again on another computer or another browser, after 12 months without using the service, and always when you send files with an invitation.
 
-Once you are identified, the top of the page shows **Identified as** followed by your address, and an **End session** button. Click it when you have finished, especially on a shared computer. The session also ends by itself after a few hours (4 hours unless your organisation chose otherwise); the page then shows **Your session has expired. Identify yourself again to continue.**
+Once you are identified, the transfer form shows a green **From** banner with a check mark, your address and a **Change** button (its full name is **Change address (ends the session)**). Click it to end the session, especially on a shared computer; on the final summary, an **End session** button does the same. The session also ends by itself after a few hours (4 hours unless your organisation chose otherwise); the page then shows **Your session has expired. Identify yourself again to continue.**
 
 <!-- topic: deposit-options -->
 ### Filling in the transfer
 
 The **New transfer** form describes what you send, to whom and for how long.
 
-![New transfer form with a recipient, a message, the duration 7 days selected and the Password field](../screenshots/en/deposit-form.png)
+![New transfer form in two columns: the drop zone, the file cards and the volume gauge on the left; the sender banner, the recipient chips, the message and the confidentiality level on the right](../screenshots/en/deposit-form.png)
 
 Fill in the fields:
 
-- **Recipients**: one or more email addresses, separated by commas or line breaks. If you enter too many, the form tells you the maximum.
+- **Recipients**: type an address and press Enter or a comma to turn it into a chip; you can also paste a whole list (separated by commas, semicolons or line breaks). Each chip has a **Remove** button, and Backspace in the empty field selects the last chip. An address the service refuses is shown as a red chip with the reason. If you enter too many, the form tells you the maximum.
+- **Link only (no e-mail to the recipients)**: a switch just under the recipients, offered when your organisation allows it: see [Sending with a link only](topic:link-only).
 - **Message**: optional. It is sent to the recipients with the link.
-- **Available for**: **1 day**, **7 days** or **30 days**. The period starts when the transfer becomes available, that is after the antivirus analysis.
-- **Password**: optional, with no complexity rule. Send it to the recipients through another channel (phone, text message), never in the same email. After 3 wrong passwords, the transfer is locked for 15 minutes.
-- **Delete the transfer after the first download**: the transfer is deleted, for all recipients, once one of them has downloaded all the files, either as one ZIP archive or file by file. The deletion happens a few minutes later.
-- **Confidentiality level**: if your organisation offers several levels, choose the one that matches the sensitivity of the files; its description appears under it. A level can impose rules: it may restrict the available durations, make the password mandatory, force the deletion after the first download, limit the recipients to the organisation, or cap the maximum number of downloads. The form then limits the choices or fills in the options for you, and tells you why. If your organisation has a single level, the selector is not shown but its rules still apply.
-- **Recipients must verify their address by a code**: shown when your organisation offers it. Each recipient then receives a personal link and must type a code sent to their own address before downloading, so a link forwarded to someone else is useless. Tell your recipients not to forward their link. A confidentiality level can make this option mandatory: it is then checked and cannot be changed. The recipients who have not downloaded the files receive a reminder email the day before the transfer expires.
-- **Maximum number of downloads**: optional, from 1 to 1000. The transfer counts every start of a download, by all the recipients together (an interrupted download that resumes counts once). Once the number is reached, the transfer can no longer be downloaded and is deleted a few minutes later. Leave the field empty for no limit, unless the chosen level sets a cap.
-- **Encrypt end to end in my browser**: offered if your organisation allows it (or required, or absent if it forbids it). Your files are encrypted before they leave your computer: see [End-to-end encryption](topic:deposit-e2e). This option does not exist for a deposit through a drop link.
-- **Files to send**: drag your files onto the area **Drag and drop files here, or** click **choose files**. To remove a file from the list, use the remove button next to its name. Under the list, the form shows **Total:** followed by the size of your files and the size allowed.
+- **Available for**: segmented choices **1 day**, **7 days** or **30 days**. The period starts when the transfer becomes available, that is after the antivirus analysis.
+- **Confidentiality level**: if your organisation offers several levels, they are shown as segmented choices, next to the duration (a level can restrict it). Pick the one that matches the sensitivity of the files; the description of the chosen level appears under the choices. A level can impose rules: it may restrict the available durations, make the password mandatory, force the deletion after the first download, limit the recipients to the organisation, or cap the maximum number of downloads. The form then limits the choices or fills in the options for you, and tells you why. If your organisation has a single level, the choice is not shown but its rules still apply.
+- **Security options**: a block you open with its title button, which shows the number of active options (for example **Security options 1 active**). It is closed by default, and opens by itself when an option is on, when the chosen level or your organisation imposes one, or when one of its fields has an error. Each option is a switch; an option imposed by the level is on and locked, with the reason shown beside it:
+- **Protect with a password** (Security options): optional, with no complexity rule. Turning the switch on reveals the **Password** field (with **Show**/**Hide**). Send the password to the recipients through another channel (phone, text message), never in the same email. After 3 wrong passwords, the transfer is locked for 15 minutes.
+- **Recipients must verify their address by code** (Security options): shown when your organisation offers it. Each recipient then receives a personal link and must type a code sent to their own address before downloading, so a link forwarded to someone else is useless. Tell your recipients not to forward their link. A confidentiality level can make this option mandatory: the switch is then on and locked. The recipients who have not downloaded the files receive a reminder email the day before the transfer expires.
+- **Delete the transfer after the first download** (Security options): the transfer is deleted, for all recipients, once one of them has downloaded all the files, either as one ZIP archive or file by file. The deletion happens a few minutes later.
+- **Limit the number of downloads** (Security options): optional. Turning the switch on reveals the **Maximum number of downloads** field, from 1 to 1000. The transfer counts every start of a download, by all the recipients together (an interrupted download that resumes counts once). Once the number is reached, the transfer can no longer be downloaded and is deleted a few minutes later. With the switch off there is no limit, unless the chosen level sets a cap: the switch is then on and locked.
+- **Encrypt end to end in my browser** (Security options): offered if your organisation allows it (or required, or absent if it forbids it). Your files are encrypted before they leave your computer: see [End-to-end encryption](topic:deposit-e2e). This option does not exist for a deposit through a drop link.
+- **Files to send**: drag your files onto the drop zone, or click **Choose files**. To remove a file from the list, use the remove button of its card. A gauge below the list shows the number of files and their total size against the limit of the transfer; if you go over it, the gauge turns red and says **Over the limit**.
 
 <!-- rules: levels -->
 
@@ -92,7 +94,7 @@ A transfer can contain up to 20 GB in total; your organisation may have set a lo
 
 <!-- rules: limits -->
 
-To send a whole folder, drag it onto the area, or click **Add a folder** (the keyboard-friendly way) and choose it. The tree of folders is kept: the list shows the folder before each file name (for example `photos/2026/`), and the recipients find the same tree in the ZIP archive. Before sending, check the list:
+To send a whole folder, drag it onto the drop zone, or click **Choose a folder** (the keyboard-friendly way) and choose it. The tree of folders is kept: the list shows the folder before each file name (for example `photos/2026/`), and the recipients find the same tree in the ZIP archive. Before sending, check the list:
 
 - system files (`.DS_Store`, `Thumbs.db`, `desktop.ini`) are left out automatically, and the form tells you how many;
 - other hidden files and files in hidden folders (whose name starts with a dot, such as `.env` or `.git`) are kept but marked **Hidden**: remove with the remove button those you do not want to send;
@@ -100,9 +102,9 @@ To send a whole folder, drag it onto the area, or click **Add a folder** (the ke
 - a file whose name or folder is not accepted (forbidden characters such as `\` or `:`, a name reserved by Windows, a folder path that is too long or nested over 16 levels) is not added, and the form lists it with the reason: rename it, then add it again;
 - the limits on the number of files and the total size apply to all the files in the folders.
 
-If your organisation does not offer folders, the **Add a folder** button is not shown: select the files, or compress the folder into a ZIP file and send that file.
+If your organisation does not offer folders, the **Choose a folder** button is not shown: select the files, or compress the folder into a ZIP file and send that file.
 
-When everything is ready, click **Send**. Two messages may refuse the transfer:
+When everything is ready, click the **Send** button at the bottom of the form, which also shows the total size (for example **Send · 4.2 GB**). Two messages may refuse the transfer:
 
 - a message saying that the chosen confidentiality level requires a field, does not allow a value, only allows recipients of the organisation or sets a lower maximum: correct the field named in the message, or choose another level;
 - **This service does not allow sending to the domain of this address.**: your organisation does not allow this recipient domain. Remove the address, or ask your administrator.
@@ -168,7 +170,7 @@ If the option is off, a deposit from outside is refused with the same message as
 <!-- when: transferReply -->
 ## Receiving a reply
 
-If your organization has turned it on, your recipients can send files back to you from the download page with the **Reply** button, without an invitation. This only concerns transfers you sent yourself (web page or API token), never those of an external guest, and only through each recipient's personal link.
+If your organization has turned it on, your recipients can send files back to you from the download page with the **Reply with files** link, without an invitation. This only concerns transfers you sent yourself (web page or API token), never those of an external guest, and only through each recipient's personal link.
 
 A reply arrives like an ordinary transfer: you receive the usual notification mail and the download page opens the same way. It carries a **warning**, however: the reply comes from outside the organization and its author's address was verified by a code, but that does not guarantee the files are safe. Be careful with unexpected files, open them only if you were expecting this reply, and if in doubt contact the author by another means. The same warning is shown at the top of the download page. The files are scanned by the antivirus like any deposit; those that cannot be scanned are flagged.
 
@@ -179,10 +181,10 @@ Only you receive the reply: the original sender is its only recipient. It is ref
 
 The **Link only** option (no email sent to the recipients) lets you pass the download link on yourself, for example through an instant messenger. It is offered only if your organisation allows it, and only to internal users (including from outside when the organisation allows it) and to API tokens. An invited person, a reply to a transfer or a drop link cannot use it. The confidentiality level you choose must allow it too.
 
-In the [New transfer](topic:deposit-options) form, tick **Link only**:
+In the [New transfer](topic:deposit-options) form, turn on the **Link only (no e-mail to the recipients)** switch, under the recipients:
 
 - the **Recipients** become optional. If you fill them in, they are recorded but **receive no email**;
-- the option is incompatible with recipient verification: ticking one unticks the other;
+- the option is incompatible with recipient verification: turning one on turns the other off;
 - the antivirus analysis and the other rules apply as usual.
 
 When you click **Send**, the link is shown **only once**, at the end of the deposit. Click **Copy the link** and keep it before leaving the page: it appears neither in the confirmation email nor in [My transfers](topic:my-transfers). The link works only once the antivirus analysis is over; the confirmation email then tells you. Since anyone holding the link can download, pass it on through a trusted channel and protect the transfer with a password given separately.
@@ -198,9 +200,9 @@ If you lose the link, open [My transfers](topic:my-transfers) and click **New li
 
 End-to-end encryption protects your files even from the server. Your files are encrypted **in your browser**, before they are sent. The key is never sent to the server, so the server cannot read them. Only the people you give the key to can open them.
 
-In the [New transfer](topic:deposit-options) form, tick **Encrypt end to end in my browser**. Depending on the rules of your organisation and of the chosen confidentiality level, the box is offered, already ticked and locked (encryption required), or absent (encryption forbidden). It is never offered for a deposit through a drop link.
+In the [New transfer](topic:deposit-options) form, open **Security options** and turn on the **Encrypt end to end in my browser** switch. Depending on the rules of your organisation and of the chosen confidentiality level, the switch is offered, already on and locked (encryption required), or absent (encryption forbidden). It is never offered for a deposit through a drop link.
 
-![New transfer form with the box Encrypt end to end in my browser ticked](../screenshots/en/deposit-e2e-option.png)
+![New transfer form with the Security options block open and the switch Encrypt end to end in my browser on](../screenshots/en/deposit-e2e-option.png)
 
 When you click **Send**:
 
@@ -221,7 +223,7 @@ Good to know:
 - **No antivirus analysis.** The server cannot read the files, so they are never analysed. They are marked "not analysed: end-to-end encrypted", for you and for the recipients.
 - **No ZIP archive on the server.** Recipients decrypt in their browser, which builds the archive itself.
 - The server still sees the size and number of files, the sender, the recipients and the dates.
-- A recent browser is required (encryption, background tasks and data streams). Without it, the box cannot be used.
+- A recent browser is required (encryption, background tasks and data streams). Without it, the switch cannot be used.
 
 <!-- topic: secret-share -->
 ## Share a secret
@@ -237,7 +239,7 @@ Once you are identified on the sending page (see [Identifying yourself with a co
 1. Say how the recipient gets the link: **I copy the link myself**, or **Send the link by email** to a single address (if your organisation allows it).
 1. Add a **Passphrase** if you wish. The recipient will need it to read the secret, and it is never sent to the server. Give it **through another channel** than the link (phone, text message, in person): when the link is sent by email, a passphrase may be required. Prefer a long passphrase of several words.
 1. Attach a **File** if needed: a small file only (the maximum size is shown under the field). It is encrypted in your browser, so the antivirus does not scan it; the recipient is told so.
-1. Check **Notify me by email when the secret is read** to get a read receipt. You are also told if the secret expires unread, or is locked after too many wrong passphrases.
+1. Turn on **Notify me by email when the secret is read** to get a read receipt. You are also told if the secret expires unread, or is locked after too many wrong passphrases.
 1. Click **Create the secret**.
 
 If the file upload or the sending of the email fails after the secret was created, the form shows **The secret is not finished**. Click **Try again** (nothing is encrypted again) or **Start over**. An unfinished secret is kept for one hour only, then it is purged: if it has expired, the form tells you to create it again.
@@ -357,7 +359,7 @@ You can download the proofs of a transfer only while it exists in **My transfers
 
 An invitation lets someone outside your organisation send you files.
 
-Only internal users identified on the sending page can invite. Once identified, click **Invite someone to send you files** at the top of the page.
+Only internal users identified on the sending page can invite. Once identified, click **Invite someone to send you files**, shown under the sender banner of the form.
 
 ![Invite an external person form with the email address of the person, an optional message and the language of the invitation email](../screenshots/en/invite.png)
 
@@ -450,10 +452,10 @@ Your organisation writes the legal documents of the service.
 
 At the bottom of the page, the links **Legal notice** and **Privacy policy** open these documents (a link appears only when the document has been written). If a document is missing, the page shows **This document has not been published by this service.**
 
-![Legal notice page of the entity, with the footer links Legal notice and Help and the Language list](../screenshots/en/legal-notice.png)
+![Legal notice page of the entity, with the footer links Legal notice and Help, and the header buttons Language, Dark theme and Help](../screenshots/en/legal-notice.png)
 
-The service uses only technical cookies, with no audience measurement. The footer also holds the **Language** list, the **Dark theme** button and a **Help** link to the help of the current screen.
+The service uses only technical cookies, with no audience measurement. The header holds the **Language** list, the **Dark theme** button and a round **Help** link (**?**) to the help of the current screen; the footer repeats a **Help** link and shows "Powered by TransTeira".
 
 ### Dark theme
 
-The pages follow the light or dark setting of your device by default. The **Dark theme** button in the footer switches the theme at any time. Your choice is remembered for a year by a strictly technical cookie (`tt_theme`), which is only set when you pick a theme different from the one of your device. Choose again the theme of your device and the cookie is deleted: the pages follow your device again. Both themes meet the same accessibility requirements (RGAA).
+The pages follow the light or dark setting of your device by default. The **Dark theme** button in the header (a moon icon) switches the theme at any time. Your choice is remembered for a year by a strictly technical cookie (`tt_theme`), which is only set when you pick a theme different from the one of your device. Choose again the theme of your device and the cookie is deleted: the pages follow your device again. Both themes meet the same accessibility requirements (RGAA).

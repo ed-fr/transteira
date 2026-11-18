@@ -17,6 +17,16 @@ export const LIGHT_BACKGROUND: Readonly<Rgb> = { r: 0xff, g: 0xff, b: 0xff };
 /** Page background of the dark theme (branding.DarkBackground, --tt-surface of the dark palette). */
 export const DARK_BACKGROUND: Readonly<Rgb> = { r: 0x11, g: 0x18, b: 0x27 };
 
+/**
+ * Muted surface of the light theme (--tt-surface-muted): page background without an image, the
+ * files column of the deposit card, info pills. Used internally only (theme.ts): the focus and
+ * graphic colours must also reach 3:1 on it. Not part of the API contrast pairs (internal/branding).
+ */
+export const LIGHT_MUTED_BACKGROUND: Readonly<Rgb> = { r: 0xf3, g: 0xf4, b: 0xf6 };
+
+/** Muted surface of the dark theme (--tt-surface-muted of the dark palette); see LIGHT_MUTED_BACKGROUND. */
+export const DARK_MUTED_BACKGROUND: Readonly<Rgb> = { r: 0x1f, g: 0x29, b: 0x37 };
+
 /** Colour of text written on the primary colour (branding.TextOnPrimary). */
 export const TEXT_ON_PRIMARY: Readonly<Rgb> = { r: 0xff, g: 0xff, b: 0xff };
 

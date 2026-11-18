@@ -20,7 +20,19 @@
  *
  * In both palettes every text colour reaches WCAG AA (4.5:1) on --tt-surface (and the status
  * colours on their -bg tint); --tt-border, --tt-focus and --tt-graphic reach 3:1 (WCAG 1.4.11,
- * RGAA 3.3). src/styles/tokens.test.ts checks it.
+ * RGAA 3.3) on --tt-surface and on --tt-surface-muted (theme.ts uses a tenant colour for the focus
+ * and the graphics only when it reaches 3:1 on both). src/styles/tokens.test.ts checks it.
+ *
+ * Glass (CLAUDE.md section 13.2, public pages): the header buttons and the footer sit directly on
+ * the background image, under the veil. They use a dark translucent glass (--tt-glass-bg) with
+ * light text, whatever the theme: composited over a pure white and a pure black image (image, then
+ * --tt-veil, then the glass), the text reaches 4.5:1 and the focus outline 3:1 on the glass and on
+ * the veil around it (tokens.test.ts). --tt-glass-border is decorative (the text identifies the
+ * control). Without a background image the page is .tt-page--plain, and the glass tokens map to
+ * the plain surface colours (rule at the end of this file).
+ *
+ * Decorative colours, exempt from the 3:1 rule because they carry no information: --tt-separator
+ * (lines between list rows and panes) and --tt-glass-border.
  */
 :root,
 [data-theme='light'] {
@@ -51,6 +63,21 @@
   /* Veil over the background image, behind the card (CLAUDE.md section 13). */
   --tt-veil: rgb(17 24 39 / 55%);
   --tt-shadow: 0 0.5rem 1.5rem rgb(17 24 39 / 25%);
+  /* Public card (CLAUDE.md section 13.2): a marked drop shadow over the background image. */
+  --tt-shadow-strong: 0 1.5rem 4rem rgb(17 24 39 / 28%), 0 0.125rem 0.375rem rgb(17 24 39 / 10%);
+
+  /* Glass of the public header buttons and footer (see the header of this file). */
+  --tt-glass-bg: rgb(17 24 39 / 40%);
+  --tt-glass-text: #ffffff;
+  --tt-glass-border: rgb(255 255 255 / 35%);
+  --tt-glass-focus: #ffffff;
+  --tt-glass-ring: #111827;
+
+  /* Decorative separator (no contrast requirement). */
+  --tt-separator: #e5e7eb;
+  /* Neutral chips and badges (file type, neutral badge, icon discs): text AA on the chip. */
+  --tt-chip-bg: #e5e7eb;
+  --tt-chip-text: #1f2937;
 
   /* Status colours (text AA on --tt-surface and on their -bg tint), never tenant colours. */
   --tt-success: #166534;
@@ -95,6 +122,18 @@
     --tt-logo-text: #111827;
     --tt-veil: rgb(0 0 0 / 70%);
     --tt-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 60%);
+    --tt-shadow-strong: 0 1.5rem 4rem rgb(0 0 0 / 55%), 0 0.125rem 0.375rem rgb(0 0 0 / 30%);
+
+    /* Darker glass: the veil of the dark theme is more opaque. */
+    --tt-glass-bg: rgb(17 24 39 / 50%);
+    --tt-glass-text: #f9fafb;
+    --tt-glass-border: rgb(255 255 255 / 30%);
+    --tt-glass-focus: #ffffff;
+    --tt-glass-ring: #111827;
+
+    --tt-separator: #374151;
+    --tt-chip-bg: #374151;
+    --tt-chip-text: #f3f4f6;
 
     --tt-success: #86efac;
     --tt-success-bg: #052e16;
@@ -151,6 +190,10 @@ html[data-app='admin'] {
   --tt-radius-sm: 0.25rem;
   --tt-radius: 0.5rem;
   --tt-radius-lg: 1rem;
+  /* Public card (CLAUDE.md section 13.2). */
+  --tt-radius-xl: 1.5rem;
+  /* Fully rounded ends (pills, switch tracks). */
+  --tt-radius-full: 999px;
   --tt-border-width: 1px;
   --tt-focus-width: 3px;
 
@@ -171,4 +214,22 @@ html[data-app='admin'] {
   --tt-card-width: 36rem;
   --tt-content-width: 72rem;
   --tt-control-height: 2.75rem;
+  /* Widths of the public card (.tt-pcard--narrow|medium|split|wide, layout.css). */
+  --tt-card-narrow: 36rem;
+  --tt-card-medium: 52rem;
+  --tt-card-split: 70rem;
+  --tt-card-wide: 72rem;
+}
+
+/*
+ * Page without a background image (PageLayout adds .tt-page--plain): no image or veil behind the
+ * header and the footer, so the glass falls back to the plain surface colours, on the muted page
+ * background. Kept here, next to the palettes, so that tokens.test.ts checks the mapping.
+ */
+.tt-page--plain {
+  --tt-glass-bg: var(--tt-surface);
+  --tt-glass-text: var(--tt-text);
+  --tt-glass-border: var(--tt-border);
+  --tt-glass-focus: var(--tt-focus);
+  --tt-glass-ring: var(--tt-focus-ring);
 }

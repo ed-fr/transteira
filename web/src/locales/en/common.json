@@ -1,10 +1,5 @@
 {
   "appName": "TransTeira",
-  "languageName": {
-    "fr": "Français",
-    "en": "English"
-  },
-  "language": "Language",
   "notFound": {
     "title": "Page not found",
     "text": "The page you are looking for does not exist or is no longer available."
@@ -56,5 +51,11 @@
     "deliveryPending": "Available after the first download.",
     "deliveryFor": "Download the proof of delivery for {recipient}",
     "done": "Proof downloaded."
+  },
+  "header": {
+    "myTransfers": "My transfers"
+  },
+  "footer": {
+    "poweredBy": "Powered by TransTeira"
   }
 }

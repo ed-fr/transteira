@@ -1,4 +1,4 @@
-// Folder upload (CLAUDE.md section 8.2, V1.1): a folder chosen with the "Add a folder" button keeps
+// Folder upload (CLAUDE.md section 8.2, V1.1): a folder chosen with the "Choose a folder" button keeps
 // its tree. System files are left out and counted, hidden files are flagged, empty folders are
 // ignored; the download page shows the folders and the ZIP archive keeps the tree.
 import fs from 'node:fs';
@@ -7,8 +7,8 @@ import path from 'node:path';
 import { internalEmail, sha256 } from '../support/data';
 import { checkA11y, expect, test } from '../support/fixtures';
 import { waitForMail } from '../support/mailpit';
-import { download, identify, mailLink, sendTransfer } from '../support/publicflow';
-import { escapeRegExp, re } from '../support/regexp';
+import { addRecipients, download, fileItem, identify, mailLink, sendTransfer } from '../support/publicflow';
+import { escapeRegExp } from '../support/regexp';
 import { readStoredZip } from '../support/zip';
 
 /** Writes a small folder tree in a temporary directory and returns its root and the folder path. */
@@ -39,10 +39,10 @@ test.describe('public: folder upload', () => {
     const tree = makeTree();
     try {
       await identify(page, tenant.origin, sender);
-      await page.getByRole('textbox', { name: /^Recipients/ }).fill(recipient);
+      await addRecipients(page, [recipient]);
 
-      // The "Add a folder" button is a real button; the directory input behind it takes the folder.
-      await expect(page.getByRole('button', { name: 'Add a folder' })).toBeVisible();
+      // The "Choose a folder" button is a real button; the directory input behind it takes the folder.
+      await expect(page.getByRole('button', { name: 'Choose a folder' })).toBeVisible();
       await page.locator('input[webkitdirectory]').setInputFiles(tree.folder);
 
       const list = page.getByRole('list', { name: 'Selected files' });
@@ -66,9 +66,8 @@ test.describe('public: folder upload', () => {
       const rctx = await newContext();
       const rpage = await rctx.newPage();
       await rpage.goto(link);
-      const table = rpage.getByRole('table', { name: 'Files of this transfer' });
-      await expect(table.getByRole('row', { name: re('project/src/main.txt') })).toBeVisible();
-      await expect(table.getByRole('row', { name: re('project/readme.txt') })).toBeVisible();
+      await expect(fileItem(rpage, 'project/src/main.txt')).toBeVisible();
+      await expect(fileItem(rpage, 'project/readme.txt')).toBeVisible();
       await checkA11y(rpage);
 
       const zip = await download(rpage, () =>

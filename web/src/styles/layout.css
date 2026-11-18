@@ -111,6 +111,177 @@
   }
 }
 
+/*
+ * Public pages (CLAUDE.md section 13.2), opt-in with PageLayout variant="public" (.tt-page--public):
+ * the brand box on the left of the header and the glass actions on the right (wrapping on narrow
+ * screens), a 16 px side gutter on phones, and the public card .tt-pcard instead of .tt-card. The
+ * administration keeps the default frame above until its own redesign.
+ */
+/*
+ * Behind the image, the veil colour: the glass keeps its contrast while the image loads or if it
+ * fails to load (the image and the veil, z-index -2 and -1 in the isolated page, paint above this
+ * background), and contrast checkers that do not see the fixed image (axe) compute on the same
+ * backdrop as a white image under the veil (the case checked by tokens.test.ts).
+ */
+.tt-page--public:not(.tt-page--plain) {
+  background: var(--tt-veil);
+}
+
+.tt-page--public .tt-page__header {
+  flex-wrap: wrap;
+  padding: var(--tt-space-5) var(--tt-space-8);
+}
+
+.tt-page--public .tt-page__brand {
+  border-radius: var(--tt-radius-lg);
+}
+
+.tt-page--public .tt-page__main {
+  padding: var(--tt-space-4) var(--tt-space-4) var(--tt-space-10);
+}
+
+/*
+ * Public card: very rounded corners and a marked shadow over the background image and its veil.
+ * Sizes: narrow (forms of one column), medium (download, help, legal texts), split (the deposit
+ * form, two panes) and wide (tables of "My transfers").
+ */
+.tt-pcard {
+  width: 100%;
+  max-width: var(--tt-card-narrow);
+  padding: var(--tt-space-8);
+  border-radius: var(--tt-radius-xl);
+  background: var(--tt-surface);
+  color: var(--tt-text);
+  box-shadow: var(--tt-shadow-strong);
+}
+
+.tt-pcard--medium {
+  max-width: var(--tt-card-medium);
+}
+
+.tt-pcard--wide {
+  max-width: var(--tt-card-wide);
+}
+
+/*
+ * Split card: no padding of its own, the content lays out its panes (.tt-pcard__columns of
+ * .tt-pcard__pane, one column when they do not fit side by side) and padded sections
+ * (.tt-pcard__section, e.g. tabs and an error summary above the panes). The card clips its
+ * content to its rounded corners (the panes have their own padding, so focus rings stay inside).
+ */
+.tt-pcard--split {
+  max-width: var(--tt-card-split);
+  padding: 0;
+  overflow: clip;
+}
+
+.tt-pcard__section {
+  padding: var(--tt-space-6) var(--tt-space-8) 0;
+}
+
+.tt-pcard__columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+}
+
+.tt-pcard__pane {
+  min-width: 0;
+  padding: var(--tt-space-8);
+}
+
+/* Muted pane (files column of the deposit): links there use --tt-text, underlined. */
+.tt-pcard__pane--muted {
+  background: var(--tt-surface-muted);
+}
+
+/*
+ * Glass controls of the public header (links and buttons on the background image): dark
+ * translucent glass with light text in both themes (tokens.css checks 4.5:1 on any image), pills
+ * of at least 44 × 44 px. .tt-glass-btn--icon makes a round icon-only control (its name is a
+ * visually hidden text). The current page (aria-current) is marked by a solid border and an
+ * underline, never by colour alone.
+ */
+.tt-glass-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--tt-space-2);
+  min-width: var(--tt-control-height);
+  min-height: var(--tt-control-height);
+  padding: var(--tt-space-1) var(--tt-space-4);
+  border: var(--tt-border-width) solid var(--tt-glass-border);
+  border-radius: var(--tt-radius-full);
+  background: var(--tt-glass-bg);
+  color: var(--tt-glass-text);
+  font: inherit;
+  font-size: var(--tt-font-size-sm);
+  font-weight: var(--tt-font-weight-bold);
+  line-height: var(--tt-line-height-tight);
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(0.5rem);
+  backdrop-filter: blur(0.5rem);
+}
+
+.tt-glass-btn:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.tt-glass-btn:focus-visible {
+  outline-color: var(--tt-glass-focus);
+  box-shadow: 0 0 0 calc(var(--tt-focus-width) + 2px) var(--tt-glass-ring);
+}
+
+.tt-glass-btn[aria-current='page'] {
+  border: 2px solid var(--tt-glass-text);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
+}
+
+.tt-glass-btn--icon {
+  width: var(--tt-control-height);
+  padding: 0;
+}
+
+@media (forced-colors: active) {
+  .tt-glass-btn {
+    border-color: ButtonText;
+  }
+
+  a.tt-glass-btn {
+    border-color: LinkText;
+  }
+}
+
+@media (max-width: 40rem) {
+  .tt-page--public .tt-page__header {
+    padding: var(--tt-space-3) var(--tt-space-4);
+  }
+
+  .tt-page--public .tt-page__main {
+    padding: var(--tt-space-2) var(--tt-space-4) var(--tt-space-6);
+  }
+
+  .tt-pcard {
+    padding: var(--tt-space-5) var(--tt-space-4);
+    border-radius: var(--tt-radius-lg);
+  }
+
+  .tt-pcard--split {
+    padding: 0;
+  }
+
+  .tt-pcard__section {
+    padding: var(--tt-space-5) var(--tt-space-4) 0;
+  }
+
+  .tt-pcard__pane {
+    padding: var(--tt-space-5) var(--tt-space-4);
+  }
+}
+
 /* Generic stack and cluster layouts. */
 .tt-stack > * + * {
   margin-top: var(--tt-space-4);
@@ -139,7 +310,7 @@
  * Printing (printable help /help/print, CLAUDE.md section 4.2; any page prints the same way):
  * the content only, on white paper. The light palette applies (tokens.css keeps the dark one on
  * screen); the page header, footer, background, veil, skip link and banner are left out, and the
- * card loses its frame. Buttons never print.
+ * card (.tt-card, or the public .tt-pcard and its panes) loses its frame. Buttons never print.
  */
 @page {
   size: A4;
@@ -158,7 +329,8 @@
   }
 
   .tt-page,
-  .tt-page--plain {
+  .tt-page--plain,
+  .tt-page--public:not(.tt-page--plain) {
     display: block;
     min-height: 0;
     background: none;
@@ -170,11 +342,29 @@
   }
 
   .tt-card,
-  .tt-card--wide {
+  .tt-card--wide,
+  .tt-pcard,
+  .tt-pcard--medium,
+  .tt-pcard--split,
+  .tt-pcard--wide {
     max-width: none;
     padding: 0;
+    overflow: visible;
     border-radius: 0;
     box-shadow: none;
+  }
+
+  .tt-pcard__section,
+  .tt-pcard__pane {
+    padding: 0;
+  }
+
+  .tt-pcard__columns {
+    display: block;
+  }
+
+  .tt-pcard__pane--muted {
+    background: none;
   }
 
   a {

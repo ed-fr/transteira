@@ -1,5 +1,5 @@
 // Dark mode (CLAUDE.md section 13.1, threat model T-230 / T-231): the theme follows the system
-// setting by default, the footer button switches it and remembers the choice in the technical
+// setting by default, the header button switches it and remembers the choice in the technical
 // cookie tt_theme, going back to the system value deletes the cookie, and an unknown cookie value
 // is ignored. The same button exists on the admin interface.
 import type { Page } from '@playwright/test';

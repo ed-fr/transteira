@@ -48,6 +48,18 @@
   },
   "form": {
     "title": "New transfer",
+    "subtitle": {
+      "limit": "Up to {max} per transfer",
+      "serverEncryption": "encrypted on the server",
+      "e2eEncryption": "encrypted end to end in your browser",
+      "antivirus": "scanned by the antivirus"
+    },
+    "from": {
+      "label": "From",
+      "identified": "Identified as",
+      "change": "Change",
+      "changeDetail": "address (ends the session)"
+    },
     "summary": {
       "one": "{count} field needs your attention:",
       "other": "{count} fields need your attention:"
@@ -56,10 +68,9 @@
     "submitting": "Preparing the transfer…",
     "recipients": {
       "label": "Recipients",
-      "hint": "One or more email addresses, separated by commas or line breaks.",
+      "hint": "Press Enter or type a comma after each address. You can also paste a list.",
       "external": "The files will be sent to {invitedBy}, who invited you.",
       "reply": "Your reply goes to {recipient}.",
-      "addressError": "{address}: {message}",
       "tooMany": "Enter at most {max} recipients.",
       "domainRefused": "This service does not allow sending to the domain of this address.",
       "dropLink": "Files will be sent to: {label}.",
@@ -81,12 +92,13 @@
       }
     },
     "password": {
+      "switch": "Protect with a password",
+      "switchHint": "The recipients will need it to download the files: share it through another channel (phone, text message), never in the same email.",
       "label": "Password",
-      "hint": "Optional. The recipients will need it to download the files: share it through another channel (phone, text message), never in the same email.",
       "show": "Show",
       "hide": "Hide",
-      "requiredHint": "Required by the chosen confidentiality level. The recipients will need it to download the files: share it through another channel (phone, text message), never in the same email.",
-      "requiredByLevel": "The chosen confidentiality level requires a password."
+      "requiredByLevel": "The chosen confidentiality level requires a password.",
+      "empty": "Enter a password, or turn off the protection."
     },
     "deleteAfterFirstDownload": {
       "label": "Delete the transfer after the first download",
@@ -103,18 +115,34 @@
         "one": "{count} file name is not accepted: rename the file and add it again.",
         "other": "{count} file names are not accepted: rename the files and add them again."
       },
-      "total": "Total: {total} of {max} allowed."
+      "removed": "File removed: {name}."
     },
     "level": {
       "legend": "Confidentiality level",
       "hint": "The level sets rules for this transfer (duration, password, recipients…).",
-      "none": "No confidentiality level is currently available for you, so no transfer can be sent. Contact your administrator."
+      "none": "No confidentiality level is currently available for you, so no transfer can be sent. Contact your administrator.",
+      "expiryChanged": {
+        "one": "The duration is now {count} day.",
+        "other": "The duration is now {count} days."
+      },
+      "securityChanged": {
+        "one": "{count} security option in effect.",
+        "other": "{count} security options in effect."
+      }
     },
     "maxDownloads": {
+      "switch": "Limit the number of downloads",
+      "switchHint": "Once the limit is reached, the transfer can no longer be downloaded and is deleted.",
       "label": "Maximum number of downloads",
-      "hint": "Optional, from 1 to {max}. Once reached, the transfer can no longer be downloaded and is deleted.",
-      "invalid": "Enter a whole number between 1 and {max}, or leave the field empty.",
-      "exceeded": "The chosen confidentiality level allows at most {max} downloads."
+      "fieldHint": "From 1 to {max}.",
+      "capHint": "From 1 to {max}. Left empty, the maximum of the level applies.",
+      "cappedByLevel": {
+        "one": "The chosen confidentiality level allows at most {count} download.",
+        "other": "The chosen confidentiality level allows at most {count} downloads."
+      },
+      "invalid": "Enter a whole number between 1 and {max}.",
+      "exceeded": "The chosen confidentiality level allows at most {max} downloads.",
+      "empty": "Enter a number of downloads, or turn off the limit."
     },
     "rules": {
       "required": "The chosen confidentiality level requires this field.",
@@ -134,6 +162,14 @@
       "label": "Link only (no e-mail to the recipients)",
       "hint": "No mail is sent: the link is shown to you once at the end of the upload and you pass it on yourself.",
       "blockedByVerification": "Not available: the chosen confidentiality level requires recipient verification."
+    },
+    "security": {
+      "title": "Security options",
+      "count": {
+        "one": "{count} active",
+        "other": "{count} active"
+      },
+      "lockedByLevel": "Required by the chosen confidentiality level."
     }
   },
   "upload": {
@@ -203,7 +239,7 @@
   "e2e": {
     "label": "Encrypt end to end in my browser",
     "hint": "The files, their names and the message are encrypted in your browser before being sent: the server cannot read them. They are not analysed by the antivirus. At the end you get a decryption key: send it to the recipients through another channel (phone, text message), never in the same email. Without it, the files cannot be opened.",
-    "requiredHint": "Required by your organisation for this transfer. The files, their names and the message are encrypted in your browser and are not analysed by the antivirus. At the end you get a decryption key to send to the recipients through another channel.",
+    "locked": "Required by your organisation for this transfer.",
     "required": "This transfer must be encrypted end to end.",
     "forbidden": "End-to-end encryption is not allowed for this transfer.",
     "unsupported": "This browser cannot encrypt the files (a secure connection and a recent browser are needed). Use another browser.",

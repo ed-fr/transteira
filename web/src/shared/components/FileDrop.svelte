@@ -2,7 +2,21 @@
   // File selection: a real <input type="file"> (the keyboard and screen reader path, focusable,
   // opened with Enter or Space) visually replaced by its label, which is also a drop zone for
   // mouse users. Dropped and chosen files both go to onfiles.
+  //
+  // Variants:
+  //   'default'  the label is a dashed zone "Drag and drop files here, or choose files" under the
+  //              visible title (label prop) and the hint; "Add a folder" button in folders mode
+  //   'hero'     large dashed zone of the public deposit (CLAUDE.md section 13.2): a round upload
+  //              icon, a title ("Drag and drop your files here", "…files or folders here" in
+  //              folders mode), the hint, then two buttons: "Choose files" (the label of the input,
+  //              drawn as a primary button: the input keeps the focus, its focus ring is drawn on
+  //              it, and it opens with Enter or Space) and "Choose a folder" (a real button, in
+  //              folders mode when the browser can pick a folder). The label prop stays the start
+  //              of the accessible name of the input ("Files to send Choose files", visually
+  //              hidden), so getByLabel(/^Files to send/) and setInputFiles keep working. The whole
+  //              zone accepts drops.
   import { t } from '../i18n/i18n.svelte';
+  import Icon from './Icon.svelte';
   import { describedBy, dropTarget, filesOf } from './helpers';
   import {
     pickedFromInput,
@@ -45,6 +59,10 @@
     folderPicker?: boolean;
     /** The input element, for focus management. */
     element?: HTMLInputElement | undefined;
+    /** Look of the zone: default (form field) or hero (large public deposit zone). */
+    variant?: 'default' | 'hero';
+    /** Title of the hero zone, instead of the default "Drag and drop your files (or folders) here". */
+    heroTitle?: string | undefined;
     class?: string;
   }
 
@@ -63,6 +81,8 @@
     room,
     folderPicker = supportsFolderPicker(),
     element = $bindable(),
+    variant = 'default',
+    heroTitle,
     class: className = '',
   }: Props = $props();
 
@@ -72,6 +92,10 @@
   const errorId = $derived(`${inputId}-error`);
   const invalid = $derived(error !== undefined && error !== '');
   const foldersOn = $derived(folders && onpicked !== undefined);
+  const hero = $derived(variant === 'hero');
+  const heroText = $derived(
+    heroTitle ?? t(foldersOn ? 'components.fileDrop.heroTitleFolders' : 'components.fileDrop.heroTitle'),
+  );
   let active = $state(false);
   let folderInput: HTMLInputElement | undefined = $state();
   let notice: PickNotice | undefined = $state();
@@ -120,51 +144,83 @@
 
 <div
   class="tt-drop {className}"
+  class:tt-drop--hero={hero}
   class:tt-drop--active={active}
   class:tt-drop--invalid={invalid}
   {@attach drop}
 >
-  <p class="tt-drop__title" id="{inputId}-title">{label}</p>
-  {#if hint}
-    <p class="tt-drop__hint" id={hintId}>{hint}</p>
-  {/if}
-  <input
-    bind:this={element}
-    type="file"
-    id={inputId}
-    class="tt-drop__input"
-    {multiple}
-    {accept}
-    {disabled}
-    {required}
-    aria-labelledby="{inputId}-title {inputId}-label"
-    aria-invalid={invalid ? 'true' : undefined}
-    aria-describedby={describedBy(hint && hintId, invalid && errorId)}
-    onchange={handleChange}
-  />
-  <label class="tt-drop__zone" for={inputId} id="{inputId}-label">
-    {#if active}
-      {t('components.fileDrop.active')}
-    {:else}
-      {t('components.fileDrop.instructions')}
-      <span class="tt-drop__browse">{t('components.fileDrop.browse')}</span>
-    {/if}
-  </label>
-  {#if foldersOn && folderPicker}
+  {#snippet input()}
     <input
-      bind:this={folderInput}
+      bind:this={element}
       type="file"
-      class="tt-drop__folder-input"
-      tabindex="-1"
-      aria-hidden="true"
-      multiple
-      webkitdirectory
+      id={inputId}
+      class="tt-drop__input"
+      {multiple}
+      {accept}
       {disabled}
-      onchange={handleFolder}
+      {required}
+      aria-labelledby="{inputId}-title {inputId}-label"
+      aria-invalid={invalid ? 'true' : undefined}
+      aria-describedby={describedBy(hint && hintId, invalid && errorId)}
+      onchange={handleChange}
     />
-    <button type="button" class="tt-drop__folder-button" {disabled} onclick={() => folderInput?.click()}>
-      {t('components.fileDrop.addFolder')}
-    </button>
+  {/snippet}
+  {#snippet folderPick(buttonClass: string, text: string)}
+    {#if foldersOn && folderPicker}
+      <input
+        bind:this={folderInput}
+        type="file"
+        class="tt-drop__folder-input"
+        tabindex="-1"
+        aria-hidden="true"
+        multiple
+        webkitdirectory
+        {disabled}
+        onchange={handleFolder}
+      />
+      <button type="button" class={buttonClass} {disabled} onclick={() => folderInput?.click()}>
+        {#if hero}<Icon name="folder" />{/if}
+        {text}
+      </button>
+    {/if}
+  {/snippet}
+  {#if hero}
+    <p class="visually-hidden" id="{inputId}-title">{label}</p>
+    <div class="tt-drop__hero">
+      <span class="tt-drop__disc" aria-hidden="true"><Icon name="upload" size="xl" /></span>
+      <p class="tt-drop__hero-title">
+        {active ? t('components.fileDrop.active') : heroText}
+      </p>
+      {#if hint}
+        <p class="tt-drop__hint" id={hintId}>{hint}</p>
+      {/if}
+      <div class="tt-drop__actions">
+        {@render input()}
+        <label class="tt-drop__choose" for={inputId} id="{inputId}-label">
+          <Icon name="upload" />
+          {t('components.fileDrop.chooseFiles')}
+        </label>
+        {@render folderPick(
+          'tt-drop__choose tt-drop__choose--secondary',
+          t('components.fileDrop.chooseFolder'),
+        )}
+      </div>
+    </div>
+  {:else}
+    <p class="tt-drop__title" id="{inputId}-title">{label}</p>
+    {#if hint}
+      <p class="tt-drop__hint" id={hintId}>{hint}</p>
+    {/if}
+    {@render input()}
+    <label class="tt-drop__zone" for={inputId} id="{inputId}-label">
+      {#if active}
+        {t('components.fileDrop.active')}
+      {:else}
+        {t('components.fileDrop.instructions')}
+        <span class="tt-drop__browse">{t('components.fileDrop.browse')}</span>
+      {/if}
+    </label>
+    {@render folderPick('tt-drop__folder-button', t('components.fileDrop.addFolder'))}
   {/if}
   <div class="tt-drop__notice" role="status">
     {#if notice}
@@ -287,6 +343,109 @@
   .tt-drop__folder-button:disabled {
     cursor: not-allowed;
     opacity: 0.65;
+  }
+
+  /* Hero variant (public deposit). */
+  .tt-drop__hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--tt-space-3);
+    min-height: 14rem;
+    padding: var(--tt-space-6) var(--tt-space-4);
+    border: 2px dashed var(--tt-border);
+    border-radius: var(--tt-radius-lg);
+    background: var(--tt-surface);
+    text-align: center;
+  }
+
+  .tt-drop__disc {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    background: var(--tt-chip-bg);
+    color: var(--tt-chip-text);
+  }
+
+  .tt-drop__hero-title {
+    margin: 0;
+    font-size: var(--tt-font-size-lg);
+    font-weight: var(--tt-font-weight-bold);
+  }
+
+  .tt-drop--hero .tt-drop__hint {
+    margin: 0;
+  }
+
+  .tt-drop__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--tt-space-2);
+  }
+
+  .tt-drop__choose {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--tt-space-2);
+    min-height: var(--tt-control-height);
+    padding: var(--tt-space-2) var(--tt-space-5);
+    border: 2px solid var(--tt-primary);
+    border-radius: var(--tt-radius);
+    background: var(--tt-primary);
+    color: var(--tt-on-primary);
+    font: inherit;
+    font-weight: var(--tt-font-weight-bold);
+    line-height: var(--tt-line-height-tight);
+    cursor: pointer;
+  }
+
+  .tt-drop__choose--secondary {
+    border-color: var(--tt-border);
+    background: var(--tt-surface);
+    color: var(--tt-text);
+  }
+
+  .tt-drop__choose:hover {
+    text-decoration: underline;
+  }
+
+  .tt-drop__input:focus-visible + .tt-drop__choose,
+  .tt-drop__choose--secondary:focus-visible {
+    outline: var(--tt-focus-width) solid var(--tt-focus);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 calc(var(--tt-focus-width) + 2px) var(--tt-focus-ring);
+  }
+
+  .tt-drop__input:disabled + .tt-drop__choose,
+  .tt-drop__choose--secondary:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+
+  .tt-drop--hero.tt-drop--active .tt-drop__hero {
+    border-style: solid;
+    border-color: var(--tt-graphic);
+    background: var(--tt-info-bg);
+  }
+
+  .tt-drop--hero.tt-drop--invalid .tt-drop__hero {
+    border-color: var(--tt-danger);
+  }
+
+  :global(.tt-page--public) .tt-drop__folder-button {
+    min-height: var(--tt-control-height);
+  }
+
+  @media (forced-colors: active) {
+    .tt-drop__choose {
+      border-color: ButtonText;
+    }
   }
 
   .tt-drop__notice {

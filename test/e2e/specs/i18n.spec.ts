@@ -56,8 +56,8 @@ async function expectNoRawKeys(page: Page): Promise<void> {
 }
 
 /** Checks one French screen: language, heading, no raw key, accessibility. */
-async function expectFrenchScreen(page: Page, headingKey: string): Promise<void> {
-  await expect(page.getByRole('heading', { name: fr(headingKey), level: 1 })).toBeVisible();
+async function expectFrenchScreen(page: Page, headingKey: string, heading?: string): Promise<void> {
+  await expect(page.getByRole('heading', { name: heading ?? fr(headingKey), level: 1 })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
   await expectNoRawKeys(page);
   await checkA11y(page);
@@ -111,9 +111,10 @@ test.describe('French pass', () => {
         { host: HOSTS.a },
       );
       await page.goto(`${state.tenants.a.origin}${await recipientPath(transfer, recipient)}`);
-      await expectFrenchScreen(page, 'download.title');
-      await expect(page.getByRole('table', { name: fr('download.files.caption') })).toBeVisible();
-      await expect(page.getByText(file.sha256)).toBeVisible();
+      await expectFrenchScreen(page, 'download.heading', msg('fr', 'download.heading', { count: 1 }));
+      await expect(page.getByRole('list', { name: fr('download.files.caption') })).toBeVisible();
+      // The full fingerprint is visually hidden (the page shows an abbreviation).
+      await expect(page.getByText(file.sha256)).toBeAttached();
       await expect(
         page
           .getByRole('button', { name: fr('download.archive.button') })

@@ -127,7 +127,7 @@ test.describe('public: link only', () => {
     // The link opens the download page.
     const rpage = await (await newContext({ clientIp: externalIp() })).newPage();
     await rpage.goto(link);
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     const got = await download(rpage, () =>
       rpage.getByRole('link', { name: `Download ${file.name}` }).click(),
     );

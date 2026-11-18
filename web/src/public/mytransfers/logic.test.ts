@@ -13,6 +13,7 @@ import {
   requestFailure,
   sessionStartFailure,
   statusKey,
+  statusVariant,
 } from './logic';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -196,5 +197,12 @@ describe('canReissueLink', () => {
     expect(canReissueLink({ status: 'scanning', linkOnly: true })).toBe(true);
     expect(canReissueLink({ status: 'uploading', linkOnly: true })).toBe(false);
     expect(canReissueLink({ status: 'available' })).toBe(false);
+  });
+});
+
+describe('statusVariant', () => {
+  it('maps a scan in progress to info and anything else to success', () => {
+    expect(statusVariant('scanning')).toBe('info');
+    expect(statusVariant('available')).toBe('success');
   });
 });

@@ -244,3 +244,60 @@ export function percentOf(value: number, max: number): number {
   }
   return Math.min(100, Math.max(0, (value / max) * 100));
 }
+
+/**
+ * Returns the extension of a file name, lowercase and without the dot ("Report.PDF" → "pdf"), or
+ * "" when there is none: no dot, a trailing dot, or a dot file such as ".bashrc" (as path.extname).
+ * A folder path before the name ("photos/a.jpg", "a\\b.txt") is ignored.
+ */
+export function fileExtension(name: string): string {
+  const base = name.slice(Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\')) + 1);
+  const dot = base.lastIndexOf('.');
+  if (dot <= 0 || dot === base.length - 1) {
+    return '';
+  }
+  return base.slice(dot + 1).toLowerCase();
+}
+
+/**
+ * Returns the short type label of a file for the FileTypeBadge: its extension, uppercase, cut to
+ * max characters (default 4: "XLSX", "JPEG", "MARK" for .markdown), or "" without extension.
+ */
+export function fileTypeLabel(name: string, max = 4): string {
+  return [...fileExtension(name).toUpperCase()].slice(0, Math.max(0, max)).join('');
+}
+
+/**
+ * Abbreviates a hexadecimal digest for display: the first head and last tail characters around an
+ * ellipsis ("9f2c1a2b…77bda41e" with the defaults). A digest too short to gain anything is
+ * returned as it is. The full value must stay available (screen readers, title, copy button).
+ */
+export function abbreviateHash(hex: string, head = 8, tail = 8): string {
+  const h = Math.max(0, head);
+  const t = Math.max(0, tail);
+  if (hex.length <= h + t + 1) {
+    return hex;
+  }
+  return `${hex.slice(0, h)}…${t === 0 ? '' : hex.slice(-t)}`;
+}
+
+/** What the volume gauge shows (VolumeGauge.svelte). */
+export interface VolumeState {
+  /** Value of the meter, clamped to [0, limit] (0 when there is no limit). */
+  value: number;
+  /** Share of the limit used, rounded to a whole percentage (at least 1 when something is used); undefined without a limit. */
+  percent: number | undefined;
+  /** The volume exceeds the limit. */
+  over: boolean;
+}
+
+/** Computes the volume gauge of a transfer: used bytes against a limit (no limit when not positive). */
+export function volumeState(used: number, limit: number | undefined): VolumeState {
+  const bytes = Number.isFinite(used) ? Math.max(0, used) : 0;
+  if (limit === undefined || !(limit > 0)) {
+    return { value: 0, percent: undefined, over: false };
+  }
+  const exact = (bytes / limit) * 100;
+  const percent = bytes > 0 ? Math.max(1, Math.round(exact)) : 0;
+  return { value: Math.min(bytes, limit), percent, over: bytes > limit };
+}

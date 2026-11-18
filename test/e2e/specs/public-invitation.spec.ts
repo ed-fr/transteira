@@ -83,8 +83,8 @@ test.describe('public: external invitation', () => {
     expect(notification.Text).toContain(file.sha256);
     const download = mailLink(notification, '/d/', tenant.origin);
     await page.goto(download);
-    await expect(page.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     await expect(page.getByText(guest, { exact: true })).toBeVisible();
-    await expect(page.getByText(file.sha256)).toBeVisible();
+    await expect(page.getByText(file.sha256)).toBeAttached();
   });
 });

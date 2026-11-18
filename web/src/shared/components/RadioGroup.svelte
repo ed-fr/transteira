@@ -161,6 +161,14 @@
     accent-color: var(--tt-primary);
   }
 
+  /* Public pages (CLAUDE.md section 13.2): the label, which also checks its radio, is a target of
+     at least 44 px high (the administration keeps its compact rows). */
+  :global(.tt-page--public) .tt-radio__option label {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tt-control-height);
+  }
+
   .tt-radio__error {
     margin: var(--tt-space-2) 0 0;
     color: var(--tt-danger);

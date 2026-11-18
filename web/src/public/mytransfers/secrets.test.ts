@@ -7,6 +7,7 @@ import {
   secretDeliveryKey,
   secretListSilent,
   secretStateKey,
+  secretStateVariant,
   type MySecret,
 } from './secrets';
 
@@ -66,5 +67,17 @@ describe('loading', () => {
     expect(secretListSilent(problem(403))).toBe(false);
     expect(secretListSilent(problem(500))).toBe(false);
     expect(secretListSilent(new Error('network'))).toBe(false);
+  });
+});
+
+describe('secretStateVariant', () => {
+  it('maps every state to a badge family', () => {
+    expect(secretStateVariant('active')).toBe('success');
+    expect(secretStateVariant('pending')).toBe('info');
+    expect(secretStateVariant('read')).toBe('neutral');
+    expect(secretStateVariant('locked')).toBe('danger');
+    expect(secretStateVariant('expired')).toBe('warning');
+    expect(secretStateVariant('deleted')).toBe('warning');
+    expect(secretStateVariant('future')).toBe('neutral');
   });
 });

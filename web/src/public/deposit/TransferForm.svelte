@@ -1,33 +1,29 @@
 <script lang="ts">
-  // Deposit form (CLAUDE.md section 8.2): recipients (internal depositors only), message,
-  // validity, optional password, delete after the first download, files. Client-side checks
-  // mirror the server rules; on refusal, an error summary takes the focus and links to the
-  // fields (RGAA 11.10).
-  import { tick } from 'svelte';
-  import {
-    Alert,
-    Button,
-    Checkbox,
-    FileDrop,
-    FileList,
-    RadioGroup,
-    TextArea,
-    TextField,
-  } from '../../shared/components';
-  import { formatBytes, t } from '../../shared/i18n/i18n.svelte';
+  // Deposit form (CLAUDE.md sections 8.2 and 13.2): in the split public card, the files column on
+  // the left (form/FilesColumn) and the details column on the right (form/DetailsColumn: sender,
+  // recipients, message, level, duration, security options, submit), one column under the other on
+  // narrow screens (files first). Messages and the error summary sit at the top of the card, above
+  // both columns. Client-side checks mirror the server rules; on refusal, the error summary takes
+  // the focus and links to the fields (RGAA 11.10): a field of the "Security options" block opens
+  // it first, then gets the focus on the next tick.
+  // The "Security options" block opens by itself when more options come into effect (at first,
+  // chosen, or imposed by a change of level) and on a refusal when one of its fields is refused; it
+  // never closes by itself, so a block the depositor closed stays closed on a refusal elsewhere.
+  import { tick, untrack } from 'svelte';
+  import { Alert } from '../../shared/components';
+  import { t } from '../../shared/i18n/i18n.svelte';
   import type { DepositFlow } from './flow.svelte';
   import {
     fileIssues,
+    hasSecurityError,
     invalidFields,
-    maxDownloadsCap,
-    MAX_FILES,
-    MESSAGE_MAX_LENGTH,
-    recipientIssues,
+    isSecurityField,
     type FormField,
     type Message,
   } from './form';
-  import Countdown from './Countdown.svelte';
-  import SessionBar from './SessionBar.svelte';
+  import DetailsColumn from './form/DetailsColumn.svelte';
+  import FilesColumn from './form/FilesColumn.svelte';
+  import { FIELD_IDS, focusTargetId, securityOpensOnCount } from './view';
 
   interface Props {
     flow: DepositFlow;
@@ -36,70 +32,34 @@
 
   let { flow, onnavigate }: Props = $props();
 
-  const ids: Record<FormField, string> = {
-    recipients: 'tt-deposit-recipients',
-    message: 'tt-deposit-message',
-    expiryDays: 'tt-deposit-expiry',
-    password: 'tt-deposit-password',
-    maxDownloads: 'tt-deposit-max-downloads',
-    recipientVerification: 'tt-deposit-recipient-verification',
-    linkOnly: 'tt-deposit-link-only',
-    endToEnd: 'tt-deposit-e2e',
-    files: 'tt-deposit-files',
-  };
-
-  const levelGroupName = 'tt-deposit-level';
-
-  let showPassword = $state(false);
-  let remaining = $state(0);
   let summary: HTMLDivElement | undefined = $state();
+  let securityOpen = $state(false);
 
   const say = (m: Message | undefined): string | undefined =>
     m === undefined ? undefined : t(m.key, m.params);
 
   const errors = $derived(flow.formErrors);
   const fields = $derived(invalidFields(errors));
-  const recipientsError = $derived.by(() => {
-    const parts: string[] = [];
-    const general = say(errors['recipients']);
-    if (general !== undefined) {
-      parts.push(general);
-    }
-    for (const issue of recipientIssues(errors, flow.recipients)) {
-      parts.push(
-        t('deposit.form.recipients.addressError', {
-          address: issue.address,
-          message: say(issue.message) ?? '',
-        }),
-      );
-    }
-    return parts.length === 0 ? undefined : parts.join(' ');
-  });
+  const nameIssues = $derived(fileIssues(errors, flow.form.files.length));
   const filesError = $derived.by(() => {
     const general = say(errors['files']);
-    const names = fileIssues(errors, flow.form.files.length).size;
     if (general !== undefined) {
       return general;
     }
-    return names > 0 ? t('deposit.form.files.invalidNames', { count: names }) : undefined;
+    return nameIssues.size > 0 ? t('deposit.form.files.invalidNames', { count: nameIssues.size }) : undefined;
   });
-  const nameIssues = $derived(fileIssues(errors, flow.form.files.length));
-  const overLimit = $derived(flow.totalBytes > flow.limits.maxTransferBytes);
-  const levelOptions = $derived(
-    flow.levels.map((l) => ({
-      value: l.key,
-      label: l.label,
-      ...(l.description === undefined ? {} : { hint: l.description }),
-    })),
+  const hasMessages = $derived(
+    flow.notice !== undefined || flow.errorText !== undefined || fields.length > 0,
   );
-  const passwordRequired = $derived(flow.rules?.requirePassword === true);
-  const verificationForced = $derived(flow.rules?.requireRecipientVerification === true);
-  const deleteForced = $derived(flow.rules?.forceDeleteAfterFirstDownload === true);
-  const linkOnlyOn = $derived(flow.linkOnlyEffective);
-  const downloadsCap = $derived(maxDownloadsCap(flow.rules));
-  const expiryOptions = $derived(
-    flow.expiryOptions.map((d) => ({ value: d, label: t('deposit.form.expiry.days', { count: d }) })),
-  );
+  // More options in effect (chosen or imposed by the level) open the block.
+  let securityCount = 0;
+  $effect(() => {
+    const count = flow.activeSecurityCount;
+    if (securityOpensOnCount(securityCount, count)) {
+      securityOpen = true;
+    }
+    securityCount = count;
+  });
 
   function fieldLabel(field: FormField): string {
     switch (field) {
@@ -124,21 +84,33 @@
     }
   }
 
-  function focusField(event: MouseEvent, field: FormField): void {
+  async function focusField(event: MouseEvent, field: FormField): Promise<void> {
     event.preventDefault();
+    if (isSecurityField(field) && !securityOpen) {
+      securityOpen = true;
+      // The panel is rendered (hidden removed) on the next tick.
+      await tick();
+    }
     const target =
       field === 'expiryDays'
-        ? document.querySelector<HTMLElement>(`input[name="${ids.expiryDays}"]`)
-        : document.getElementById(ids[field]);
+        ? (document.querySelector<HTMLElement>(`input[name="${FIELD_IDS.expiryDays}"]:checked`) ??
+          document.querySelector<HTMLElement>(`input[name="${FIELD_IDS.expiryDays}"]`))
+        : document.getElementById(
+            focusTargetId(field, { password: flow.passwordEnabled, maxDownloads: flow.maxDownloadsEnabled }),
+          );
     target?.focus();
   }
 
-  // Focus the error summary each time the form is refused.
+  // Focus the error summary each time the form is refused, after opening the security block when
+  // one of its fields is refused (only then: a refusal elsewhere leaves the block as it is).
   let refusals = 0;
   $effect(() => {
     const count = flow.formRefusals;
     if (count !== refusals) {
       refusals = count;
+      if (hasSecurityError(untrack(() => flow.formErrors))) {
+        securityOpen = true;
+      }
       void tick().then(() => summary?.focus());
     }
   });
@@ -149,241 +121,63 @@
   }
 </script>
 
-<SessionBar {flow} {onnavigate} />
-
-<h1 tabindex="-1">{t('deposit.form.title')}</h1>
-
-{#if flow.notice}
-  <Alert severity="info">{t(flow.notice.key, flow.notice.params)}</Alert>
-{/if}
-
-{#if flow.errorText}
-  <Alert severity="error">{flow.errorText}</Alert>
-{/if}
-
-{#if fields.length > 0}
-  <Alert severity="error" title={t('deposit.form.summary', { count: fields.length })} bind:element={summary}>
-    <ul class="tt-mb-0">
-      {#each fields as field (field)}
-        <li><a href="#{ids[field]}" onclick={(e) => focusField(e, field)}>{fieldLabel(field)}</a></li>
-      {/each}
-    </ul>
-  </Alert>
-{/if}
-
-<form class="tt-stack" novalidate onsubmit={submit}>
-  {#if flow.isDropLink}
-    <Alert severity="info" live={false}>
-      {t('deposit.form.recipients.dropLink', { label: flow.dropLinkLabel ?? '' })}
-    </Alert>
-  {:else if flow.isReply}
-    <Alert severity="info" live={false}>
-      {t('deposit.form.recipients.reply', { recipient: flow.replyRecipient ?? '' })}
-    </Alert>
-  {:else if flow.isExternal}
-    <Alert severity="info" live={false}>
-      {t('deposit.form.recipients.external', { invitedBy: flow.invitedBy ?? '' })}
-    </Alert>
-  {:else}
-    <TextArea
-      id={ids.recipients}
-      label={t('deposit.form.recipients.label')}
-      hint={linkOnlyOn ? t('deposit.form.recipients.optionalHint') : t('deposit.form.recipients.hint')}
-      required={!linkOnlyOn}
-      rows={3}
-      autocomplete="email"
-      spellcheck={false}
-      error={recipientsError}
-      bind:value={flow.form.recipientsText}
-    />
-  {/if}
-
-  <TextArea
-    id={ids.message}
-    label={t('deposit.form.message.label')}
-    hint={t('deposit.form.message.hint')}
-    maxlength={MESSAGE_MAX_LENGTH}
-    rows={4}
-    error={say(errors['message'])}
-    bind:value={flow.form.message}
-  />
-
-  {#if flow.levels.length > 1 && !flow.isDropLink}
-    <RadioGroup
-      legend={t('deposit.form.level.legend')}
-      hint={t('deposit.form.level.hint')}
-      name={levelGroupName}
-      options={levelOptions}
-      required
-      value={flow.level?.key}
-      onchange={(key) => flow.setLevel(key)}
-    />
-  {/if}
-
-  {#if flow.isDropLink}
-    <p class="tt-mb-0">
-      {t('deposit.form.expiry.forcedByLink', { count: flow.expiryOptions[0] ?? 0 })}
-    </p>
-  {:else}
-    <RadioGroup
-      legend={t('deposit.form.expiry.legend')}
-      name={ids.expiryDays}
-      options={expiryOptions}
-      required
-      inline
-      error={say(errors['expiryDays'])}
-      bind:value={flow.form.expiryDays}
-    />
-  {/if}
-
-  <TextField
-    id={ids.password}
-    label={t('deposit.form.password.label')}
-    type={showPassword ? 'text' : 'password'}
-    autocomplete="new-password"
-    required={passwordRequired}
-    hint={passwordRequired ? t('deposit.form.password.requiredHint') : t('deposit.form.password.hint')}
-    error={say(errors['password'])}
-    bind:value={flow.form.password}
-  >
-    {#snippet addon()}
-      <Button
-        variant="secondary"
-        small
-        aria-pressed={showPassword}
-        onclick={() => (showPassword = !showPassword)}
-      >
-        {showPassword ? t('deposit.form.password.hide') : t('deposit.form.password.show')}
-      </Button>
-    {/snippet}
-  </TextField>
-
-  {#if flow.maxDownloadsOffered}
-    <TextField
-      id={ids.maxDownloads}
-      label={t('deposit.form.maxDownloads.label')}
-      type="number"
-      inputmode="numeric"
-      min={1}
-      max={downloadsCap}
-      hint={t('deposit.form.maxDownloads.hint', { max: downloadsCap })}
-      error={say(errors['maxDownloads'])}
-      bind:value={flow.form.maxDownloadsText}
-    />
-  {/if}
-
-  {#if flow.recipientVerificationOffered}
-    {#if verificationForced}
-      <Checkbox
-        id={ids.recipientVerification}
-        label={t('deposit.form.recipientVerification.label')}
-        hint={t('deposit.form.recipientVerification.forced')}
-        checked={true}
-        disabled
-      />
-    {:else}
-      <Checkbox
-        id={ids.recipientVerification}
-        label={t('deposit.form.recipientVerification.label')}
-        hint={linkOnlyOn
-          ? t('deposit.form.recipientVerification.incompatibleLinkOnly')
-          : t('deposit.form.recipientVerification.hint')}
-        disabled={linkOnlyOn}
-        error={say(errors['recipientVerification'])}
-        bind:checked={flow.form.recipientVerification}
-      />
+{#if hasMessages}
+  <div class="tt-pcard__section tt-stack">
+    {#if flow.notice}
+      <Alert severity="info">{t(flow.notice.key, flow.notice.params)}</Alert>
     {/if}
-  {/if}
 
-  {#if flow.linkOnlyOffered}
-    <Checkbox
-      id={ids.linkOnly}
-      label={t('deposit.form.linkOnly.label')}
-      hint={flow.linkOnlyBlockedByVerification
-        ? t('deposit.form.linkOnly.blockedByVerification')
-        : t('deposit.form.linkOnly.hint')}
-      disabled={flow.linkOnlyBlockedByVerification}
-      error={say(errors['linkOnly'])}
-      checked={flow.form.linkOnly}
-      onchange={(e) => flow.setLinkOnly(e.currentTarget.checked)}
-    />
-  {/if}
+    {#if flow.errorText}
+      <Alert severity="error">{flow.errorText}</Alert>
+    {/if}
 
-  {#if flow.e2eOffered}
-    <Checkbox
-      id={ids.endToEnd}
-      label={t('deposit.e2e.label')}
-      hint={flow.e2eRequired ? t('deposit.e2e.requiredHint') : t('deposit.e2e.hint')}
-      disabled={flow.e2eRequired}
-      error={say(errors['endToEnd'])}
-      checked={flow.e2eEffective}
-      onchange={(e) => (flow.form.endToEnd = e.currentTarget.checked)}
-    />
-  {/if}
+    {#if fields.length > 0}
+      <Alert
+        severity="error"
+        title={t('deposit.form.summary', { count: fields.length })}
+        bind:element={summary}
+      >
+        <ul class="tt-mb-0 tt-deposit-summary">
+          {#each fields as field (field)}
+            <li>
+              <a href="#{FIELD_IDS[field]}" onclick={(e) => void focusField(e, field)}>{fieldLabel(field)}</a>
+            </li>
+          {/each}
+        </ul>
+      </Alert>
+    {/if}
+  </div>
+{/if}
 
-  {#if deleteForced}
-    <Checkbox
-      id="tt-deposit-delete-after-first"
-      label={t('deposit.form.deleteAfterFirstDownload.label')}
-      hint={t('deposit.form.deleteAfterFirstDownload.forced')}
-      checked={true}
-      disabled
-    />
-  {:else}
-    <Checkbox
-      id="tt-deposit-delete-after-first"
-      label={t('deposit.form.deleteAfterFirstDownload.label')}
-      hint={t('deposit.form.deleteAfterFirstDownload.hint')}
-      bind:checked={flow.form.deleteAfterFirstDownload}
-    />
-  {/if}
-
-  <FileDrop
-    id={ids.files}
-    label={t('deposit.form.files.label')}
-    hint={t('deposit.form.files.hint', { max: formatBytes(flow.limits.maxTransferBytes), count: MAX_FILES })}
-    required
-    error={filesError}
-    onfiles={(files) => flow.addFiles(files)}
-    folders={flow.foldersEnabled}
-    onpicked={(files) => flow.addPicked(files)}
-    room={flow.fileRoom}
-  />
-
-  <FileList
-    files={flow.form.files}
-    onremove={(index) => flow.removeFile(index)}
-    disabled={flow.busy}
-    showTotal
-  >
-    {#snippet details(_file, index)}
-      {@const issue = nameIssues.get(index)}
-      {#if issue}
-        <p class="tt-text-danger tt-text-sm tt-mb-0">{say(issue)}</p>
-      {/if}
-    {/snippet}
-  </FileList>
-
-  {#if flow.form.files.length > 0}
-    <p class="tt-text-sm" class:tt-text-danger={overLimit}>
-      {t('deposit.form.files.total', {
-        total: formatBytes(flow.totalBytes),
-        max: formatBytes(flow.limits.maxTransferBytes),
-      })}
-    </p>
-  {/if}
-
-  <Countdown until={flow.retryAt} bind:remaining />
-  {#if flow.noUsableLevel}
-    <Alert severity="error">{t('deposit.form.level.none')}</Alert>
-  {:else}
-    <Button
-      type="submit"
-      loading={flow.busy}
-      disabled={remaining > 0}
-      loadingLabel={t('deposit.form.submitting')}
-    >
-      {t('deposit.form.submit')}
-    </Button>
-  {/if}
+<form class="tt-pcard__columns tt-deposit-form" novalidate onsubmit={submit}>
+  <div class="tt-pcard__pane tt-pcard__pane--muted tt-stack">
+    <FilesColumn {flow} error={filesError} {nameIssues} />
+  </div>
+  <div class="tt-pcard__pane tt-stack">
+    <DetailsColumn {flow} {errors} {onnavigate} bind:securityOpen />
+  </div>
 </form>
+
+<style>
+  /*
+   * The two panes of the deposit form: one column on phones and narrow windows (files first),
+   * else 45 % files and 55 % details, so that the duration and the confidentiality level fit side
+   * by side with their full labels (DetailsColumn stacks them again when they do not fit).
+   */
+  .tt-deposit-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  @media (min-width: 54rem) {
+    .tt-deposit-form {
+      grid-template-columns: minmax(0, 9fr) minmax(0, 11fr);
+    }
+  }
+
+  /* Links of the error summary: 44 px targets (public pages). */
+  .tt-deposit-summary a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tt-control-height);
+  }
+</style>

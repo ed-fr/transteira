@@ -9,6 +9,7 @@
   import { problemMessage } from '../../shared/api/problem';
   import {
     Alert,
+    Badge,
     Button,
     CopyButton,
     Dialog,
@@ -27,6 +28,7 @@
     extensionOptions,
     isSessionExpired,
     statusKey,
+    statusVariant,
     type MyTransferDetail,
   } from './logic';
 
@@ -242,7 +244,7 @@
           : transfer.recipients.join(', '))}
     </dd>
     <dt>{t('myTransfers.list.status')}</dt>
-    <dd>{t(statusKey(transfer.status))}</dd>
+    <dd><Badge variant={statusVariant(transfer.status)}>{t(statusKey(transfer.status))}</Badge></dd>
     <dt>{t('myTransfers.detail.created')}</dt>
     <dd>{when(transfer.createdAt)}</dd>
     <dt>{t('myTransfers.list.expires')}</dt>
@@ -487,6 +489,13 @@
   .table-wrap {
     overflow-x: auto;
     margin: var(--tt-space-4) 0;
+    border: var(--tt-border-width) solid var(--tt-separator);
+    border-radius: var(--tt-radius-lg);
+  }
+
+  .grid thead th {
+    background: var(--tt-surface-muted);
+    font-size: var(--tt-font-size-sm);
   }
 
   .grid {
@@ -496,8 +505,8 @@
 
   .grid th,
   .grid td {
-    padding: var(--tt-space-2);
-    border-bottom: 1px solid var(--tt-border);
+    padding: var(--tt-space-3);
+    border-bottom: 1px solid var(--tt-separator);
     text-align: left;
     vertical-align: top;
   }

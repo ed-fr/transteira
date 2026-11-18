@@ -5,13 +5,19 @@ import {
   fieldOf,
   fileIssues,
   fileNameError,
+  hasSecurityError,
   invalidFields,
   isEmail,
+  isSecurityField,
+  levelDownloadsCap,
   mapServerErrors,
   parseRecipients,
-  recipientIssues,
+  recipientIssueMap,
+  SECURITY_FIELDS,
   validateForm,
+  validatePolicy,
   type FormValues,
+  type LevelRules,
 } from './form';
 
 describe('parseRecipients', () => {
@@ -183,10 +189,9 @@ describe('error helpers', () => {
     other: { key: 'o' },
   };
 
-  it('lists recipient issues with their address', () => {
-    expect(recipientIssues(errors, ['a@x.example', 'b@x.example'])).toEqual([
-      { address: 'b@x.example', message: { key: 'r1' } },
-    ]);
+  it('maps recipient issues by index', () => {
+    expect([...recipientIssueMap(errors, 2)]).toEqual([[1, { key: 'r1' }]]);
+    expect(recipientIssueMap(errors, 1).size).toBe(0);
   });
 
   it('lists file issues by index', () => {
@@ -206,5 +211,56 @@ describe('error helpers', () => {
     expect(defaultExpiry([1, 7, 30])).toBe(7);
     expect(defaultExpiry([1, 30])).toBe(1);
     expect(defaultExpiry([])).toBeUndefined();
+  });
+});
+
+describe('security options', () => {
+  const rules: LevelRules = {
+    requireRecipientVerification: false,
+    requirePassword: false,
+    allowedExpiryDays: [1, 7, 30],
+    internalRecipientsOnly: false,
+    forceDeleteAfterFirstDownload: false,
+    maxDownloads: null,
+  };
+
+  it('tells the fields of the block', () => {
+    expect(SECURITY_FIELDS).toEqual(['password', 'maxDownloads', 'recipientVerification', 'endToEnd']);
+    expect(isSecurityField('password')).toBe(true);
+    expect(isSecurityField('endToEnd')).toBe(true);
+    expect(isSecurityField('recipients')).toBe(false);
+    expect(hasSecurityError({ 'files.0.name': { key: 'f' } })).toBe(false);
+    expect(hasSecurityError({ maxDownloads: { key: 'm' }, message: { key: 'x' } })).toBe(true);
+    expect(hasSecurityError({})).toBe(false);
+  });
+
+  it('gives the cap of the level only when it sets one', () => {
+    expect(levelDownloadsCap(undefined)).toBeUndefined();
+    expect(levelDownloadsCap(rules)).toBeUndefined();
+    expect(levelDownloadsCap({ ...rules, maxDownloads: 3 })).toBe(3);
+    expect(levelDownloadsCap({ ...rules, maxDownloads: 5000 })).toBe(1000);
+  });
+
+  it('refuses a switch turned on with its field left empty', () => {
+    expect(validatePolicy('', '', rules, true, { passwordOn: true, maxDownloadsOn: true })).toEqual({
+      password: { key: 'deposit.form.password.empty' },
+      maxDownloads: { key: 'deposit.form.maxDownloads.empty' },
+    });
+    // Without the switches (or with values), nothing changes.
+    expect(validatePolicy('', '', rules, true)).toEqual({});
+    expect(validatePolicy('', '', rules, true, {})).toEqual({});
+    expect(validatePolicy('pw', '2', rules, true, { passwordOn: true, maxDownloadsOn: true })).toEqual({});
+    // The option is not offered: no download error.
+    expect(validatePolicy('pw', '', rules, false, { maxDownloadsOn: true })).toEqual({});
+  });
+
+  it('keeps the level errors first and accepts an empty field under a cap', () => {
+    const level = { ...rules, requirePassword: true, maxDownloads: 3 };
+    expect(validatePolicy('', '', level, true, { passwordOn: true, maxDownloadsOn: true })).toEqual({
+      password: { key: 'deposit.form.password.requiredByLevel' },
+    });
+    expect(validatePolicy('pw', 'x', rules, true, { maxDownloadsOn: true })['maxDownloads']?.key).toBe(
+      'deposit.form.maxDownloads.invalid',
+    );
   });
 });

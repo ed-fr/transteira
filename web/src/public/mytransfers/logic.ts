@@ -249,3 +249,8 @@ export function phaseAfterError(err: unknown): Phase | undefined {
 export function statusKey(status: string): string {
   return status === 'scanning' ? 'myTransfers.status.scanning' : 'myTransfers.status.available';
 }
+
+/** Badge colour family of a transfer status (the text always carries the meaning). */
+export function statusVariant(status: string): 'info' | 'success' {
+  return status === 'scanning' ? 'info' : 'success';
+}

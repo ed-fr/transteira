@@ -1,6 +1,6 @@
 {
   "index": {
-    "intro": "Choose the guide that matches what you want to do. Each screen also has a help link at the bottom of the page, which opens the matching section directly.",
+    "intro": "Choose the guide that matches what you want to do. Each screen also has a help link, in the header and in the footer, which opens the matching section directly.",
     "guides": "Guides"
   },
   "guides": {

@@ -54,6 +54,14 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 - `AbuseReport` of the admin API: `transferId` and `senderEmail` are no longer required (a report
   on a secret has neither) and `secretId` is added.
+- Public pages redesign (specification section 13.2): glass header with "My transfers", the
+  express secret, language, theme and help; rounded card on the background image; discreet footer
+  with "Powered by TransTeira". The deposit is a two-column card (drop zone, file cards and volume
+  gauge; sender banner, recipient chips, segmented duration and confidentiality level, collapsible
+  "Security options" block with switches). The download page shows "N files for you", information
+  pills, one line per file with an antivirus badge and an abbreviated SHA-256 fingerprint with a
+  Copy button, and "Reply with files" and "Report an abuse" at the bottom. The administration is
+  unchanged, except the branding preview. User guides, integrated help and screenshots updated.
 
 ## [2.2.0] - 2026-11-11
 

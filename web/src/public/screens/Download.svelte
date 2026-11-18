@@ -14,20 +14,32 @@
   // Downloads stay available during maintenance (the banner is shown by App.svelte).
   // When the window gets the focus back, the transfer is read again (at most once a minute): the
   // one-hour download grant may have expired (password form again), or the transfer may be gone.
+  // Layout of version 2.3 (section 13.2), in a medium public card (CardFrame; narrow for the end
+  // states): header with the sender initial, "N files for you" and the sender address
+  // (download/Header); information pills (download/InfoPills: relative expiry, level, downloads
+  // left, total size); the message in a bubble; the antivirus summary banner; the prominent ZIP
+  // link; the list "Files of this transfer", one row per file (download/FileRow); the bottom strip
+  // with "Reply with files" and "Report an abuse" (download/BottomStrip).
   import { onDestroy, onMount, tick } from 'svelte';
   import { api } from '../../shared/api/api';
-  import { Alert, Button, CopyButton, Spinner, TextField, announce } from '../../shared/components';
+  import { Alert, Button, Icon, Spinner, TextField, announce, type IconName } from '../../shared/components';
   import { fullName } from '../../shared/components/folders';
   import { ARCHIVE_NAME } from '../../shared/e2e/archive-names';
   import { languageValues } from '../../shared/api/schema';
-  import { formatBytes, formatDate, i18n, t } from '../../shared/i18n/i18n.svelte';
+  import { formatBytes, i18n, t } from '../../shared/i18n/i18n.svelte';
   import {
     E2EDownloader,
     E2EDownloadError,
     type DownloadErrorCode,
     type DownloadEvents,
   } from '../../shared/e2e/download';
+  import { useCardFrame, type CardSize } from '../frame/card.svelte';
+  import { startClock } from './clock';
   import { Countdown } from './countdown.svelte';
+  import BottomStrip from './download/BottomStrip.svelte';
+  import DownloadFileRow from './download/FileRow.svelte';
+  import Header from './download/Header.svelte';
+  import InfoPills from './download/InfoPills.svelte';
   import {
     isDowngrade,
     isEndToEnd,
@@ -39,13 +51,11 @@
   } from './e2e';
   import ErrorPage from './ErrorPage.svelte';
   import NotFound from './NotFound.svelte';
-  import ReportAbuse from './ReportAbuse.svelte';
   import VerificationStep from './VerificationStep.svelte';
   import {
     canReply,
     replyFailure,
     downloadView,
-    isNotScanned,
     downloadLoadFailure,
     needsVerification,
     shouldRecheck,
@@ -107,6 +117,16 @@
   let filesHeading: HTMLHeadingElement | undefined = $state();
 
   let lastLoadAt = 0;
+  // Clock of the relative expiry: the time of the last successful read of the transfer, moved on
+  // every 30 seconds while the page stays open (the text would otherwise stay frozen).
+  let now = $state(Date.now());
+  onMount(() => startClock((time) => (now = time)));
+
+  // Medium card for the transfer (password and verification steps included), narrow for the end
+  // states (not found, gone, error), like the other short pages.
+  const frame = useCardFrame();
+  const cardSize = $derived<CardSize>(view.kind === 'loading' || view.kind === 'ready' ? 'medium' : 'narrow');
+  $effect.pre(() => frame?.request(cardSize));
 
   /**
    * Opens the sealed metadata of an unlocked end-to-end encrypted transfer with the current key.
@@ -220,6 +240,7 @@
         view = { kind: 'downgrade' };
         return;
       }
+      now = Date.now();
       view = { kind: 'ready', transfer: data };
       void openTransfer(data, false);
     } catch (err) {
@@ -241,6 +262,7 @@
         view = { kind: 'downgrade' };
         return;
       }
+      now = Date.now();
       view = { kind: 'ready', transfer: data };
       void openTransfer(data, false);
       if (wasUnlocked && needsVerification(data)) {
@@ -389,29 +411,38 @@
 
 <svelte:window onfocus={() => void recheck()} />
 
+<!-- End state of the page (not found, gone, refused): a decorative icon above the explanation. -->
+{#snippet ended(icon: IconName, tone: 'neutral' | 'danger', title: string, text: string)}
+  <div class="tt-dlend">
+    <span class="tt-dlend__icon tt-dlend__icon--{tone}"><Icon name={icon} size="lg" /></span>
+    <NotFound {nav} {title} {text} homeLink={false} />
+  </div>
+{/snippet}
+
+<!-- Message of the sender, in a bubble under a heading for screen readers. -->
+{#snippet bubble(text: string)}
+  <div class="tt-dl__message">
+    <h2 class="visually-hidden">{t('download.message')}</h2>
+    <p class="tt-dl__bubble tt-break">{text}</p>
+  </div>
+{/snippet}
+
 {#if view.kind === 'loading'}
   <h1 tabindex="-1">{t('download.title')}</h1>
   <Spinner showLabel />
 {:else if view.kind === 'not-found'}
-  <NotFound {nav} title={t('download.notFound.title')} text={t('download.notFound.text')} homeLink={false} />
+  {@render ended('x', 'neutral', t('download.notFound.title'), t('download.notFound.text'))}
 {:else if view.kind === 'gone'}
-  <NotFound {nav} title={t('download.gone.title')} text={t('download.gone.text')} homeLink={false} />
+  {@render ended('clock', 'neutral', t('download.gone.title'), t('download.gone.text'))}
 {:else if view.kind === 'max-downloads'}
-  <NotFound
-    {nav}
-    title={t('download.maxDownloads.title')}
-    text={t('download.maxDownloads.text')}
-    homeLink={false}
-  />
+  {@render ended('download', 'neutral', t('download.maxDownloads.title'), t('download.maxDownloads.text'))}
 {:else if view.kind === 'downgrade'}
-  <NotFound
-    {nav}
-    title={t('download.e2e.downgrade.title')}
-    text={t('download.e2e.downgrade.text')}
-    homeLink={false}
-  />
+  {@render ended('alert', 'danger', t('download.e2e.downgrade.title'), t('download.e2e.downgrade.text'))}
 {:else if view.kind === 'error'}
-  <ErrorPage onretry={() => void retry()} {retrying} />
+  <div class="tt-dlend">
+    <span class="tt-dlend__icon tt-dlend__icon--neutral"><Icon name="alert" size="lg" /></span>
+    <ErrorPage onretry={() => void retry()} {retrying} />
+  </div>
 {:else if replyVerifying}
   <VerificationStep
     {token}
@@ -436,394 +467,355 @@
     }}
     ongone={(kind) => (view = { kind })}
   />
-  <ReportAbuse {token} />
+  <BottomStrip {token} />
 {:else if view.transfer.locked}
   {@const transfer = view.transfer}
-  <h1 tabindex="-1">{t('download.locked.title')}</h1>
-  <dl class="tt-dl">
-    <dt>{t('download.sender')}</dt>
-    <dd>{transfer.senderEmail}</dd>
-    <dt>{t('download.expires')}</dt>
-    <dd>{formatDate(transfer.expiresAt, { dateStyle: 'long', timeStyle: 'short' })}</dd>
-    {#if transfer.confidentialityLevel}
-      <dt>{t('download.level')}</dt>
-      <dd>{transfer.confidentialityLevel.label}</dd>
+  <div class="tt-dl">
+    <Header title={t('download.locked.title')} senderEmail={transfer.senderEmail} />
+    <InfoPills expiresAt={transfer.expiresAt} {now} levelLabel={transfer.confidentialityLevel?.label} />
+    <p>{t('download.locked.text')}</p>
+    {#if isEndToEnd(transfer)}
+      <p>{t('download.e2e.lockedNotice')}</p>
     {/if}
-  </dl>
-  <p>{t('download.locked.text')}</p>
-  {#if isEndToEnd(transfer)}
-    <p>{t('download.e2e.lockedNotice')}</p>
-  {/if}
-  <form class="tt-stack" onsubmit={unlock} novalidate>
-    {#if formError}
-      <Alert severity="error">
-        {formError}
-        {#if lock.active}
-          {t('common.retryAfter', { count: lock.remaining })}
-        {/if}
-      </Alert>
-    {/if}
-    <TextField
-      label={t('download.locked.label')}
-      type="password"
-      autocomplete="off"
-      required
-      bind:value={password}
-      bind:element={passwordInput}
-      error={passwordError}
-      disabled={lock.active}
-    />
-    <Button type="submit" loading={unlocking} disabled={lock.active}>{t('download.locked.submit')}</Button>
-  </form>
-  <ReportAbuse {token} />
+    <form class="tt-stack tt-dl__form" onsubmit={unlock} novalidate>
+      {#if formError}
+        <Alert severity="error">
+          {formError}
+          {#if lock.active}
+            {t('common.retryAfter', { count: lock.remaining })}
+          {/if}
+        </Alert>
+      {/if}
+      <TextField
+        label={t('download.locked.label')}
+        type="password"
+        autocomplete="off"
+        required
+        bind:value={password}
+        bind:element={passwordInput}
+        error={passwordError}
+        disabled={lock.active}
+      />
+      <Button type="submit" loading={unlocking} disabled={lock.active}>{t('download.locked.submit')}</Button>
+    </form>
+  </div>
+  <BottomStrip {token} />
 {:else}
   {@const transfer = view.transfer}
   {@const dl = downloadView(transfer)}
   {@const opened = e2e?.kind === 'open' ? e2e : undefined}
   {@const fileCount = opened ? opened.files.length : dl.files.length}
   {@const totalBytes = opened ? opened.totalBytes : dl.totalBytes}
-  <h1 tabindex="-1" bind:this={filesHeading}>{t('download.title')}</h1>
-  <dl class="tt-dl">
-    <dt>{t('download.sender')}</dt>
-    <dd>{transfer.senderEmail}</dd>
-    <dt>{t('download.expires')}</dt>
-    <dd>{formatDate(transfer.expiresAt, { dateStyle: 'long', timeStyle: 'short' })}</dd>
-    <dt>{t('download.total')}</dt>
-    <dd>{t('download.totalValue', { count: fileCount, size: formatBytes(totalBytes) })}</dd>
-    {#if dl.levelLabel !== undefined}
-      <dt>{t('download.level')}</dt>
-      <dd>{dl.levelLabel}</dd>
+  <div class="tt-dl">
+    <Header
+      title={t('download.heading', { count: fileCount })}
+      senderEmail={transfer.senderEmail}
+      bind:element={filesHeading}
+    />
+    <InfoPills
+      expiresAt={transfer.expiresAt}
+      {now}
+      levelLabel={dl.levelLabel}
+      downloadsRemaining={dl.downloadsRemaining}
+      {totalBytes}
+    />
+    {#if transfer.reply}
+      <Alert severity="warning" live={false} class="tt-dl__alert">
+        {t('download.reply.notice', { tenant: tenant.name })}
+      </Alert>
     {/if}
-    {#if dl.downloadsRemaining !== undefined}
-      <dt>{t('download.downloadsRemaining')}</dt>
-      <dd>{dl.downloadsRemaining}</dd>
+    {#if transfer.message}
+      {@render bubble(transfer.message)}
     {/if}
-  </dl>
-  {#if transfer.reply}
-    <Alert severity="warning" live={false}>{t('download.reply.notice', { tenant: tenant.name })}</Alert>
-  {/if}
-  {#if transfer.message}
-    <h2 class="tt-text-lg">{t('download.message')}</h2>
-    <p class="tt-break message">{transfer.message}</p>
-  {/if}
-  {#if opened?.message}
-    <h2 class="tt-text-lg">{t('download.message')}</h2>
-    <p class="tt-break message">{opened.message}</p>
-  {/if}
+    {#if opened?.message}
+      {@render bubble(opened.message)}
+    {/if}
 
-  {#if dl.deleteAfterFirstDownload}
-    <Alert severity="warning" live={false}>{t('download.deleteAfterFirst')}</Alert>
-  {/if}
-  {#if isEndToEnd(transfer)}
-    <Alert severity="warning" live={false}>{t('download.e2e.notice')}</Alert>
-    {#if !cryptoAvailable || e2e?.kind === 'unsupported'}
-      <Alert severity="error">{t('download.e2e.unsupported')}</Alert>
-    {:else if keyBytes === undefined}
-      <section class="tt-stack" aria-labelledby="tt-e2e-key-title">
-        <h2 id="tt-e2e-key-title" class="tt-text-lg">{t('download.e2e.key.title')}</h2>
-        <p class="tt-mb-0">{t('download.e2e.key.text')}</p>
-        <form class="tt-stack" onsubmit={submitKey} novalidate>
-          <TextField
-            id="tt-e2e-key"
-            label={t('download.e2e.key.label')}
-            hint={t('download.e2e.key.hint')}
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck={false}
-            required
-            bind:value={keyText}
-            bind:element={keyInput}
-            error={keyError}
-          />
-          <div class="tt-cluster">
-            <Button type="submit" id="tt-e2e-key-submit">{t('download.e2e.key.submit')}</Button>
-          </div>
-        </form>
-      </section>
-    {:else if e2e === undefined}
-      <Spinner label={t('download.e2e.opening')} showLabel />
-    {:else if e2e.kind === 'tampered'}
-      <Alert severity="error">{t('download.e2e.tampered')}</Alert>
-    {:else if opened}
-      {#if downloadError}
-        <!-- Announced by decryptDownload (assertive): not a live region of its own. -->
-        <Alert severity="error" live={false}>{downloadError}</Alert>
+    {#if dl.deleteAfterFirstDownload}
+      <Alert severity="warning" live={false} class="tt-dl__alert">{t('download.deleteAfterFirst')}</Alert>
+    {/if}
+    {#if isEndToEnd(transfer)}
+      <Alert severity="warning" live={false} class="tt-dl__alert">{t('download.e2e.notice')}</Alert>
+      {#if !cryptoAvailable || e2e?.kind === 'unsupported'}
+        <Alert severity="error" class="tt-dl__alert">{t('download.e2e.unsupported')}</Alert>
+      {:else if keyBytes === undefined}
+        <section class="tt-stack tt-dl__key" aria-labelledby="tt-e2e-key-title">
+          <h2 id="tt-e2e-key-title" class="tt-text-lg">{t('download.e2e.key.title')}</h2>
+          <p class="tt-mb-0">{t('download.e2e.key.text')}</p>
+          <form class="tt-stack tt-dl__form" onsubmit={submitKey} novalidate>
+            <TextField
+              id="tt-e2e-key"
+              label={t('download.e2e.key.label')}
+              hint={t('download.e2e.key.hint')}
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck={false}
+              required
+              bind:value={keyText}
+              bind:element={keyInput}
+              error={keyError}
+            />
+            <div class="tt-cluster">
+              <Button type="submit" id="tt-e2e-key-submit">{t('download.e2e.key.submit')}</Button>
+            </div>
+          </form>
+        </section>
+      {:else if e2e === undefined}
+        <Spinner label={t('download.e2e.opening')} showLabel />
+      {:else if e2e.kind === 'tampered'}
+        <Alert severity="error" class="tt-dl__alert">{t('download.e2e.tampered')}</Alert>
+      {:else if opened}
+        {#if downloadError}
+          <!-- Announced by decryptDownload (assertive): not a live region of its own. -->
+          <Alert severity="error" live={false} class="tt-dl__alert">{downloadError}</Alert>
+        {/if}
+        {#if opened.files.length === 0}
+          <p>{t('download.noFiles')}</p>
+        {:else}
+          {#if opened.files.every((f) => f.url !== undefined)}
+            <div class="tt-dl__zip">
+              <Button
+                id="tt-e2e-archive"
+                class="tt-dl__zipbtn"
+                loading={busy['archive'] === true}
+                disabled={downloadPending && busy['archive'] !== true}
+                loadingLabel={t('download.e2e.busy')}
+                onclick={() =>
+                  void decryptDownload('archive', ARCHIVE_NAME, (d, events) =>
+                    d.downloadArchive(
+                      opened.key,
+                      opened.files.map((f) => ({
+                        url: f.url ?? '',
+                        index: f.index,
+                        name: f.entryName,
+                        size: f.size,
+                        sha256: f.sha256,
+                      })),
+                      ARCHIVE_NAME,
+                      events,
+                    ),
+                  )}
+              >
+                {#if busy['archive'] !== true}<Icon name="download" />{/if}
+                {t('download.archive.button')}
+              </Button>
+              <p class="tt-dl__hint">{t('download.e2e.archiveHint')}</p>
+            </div>
+          {/if}
+
+          <ul class="tt-dl__files" aria-label={t('download.files.caption')}>
+            {#each opened.files as file (file.id)}
+              {@const name = fullName(file.path, file.name)}
+              {@const url = file.url}
+              {#snippet decrypt()}
+                {#if url !== undefined}
+                  <Button
+                    variant="secondary"
+                    class="tt-dlrow__action"
+                    loading={busy[file.id] === true}
+                    disabled={downloadPending && busy[file.id] !== true}
+                    loadingLabel={t('download.e2e.busyName', { name })}
+                    title={t('download.files.downloadFile', { name })}
+                    onclick={() =>
+                      void decryptDownload(file.id, name, (d, events) =>
+                        d.downloadFile(
+                          opened.key,
+                          {
+                            url,
+                            index: file.index,
+                            name: file.name,
+                            size: file.size,
+                            sha256: file.sha256,
+                          },
+                          events,
+                        ),
+                      )}
+                  >
+                    {#if busy[file.id] !== true}<Icon name="download" />{/if}<span class="visually-hidden"
+                      >{t('download.files.downloadFile', { name })}</span
+                    >
+                  </Button>
+                {/if}
+              {/snippet}
+              <DownloadFileRow
+                name={file.name}
+                path={file.path}
+                size={file.size}
+                scanStatus="not_scanned_e2e"
+                sha256={file.sha256}
+                cipherSha256={file.ciphertextSha256}
+                action={url === undefined ? undefined : decrypt}
+              />
+            {/each}
+          </ul>
+          <p class="tt-dl__note">{t('download.e2e.integrity')}</p>
+        {/if}
       {/if}
-      {#if opened.files.length === 0}
+    {:else}
+      {#if dl.notScanned > 0}
+        <Alert
+          severity="warning"
+          live={false}
+          class="tt-dl__alert"
+          title={t('download.scan.summaryTitle', { count: dl.notScanned })}
+        >
+          {t('download.scan.summaryText', { count: dl.notScanned })}
+        </Alert>
+      {/if}
+
+      {#if dl.files.length === 0}
         <p>{t('download.noFiles')}</p>
       {:else}
-        {#if opened.files.every((f) => f.url !== undefined)}
-          <p class="tt-mt-4">
-            <Button
-              id="tt-e2e-archive"
-              loading={busy['archive'] === true}
-              disabled={downloadPending && busy['archive'] !== true}
-              loadingLabel={t('download.e2e.busy')}
-              onclick={() =>
-                void decryptDownload('archive', ARCHIVE_NAME, (d, events) =>
-                  d.downloadArchive(
-                    opened.key,
-                    opened.files.map((f) => ({
-                      url: f.url ?? '',
-                      index: f.index,
-                      name: f.entryName,
-                      size: f.size,
-                      sha256: f.sha256,
-                    })),
-                    ARCHIVE_NAME,
-                    events,
-                  ),
-                )}
-            >
+        {#if dl.archiveHref}
+          <div class="tt-dl__zip">
+            <a class="tt-dl__zipbtn" href={dl.archiveHref} download>
+              <Icon name="download" />
               {t('download.archive.button')}
-            </Button>
-          </p>
-          <p class="tt-text-muted tt-text-sm">{t('download.e2e.archiveHint')}</p>
+            </a>
+            <p class="tt-dl__hint">{t('download.archive.hint', { size: formatBytes(dl.totalBytes) })}</p>
+          </div>
         {/if}
 
-        <div class="table-wrap">
-          <table class="files">
-            <caption>{t('download.files.caption')}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{t('download.files.name')}</th>
-                <th scope="col">{t('download.files.size')}</th>
-                <th scope="col">{t('download.files.sha256')}</th>
-                <th scope="col">{t('download.files.action')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each opened.files as file (file.id)}
-                {@const name = fullName(file.path, file.name)}
-                <tr>
-                  <th scope="row" class="tt-break file-name">
-                    {#if file.path}<span class="tt-text-muted">{file.path}/</span>{/if}{file.name}
-                    <span class="scan-warning tt-text-sm">{t('download.e2e.notScanned')}</span>
-                  </th>
-                  <td class="nowrap">{formatBytes(file.size)}</td>
-                  <td>
-                    <span class="sha-label tt-text-sm">{t('download.e2e.sha256Plain')}</span>
-                    <code class="tt-mono tt-break">{file.sha256}</code>
-                    <CopyButton small text={file.sha256} ariaLabel={t('download.files.copySha', { name })} />
-                    <span class="sha-label tt-text-sm">{t('download.e2e.sha256Cipher')}</span>
-                    <code class="tt-mono tt-break">{file.ciphertextSha256}</code>
-                    <CopyButton
-                      small
-                      text={file.ciphertextSha256}
-                      ariaLabel={t('download.e2e.copyCipherSha', { name })}
-                    />
-                  </td>
-                  <td>
-                    {#if file.url}
-                      {@const url = file.url}
-                      <Button
-                        variant="secondary"
-                        small
-                        loading={busy[file.id] === true}
-                        disabled={downloadPending && busy[file.id] !== true}
-                        loadingLabel={t('download.e2e.busyName', { name })}
-                        onclick={() =>
-                          void decryptDownload(file.id, name, (d, events) =>
-                            d.downloadFile(
-                              opened.key,
-                              {
-                                url,
-                                index: file.index,
-                                name: file.name,
-                                size: file.size,
-                                sha256: file.sha256,
-                              },
-                              events,
-                            ),
-                          )}
-                      >
-                        {t('download.files.download')}<span class="visually-hidden">
-                          {t('download.files.downloadName', { name })}</span
-                        >
-                      </Button>
-                    {:else}
-                      <span class="tt-text-muted">{t('download.files.unavailable')}</span>
-                    {/if}
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-        <p class="tt-text-muted tt-text-sm">{t('download.e2e.integrity')}</p>
+        <ul class="tt-dl__files" aria-label={t('download.files.caption')}>
+          {#each dl.files as file (file.id)}
+            <DownloadFileRow
+              name={file.name}
+              path={file.path}
+              size={file.size}
+              scanStatus={file.scanStatus}
+              sha256={file.sha256}
+              href={file.href}
+            />
+          {/each}
+        </ul>
+        <p class="tt-dl__note">{t('download.integrity')}</p>
       {/if}
     {/if}
-  {:else}
-    {#if dl.hasUnscanned}
-      <Alert severity="warning" live={false}>{t('download.scan.summary')}</Alert>
-    {/if}
-
-    {#if dl.files.length === 0}
-      <p>{t('download.noFiles')}</p>
-    {:else}
-      {#if dl.archiveHref}
-        <p class="tt-mt-4">
-          <a class="link-button link-button--primary" href={dl.archiveHref} download>
-            {t('download.archive.button')}
-          </a>
-        </p>
-        <p class="tt-text-muted tt-text-sm">{t('download.archive.hint')}</p>
-      {/if}
-
-      <div class="table-wrap">
-        <table class="files">
-          <caption>{t('download.files.caption')}</caption>
-          <thead>
-            <tr>
-              <th scope="col">{t('download.files.name')}</th>
-              <th scope="col">{t('download.files.size')}</th>
-              <th scope="col">{t('download.files.sha256')}</th>
-              <th scope="col">{t('download.files.action')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each dl.files as file (file.id)}
-              <tr>
-                <th scope="row" class="tt-break file-name">
-                  {#if file.path}<span class="tt-text-muted">{file.path}/</span>{/if}{file.name}
-                  {#if isNotScanned(file.scanStatus)}
-                    <span class="scan-warning tt-text-sm">
-                      {#if file.scanStatus === 'not_scanned_encrypted'}
-                        {t('download.scan.notScannedEncrypted')}
-                      {:else if file.scanStatus === 'not_scanned_disabled'}
-                        {t('download.scan.notScannedDisabled')}
-                      {:else if file.scanStatus === 'not_scanned_e2e'}
-                        {t('download.e2e.notScanned')}
-                      {:else}
-                        {t('download.scan.notScannedTooLarge')}
-                      {/if}
-                    </span>
-                  {/if}
-                </th>
-                <td class="nowrap">{formatBytes(file.size)}</td>
-                <td>
-                  <code class="tt-mono tt-break">{file.sha256}</code>
-                  <CopyButton
-                    small
-                    text={file.sha256}
-                    ariaLabel={t('download.files.copySha', { name: fullName(file.path, file.name) })}
-                  />
-                </td>
-                <td>
-                  {#if file.href}
-                    <a class="link-button" href={file.href} download>
-                      {t('download.files.download')}<span class="visually-hidden">
-                        {t('download.files.downloadName', { name: fullName(file.path, file.name) })}</span
-                      >
-                    </a>
-                  {:else}
-                    <span class="tt-text-muted">{t('download.files.unavailable')}</span>
-                  {/if}
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-      <p class="tt-text-muted tt-text-sm">{t('download.integrity')}</p>
-    {/if}
-  {/if}
-  {#if canReply(transfer)}
-    <section class="tt-stack reply" aria-labelledby="tt-reply-title">
-      <h2 id="tt-reply-title" class="tt-text-lg">{t('download.reply.button')}</h2>
-      <p class="tt-mb-0 tt-break">{t('download.reply.hint', { email: transfer.senderEmail })}</p>
-      {#if replyError}
-        <Alert severity="error">{replyError}</Alert>
-      {/if}
-      <div class="tt-cluster">
-        <Button variant="secondary" loading={replyBusy} onclick={() => void reply()}>
-          {t('download.reply.button')}
-        </Button>
-      </div>
-    </section>
-  {/if}
-  <ReportAbuse {token} />
+  </div>
+  <BottomStrip
+    {token}
+    canReply={canReply(transfer)}
+    {replyBusy}
+    {replyError}
+    replyHint={t('download.reply.hint', { email: transfer.senderEmail })}
+    onreply={() => void reply()}
+  />
 {/if}
 
 <style>
-  .reply {
-    margin: var(--tt-space-4) 0;
+  /* One column of blocks spaced by the gap: the margins of the direct children are reset. */
+  .tt-dl {
+    display: flex;
+    flex-direction: column;
+    gap: var(--tt-space-5);
   }
 
-  .message {
+  .tt-dl > p,
+  .tt-dl__key > p,
+  .tt-dl :global(.tt-dl__alert) {
+    margin: 0;
+  }
+
+  .tt-dl__form {
+    max-width: 26rem;
+  }
+
+  .tt-dl__bubble {
+    margin: 0;
+    padding: var(--tt-space-4) var(--tt-space-5);
+    border: var(--tt-border-width) solid transparent;
+    border-radius: var(--tt-radius-sm) var(--tt-radius-lg) var(--tt-radius-lg) var(--tt-radius-lg);
+    background: var(--tt-surface-muted);
+    color: var(--tt-text);
     white-space: pre-line;
   }
 
-  .table-wrap {
-    overflow-x: auto;
-    margin: var(--tt-space-4) 0;
+  .tt-dl__zip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--tt-space-3) var(--tt-space-4);
   }
 
-  .files {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .files caption {
-    margin-bottom: var(--tt-space-2);
-    font-weight: var(--tt-font-weight-bold);
-    text-align: left;
-  }
-
-  .files th,
-  .files td {
-    padding: var(--tt-space-2);
-    border-bottom: 1px solid var(--tt-border);
-    text-align: left;
-    vertical-align: top;
-  }
-
-  .file-name {
-    font-weight: var(--tt-font-weight-normal);
-  }
-
-  .scan-warning {
-    display: block;
-    margin-top: var(--tt-space-1);
-    padding: var(--tt-space-1) var(--tt-space-2);
-    border-left: 4px solid var(--tt-warning);
-    background: var(--tt-warning-bg);
-    color: var(--tt-text);
-    font-weight: var(--tt-font-weight-normal);
-  }
-
-  .sha-label {
-    display: block;
-    margin-top: var(--tt-space-1);
-    color: var(--tt-text-muted);
-  }
-
-  .nowrap {
-    white-space: nowrap;
-  }
-
-  .link-button {
+  /* Prominent ZIP control: the link of a plain transfer, the decrypting Button otherwise. */
+  .tt-dl__zip :global(.tt-dl__zipbtn) {
     display: inline-flex;
     align-items: center;
-    min-height: 2rem;
-    padding: var(--tt-space-1) var(--tt-space-3);
-    border: 2px solid var(--tt-border);
-    border-radius: var(--tt-radius);
-    background: var(--tt-surface);
-    color: var(--tt-text);
-    font-weight: var(--tt-font-weight-bold);
-    text-decoration: none;
-  }
-
-  .link-button--primary {
-    min-height: var(--tt-control-height);
-    padding: var(--tt-space-2) var(--tt-space-5);
-    border-color: var(--tt-primary);
+    justify-content: center;
+    gap: var(--tt-space-2);
+    min-height: 3.25rem;
+    padding: var(--tt-space-3) var(--tt-space-6);
+    border: 2px solid transparent;
+    border-radius: var(--tt-radius-lg);
     background: var(--tt-primary);
     color: var(--tt-on-primary);
+    font-size: var(--tt-font-size-lg);
+    font-weight: var(--tt-font-weight-bold);
+    line-height: var(--tt-line-height-tight);
+    text-decoration: none;
+    box-shadow: var(--tt-shadow);
   }
 
-  .link-button:hover {
+  .tt-dl__zip a.tt-dl__zipbtn:hover {
     text-decoration: underline;
+  }
+
+  .tt-dl__hint {
+    margin: 0;
+    color: var(--tt-text-muted);
+    font-size: var(--tt-font-size-sm);
+  }
+
+  .tt-dl__files {
+    margin: 0;
+    padding: 0;
+    border-top: var(--tt-border-width) solid var(--tt-separator);
+    list-style: none;
+  }
+
+  .tt-dl__note {
+    color: var(--tt-text-muted);
+    font-size: var(--tt-font-size-sm);
+  }
+
+  .tt-dlend__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    margin-bottom: var(--tt-space-4);
+    border: var(--tt-border-width) solid transparent;
+    border-radius: var(--tt-radius-full);
+  }
+
+  .tt-dlend__icon--neutral {
+    background: var(--tt-chip-bg);
+    color: var(--tt-chip-text);
+  }
+
+  .tt-dlend__icon--danger {
+    background: var(--tt-danger-bg);
+    color: var(--tt-danger);
+  }
+
+  @media (max-width: 40rem) {
+    .tt-dl {
+      gap: var(--tt-space-4);
+    }
+
+    .tt-dl__zip :global(.tt-dl__zipbtn) {
+      width: 100%;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .tt-dl__zip :global(.tt-dl__zipbtn) {
+      border-color: ButtonText;
+    }
+
+    .tt-dl__zip a.tt-dl__zipbtn {
+      border-color: LinkText;
+    }
   }
 </style>

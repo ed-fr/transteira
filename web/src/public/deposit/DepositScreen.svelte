@@ -13,9 +13,13 @@
   // Key the component on the invitation token: the flow is built from the initial props.
   // On the form step, a tab list switches between sending files and sharing a one-time secret
   // (public/secret, since 2.1) when the tenant offers secrets to this depositor.
+  // The width of the public card follows the step (CLAUDE.md section 13.2, view.ts): split on the
+  // form step of the files tab (files and details side by side, the tabs above them), medium on
+  // the secret tab, narrow on the other steps.
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { Alert, Button, Spinner } from '../../shared/components';
   import { t } from '../../shared/i18n/i18n.svelte';
+  import { useCardFrame } from '../frame/card.svelte';
   import { SecretCreateFlow } from '../secret/createFlow.svelte';
   import SecretDone from '../secret/SecretDone.svelte';
   import SecretForm from '../secret/SecretForm.svelte';
@@ -37,6 +41,7 @@
   import ResumePrompt from './ResumePrompt.svelte';
   import TransferForm from './TransferForm.svelte';
   import UploadStep from './UploadStep.svelte';
+  import { depositCardSize, type DepositMode } from './view';
 
   interface Props {
     /** Public description of the tenant (GET /tenant). */
@@ -69,7 +74,7 @@
   });
   let container: HTMLElement | undefined = $state();
 
-  type Mode = 'files' | 'secret';
+  type Mode = DepositMode;
   const modes: readonly Mode[] = ['files', 'secret'];
   const tabIds: Record<Mode, string> = { files: 'tt-deposit-tab-files', secret: 'tt-deposit-tab-secret' };
   const panelIds: Record<Mode, string> = {
@@ -77,6 +82,11 @@
     secret: 'tt-deposit-panel-secret',
   };
   const mode = $derived<Mode>(secret.offered && flow.mode === 'secret' ? 'secret' : 'files');
+  const split = $derived(depositCardSize(flow.step, mode) === 'split');
+
+  // The card size of the step, released when the step changes or the screen is left.
+  const frame = useCardFrame();
+  $effect.pre(() => frame?.request(depositCardSize(flow.step, mode)));
 
   function selectTab(next: Mode, focus = false): void {
     flow.mode = next;
@@ -157,7 +167,7 @@
 
 <svelte:window onbeforeunload={beforeUnload} />
 
-<div class="tt-stack" bind:this={container}>
+<div class:tt-stack={!split} bind:this={container}>
   {#if flow.step === 'loading'}
     <h1 tabindex="-1" class="visually-hidden">{t('deposit.loading')}</h1>
     <Spinner label={t('deposit.loading')} showLabel />
@@ -179,24 +189,26 @@
     <CodeStep {flow} />
   {:else if flow.step === 'form'}
     {#if secret.offered}
-      <div class="tt-deposit-tabs" role="tablist" aria-label={t('secretCreate.tabs.label')}>
-        {#each modes as m (m)}
-          <button
-            type="button"
-            role="tab"
-            id={tabIds[m]}
-            class="tt-deposit-tab"
-            aria-selected={mode === m}
-            aria-controls={mode === m ? panelIds[m] : undefined}
-            tabindex={mode === m ? 0 : -1}
-            onclick={() => selectTab(m)}
-            onkeydown={tabKey}
-          >
-            {t(`secretCreate.tabs.${m}`)}
-          </button>
-        {/each}
+      <div class:tt-pcard__section={split}>
+        <div class="tt-deposit-tabs" role="tablist" aria-label={t('secretCreate.tabs.label')}>
+          {#each modes as m (m)}
+            <button
+              type="button"
+              role="tab"
+              id={tabIds[m]}
+              class="tt-deposit-tab"
+              aria-selected={mode === m}
+              aria-controls={mode === m ? panelIds[m] : undefined}
+              tabindex={mode === m ? 0 : -1}
+              onclick={() => selectTab(m)}
+              onkeydown={tabKey}
+            >
+              {t(`secretCreate.tabs.${m}`)}
+            </button>
+          {/each}
+        </div>
       </div>
-      <div class="tt-stack" role="tabpanel" id={panelIds[mode]} aria-labelledby={tabIds[mode]}>
+      <div class:tt-stack={!split} role="tabpanel" id={panelIds[mode]} aria-labelledby={tabIds[mode]}>
         {#if mode === 'secret'}
           {#if secret.step === 'done'}
             <SecretDone {flow} {secret} {onnavigate} />
@@ -250,7 +262,7 @@
   }
 
   .tt-deposit-tab[aria-selected='true'] {
-    border-bottom-color: var(--tt-primary);
+    border-bottom-color: var(--tt-graphic);
     font-weight: var(--tt-font-weight-bold);
   }
 

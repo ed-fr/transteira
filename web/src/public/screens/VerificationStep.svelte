@@ -4,10 +4,12 @@
   // "Send me a code" (the masked address is shown, never the full one), then the code entry (15
   // minutes, 2 wrong attempts). The cookie is set by the server; once the code is accepted the
   // parent reads the transfer again (the password form or the files follow).
+  // Layout of version 2.3 (section 13.2): a decorative shield disc next to the title, a column of
+  // readable width, the code field and its buttons kept narrow.
   import { tick } from 'svelte';
   import { api } from '../../shared/api/api';
   import { languageValues } from '../../shared/api/schema';
-  import { Alert, Button, TextField, announce } from '../../shared/components';
+  import { Alert, Button, Icon, TextField, announce } from '../../shared/components';
   import { formatDate, i18n, t } from '../../shared/i18n/i18n.svelte';
   import Countdown from '../deposit/Countdown.svelte';
   import {
@@ -189,62 +191,122 @@
   }
 </script>
 
-<h1 tabindex="-1">{purpose === 'reply' ? t('download.verify.replyTitle') : t('download.verify.title')}</h1>
-
-{#if expired}
-  <Alert severity="info">{t('download.verify.expired')}</Alert>
-{/if}
-
-{#if phase === 'start'}
-  <p>{purpose === 'reply' ? t('download.verify.replyIntro') : t('download.verify.intro')}</p>
-  {#if shownEmail !== ''}
-    <p class="tt-break">{t('download.verify.address', { email: shownEmail })}</p>
-  {/if}
-  {#if purpose === 'download'}
-    <p class="tt-text-muted tt-text-sm">{t('download.verify.personal')}</p>
-  {/if}
-  {#if formError}
-    <Alert severity="error">{formError}</Alert>
-  {/if}
-  <Countdown until={retryAt} bind:remaining />
-  <div class="tt-cluster">
-    <Button loading={busy} disabled={remaining > 0} onclick={() => void send(false)}>
-      {t('download.verify.send')}
-    </Button>
-    {#if oncancel}
-      <Button variant="secondary" disabled={busy} onclick={oncancel}>{t('download.reply.page.back')}</Button>
-    {/if}
+<div class="tt-verify">
+  <div class="tt-verify__head">
+    <span class="tt-verify__icon"><Icon name="shield" size="lg" /></span>
+    <h1 class="tt-verify__title" tabindex="-1">
+      {purpose === 'reply' ? t('download.verify.replyTitle') : t('download.verify.title')}
+    </h1>
   </div>
-{:else}
-  <p class="tt-break">{t('download.verify.sent', { email: shownEmail })}</p>
-  {#if until !== ''}
-    <p class="tt-text-muted tt-text-sm">{t('download.verify.expires', { time: until })}</p>
+
+  {#if expired}
+    <Alert severity="info">{t('download.verify.expired')}</Alert>
   {/if}
-  {#if notice}
-    <Alert severity="info">{notice}</Alert>
-  {/if}
-  {#if formError}
-    <Alert severity="error">{formError}</Alert>
-  {/if}
-  <form class="tt-stack" novalidate onsubmit={confirm}>
-    <TextField
-      label={t('download.verify.label')}
-      inputmode="numeric"
-      autocomplete="one-time-code"
-      pattern="[0-9]*"
-      spellcheck={false}
-      required
-      hint={t('download.verify.hint')}
-      error={codeError}
-      bind:value={code}
-      bind:element={codeInput}
-    />
+
+  {#if phase === 'start'}
+    <p>{purpose === 'reply' ? t('download.verify.replyIntro') : t('download.verify.intro')}</p>
+    {#if shownEmail !== ''}
+      <p class="tt-break">{t('download.verify.address', { email: shownEmail })}</p>
+    {/if}
+    {#if purpose === 'download'}
+      <p class="tt-text-muted tt-text-sm">{t('download.verify.personal')}</p>
+    {/if}
+    {#if formError}
+      <Alert severity="error">{formError}</Alert>
+    {/if}
     <Countdown until={retryAt} bind:remaining />
     <div class="tt-cluster">
-      <Button type="submit" loading={busy} disabled={remaining > 0}>{t('download.verify.submit')}</Button>
-      <Button variant="secondary" disabled={busy || remaining > 0} onclick={() => void send(true)}>
-        {t('download.verify.resend')}
+      <Button loading={busy} disabled={remaining > 0} onclick={() => void send(false)}>
+        {t('download.verify.send')}
       </Button>
+      {#if oncancel}
+        <Button variant="secondary" disabled={busy} onclick={oncancel}>{t('download.reply.page.back')}</Button
+        >
+      {/if}
     </div>
-  </form>
-{/if}
+  {:else}
+    <p class="tt-break">{t('download.verify.sent', { email: shownEmail })}</p>
+    {#if until !== ''}
+      <p class="tt-text-muted tt-text-sm">{t('download.verify.expires', { time: until })}</p>
+    {/if}
+    {#if notice}
+      <Alert severity="info">{notice}</Alert>
+    {/if}
+    {#if formError}
+      <Alert severity="error">{formError}</Alert>
+    {/if}
+    <form class="tt-stack" novalidate onsubmit={confirm}>
+      <div class="tt-verify__field">
+        <TextField
+          label={t('download.verify.label')}
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          pattern="[0-9]*"
+          spellcheck={false}
+          required
+          hint={t('download.verify.hint')}
+          error={codeError}
+          bind:value={code}
+          bind:element={codeInput}
+        />
+      </div>
+      <Countdown until={retryAt} bind:remaining />
+      <div class="tt-cluster">
+        <Button type="submit" loading={busy} disabled={remaining > 0}>{t('download.verify.submit')}</Button>
+        <Button variant="secondary" disabled={busy || remaining > 0} onclick={() => void send(true)}>
+          {t('download.verify.resend')}
+        </Button>
+      </div>
+    </form>
+  {/if}
+</div>
+
+<style>
+  .tt-verify {
+    max-width: 40rem;
+  }
+
+  .tt-verify__head {
+    display: flex;
+    align-items: center;
+    gap: var(--tt-space-4);
+    margin-bottom: var(--tt-space-5);
+  }
+
+  .tt-verify__icon {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    border: var(--tt-border-width) solid transparent;
+    border-radius: var(--tt-radius-full);
+    background: var(--tt-chip-bg);
+    color: var(--tt-chip-text);
+  }
+
+  .tt-verify__title {
+    min-width: 0;
+    margin: 0;
+  }
+
+  .tt-verify__field {
+    max-width: 18rem;
+  }
+
+  @media (max-width: 40rem) {
+    .tt-verify__head {
+      gap: var(--tt-space-3);
+    }
+
+    .tt-verify__icon {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+
+    .tt-verify__title {
+      font-size: var(--tt-font-size-xl);
+    }
+  }
+</style>

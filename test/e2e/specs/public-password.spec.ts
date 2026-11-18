@@ -6,7 +6,7 @@
 import { internalEmail, makeFile, sha256 } from '../support/data';
 import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures';
 import { waitForMail } from '../support/mailpit';
-import { deposit, download, identify, mailLink } from '../support/publicflow';
+import { deposit, download, fileItem, identify, mailLink } from '../support/publicflow';
 import { waitForSecurityEvents } from '../support/securitylog';
 
 const UNLOCK = /\/api\/v1\/downloads\/[^/]+\/unlock$/;
@@ -103,11 +103,8 @@ test.describe('public: transfer password', () => {
     await expect(opage.getByText('The password is not correct. 2 attempts remaining.')).toBeVisible();
     await opage.getByLabel(/^Password/).fill(password);
     await opage.getByRole('button', { name: 'Unlock' }).click();
-    await expect(opage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
-    const row = opage
-      .getByRole('table', { name: 'Files of this transfer' })
-      .getByRole('row', { name: /contract/ });
-    await expect(row.getByText(okFile.sha256)).toBeVisible();
+    await expect(opage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
+    await expect(fileItem(opage, /contract/).getByText(okFile.sha256)).toBeAttached();
     await checkA11y(opage);
 
     const got = await download(opage, () =>

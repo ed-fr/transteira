@@ -8,7 +8,7 @@ import { eicar } from '../support/eicar';
 import { CLAMAV_MAX_SCAN_BYTES } from '../support/env';
 import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures';
 import { waitForMail } from '../support/mailpit';
-import { deposit, identify, mailLink } from '../support/publicflow';
+import { deposit, fileItem, identify, mailLink } from '../support/publicflow';
 
 /** A file holding the EICAR signature, never committed (CLAUDE.md test rules). */
 function infectedFile(name: string): GeneratedFile {
@@ -57,15 +57,17 @@ test.describe('public: antivirus', () => {
     expect(notification.Text).toContain(large.sha256);
     const rpage = await (await newContext()).newPage();
     await rpage.goto(mailLink(notification, '/d/', tenant.origin));
-    await expect(rpage.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
-    const table = rpage.getByRole('table', { name: 'Files of this transfer' });
-    await expect(table.getByRole('row')).toHaveCount(3); // header + 2 files
-    await expect(table.getByText(infected.name)).toHaveCount(0);
-    await expect(rpage.getByText(/Some files could not be analysed by the antivirus/)).toBeVisible();
-    await expect(table.getByRole('row', { name: /large-video/ })).toContainText(
+    await expect(rpage.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
+    const list = rpage.getByRole('list', { name: 'Files of this transfer' });
+    await expect(list.getByRole('listitem')).toHaveCount(2);
+    await expect(list.getByText(infected.name)).toHaveCount(0);
+    await expect(rpage.getByText(/could not be analysed by the antivirus/)).toBeVisible();
+    await expect(fileItem(rpage, /large-video/)).toContainText(
       'Not analysed by the antivirus: this file is too large to be analysed.',
     );
-    await expect(table.getByRole('row', { name: /clean-sheet/ })).not.toContainText('Not analysed');
+    await expect(fileItem(rpage, /large-video/).getByText('Not scanned', { exact: false })).toBeVisible();
+    await expect(fileItem(rpage, /clean-sheet/)).not.toContainText('Not analysed');
+    await expect(fileItem(rpage, /clean-sheet/).getByText('Scanned', { exact: true })).toBeVisible();
     await checkA11y(rpage);
     await expectCleanStorage(rpage);
   });

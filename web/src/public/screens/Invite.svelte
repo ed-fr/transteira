@@ -10,7 +10,7 @@
   import {
     Alert,
     Button,
-    RadioGroup,
+    SegmentedControl,
     Spinner,
     TextArea,
     TextField,
@@ -52,7 +52,7 @@
     tenant.availableLanguages.find((l) => l === locale.current) ?? tenant.language,
   );
   const languageOptions = $derived(
-    tenant.availableLanguages.map((code) => ({ value: code, label: languageName(code) })),
+    tenant.availableLanguages.map((code) => ({ value: code, label: languageName(code), lang: code })),
   );
 
   async function load(): Promise<void> {
@@ -201,14 +201,13 @@
       error={errors.message}
     />
     {#if languageOptions.length > 1}
-      <RadioGroup
+      <SegmentedControl
         legend={t('invitation.invite.language')}
         hint={t('invitation.invite.languageHint')}
         options={languageOptions}
         value={language ?? defaultLanguage}
         onchange={(value) => (language = value)}
         error={errors.language}
-        inline
       />
     {/if}
     <div class="tt-cluster">

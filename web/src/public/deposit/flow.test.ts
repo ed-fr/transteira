@@ -1077,7 +1077,7 @@ describe('transfer', () => {
       'POST /verification-challenges/vch_1/confirm': problem(500, 'internal-error'),
     });
     flow.form.recipientsText = 'a@entity-a.example.com, b@entity-a.example.com';
-    expect(flow.recipients).toEqual(['a@entity-a.example.com', 'b@entity-a.example.com']);
+    expect(flow.committedRecipients).toEqual(['a@entity-a.example.com', 'b@entity-a.example.com']);
     await flow.start();
     flow.email = 'alice@entity-a.example.com';
     await flow.submitEmail();

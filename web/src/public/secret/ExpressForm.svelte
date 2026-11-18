@@ -7,7 +7,7 @@
   // no maxlength: a textarea counts UTF-16 code units, which would refuse texts of fewer than
   // 10 000 code points.
   import { onDestroy, tick, untrack } from 'svelte';
-  import { Alert, Button, LiveRegion, RadioGroup, TextArea } from '../../shared/components';
+  import { Alert, Button, LiveRegion, SegmentedControl, TextArea } from '../../shared/components';
   import { t } from '../../shared/i18n/i18n.svelte';
   import { Countdown } from '../screens/countdown.svelte';
   import { codePoints } from './create';
@@ -124,13 +124,12 @@
   />
   <LiveRegion message={counter.message} />
 
-  <RadioGroup
+  <SegmentedControl
     legend={t('secretExpress.duration.legend')}
     hint={t('secretExpress.duration.hint')}
     name={ids.expiresIn}
     options={durationOptions}
     required
-    inline
     disabled={busy}
     error={errors.expiresIn === undefined ? undefined : t(errors.expiresIn.key, errors.expiresIn.params)}
     bind:value={flow.expiresIn}

@@ -4,6 +4,8 @@ import {
   formatBytes,
   formatDate,
   formatNumber,
+  formatRelative,
+  formatRelativeIn,
   groupLoaders,
   i18n,
   interpolate,
@@ -180,6 +182,77 @@ describe('createI18n', () => {
   });
 });
 
+describe('formatRelativeIn', () => {
+  const now = Date.parse('2026-11-18T12:00:00Z');
+  const at = (ms: number): number => now + ms;
+  const MIN = 60_000;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+
+  it.each([
+    [0, 'now'],
+    [20_000, 'now'],
+    [-20_000, 'now'],
+    [30_000, 'in 1 minute'],
+    [-30_000, '1 minute ago'],
+    [5 * MIN, 'in 5 minutes'],
+    [-5 * MIN, '5 minutes ago'],
+    [59 * MIN, 'in 59 minutes'],
+    [HOUR, 'in 1 hour'],
+    [3 * HOUR + 20 * MIN, 'in 3 hours'],
+    [-3 * HOUR, '3 hours ago'],
+    [23 * HOUR + 29 * MIN, 'in 23 hours'],
+    [DAY, 'tomorrow'],
+    [-DAY, 'yesterday'],
+    [DAY + 11 * HOUR, 'tomorrow'],
+    [DAY + 13 * HOUR, 'in 2 days'],
+    [5 * DAY + 20 * HOUR, 'in 6 days'],
+    [30 * DAY, 'in 30 days'],
+    [-3 * DAY, '3 days ago'],
+    [-(DAY + 12 * HOUR), '2 days ago'],
+  ])('formats %d ms from now in English as %j', (offset, expected) => {
+    expect(formatRelativeIn('en', at(offset), now)).toBe(expected);
+  });
+
+  it.each([
+    [0, 'maintenant'],
+    [5 * MIN, 'dans 5 minutes'],
+    [3 * HOUR, 'dans 3 heures'],
+    [DAY, 'demain'],
+    [2 * DAY, 'après-demain'],
+    [5 * DAY + 20 * HOUR, 'dans 6 jours'],
+    [-DAY, 'hier'],
+    [-4 * DAY, 'il y a 4 jours'],
+  ])('formats %d ms from now in French as %j', (offset, expected) => {
+    expect(formatRelativeIn('fr', at(offset), now).replace(/\s/gu, ' ')).toBe(expected);
+  });
+
+  it('accepts dates, ISO strings and epoch milliseconds, and defaults now to the clock', () => {
+    expect(formatRelativeIn('en', new Date(at(2 * DAY)), new Date(now))).toBe('in 2 days');
+    expect(formatRelativeIn('en', '2026-11-25T12:00:00Z', '2026-11-18T12:00:00Z')).toBe('in 7 days');
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    try {
+      expect(formatRelativeIn('en', at(3 * DAY))).toBe('in 3 days');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives an empty string for an invalid date or clock', () => {
+    expect(formatRelativeIn('en', 'not a date', now)).toBe('');
+    expect(formatRelativeIn('en', now, Number.NaN)).toBe('');
+  });
+
+  it('follows the language of an instance', async () => {
+    const inst = createI18n({ loaders });
+    await inst.setLocale('fr');
+    expect(inst.formatRelative(at(DAY), now)).toBe('demain');
+    await inst.setLocale('en');
+    expect(inst.formatRelative(at(DAY), now)).toBe('tomorrow');
+  });
+});
+
 describe('shared instance', () => {
   it('loads the real bundles through import.meta.glob', async () => {
     expect(i18n.languages).toEqual(expect.arrayContaining(['fr', 'en']));
@@ -190,7 +263,9 @@ describe('shared instance', () => {
     expect(formatBytes(1024)).toBe('1 ko');
     expect(formatNumber(1000)).toBe('1 000');
     expect(formatDate('2026-10-19T16:00:00Z', { year: 'numeric', timeZone: 'UTC' })).toBe('2026');
+    expect(formatRelative('2026-10-20T16:00:00Z', '2026-10-19T16:00:00Z')).toBe('demain');
     await setLocale('en');
+    expect(formatRelative('2026-10-20T16:00:00Z', '2026-10-19T16:00:00Z')).toBe('tomorrow');
     expect(t('errors.not-found')).toBe('This page or resource does not exist.');
   });
 });

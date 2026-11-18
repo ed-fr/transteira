@@ -568,7 +568,7 @@ The durations are fixed (1 hour, 1 day, 7 days), whatever you offer for the one-
 
 **API tokens.** A token can create express secrets only if you tick **Allowed to create express secrets** when you create it, or in **Edit**. It is off by default: an ordinary token cannot create any. A token allowed to do it works **even when the anonymous mode is off**, and with its own limit per token (see above). The **Express secrets** column of the token list shows **Allowed** or **No**. Each creation is recorded in the audit log with the token used.
 
-**Reports.** The reader of an express secret can use **Report abuse** (see [Reports](topic:tenant-abuse-reports)). The **Concerns** column of the Reports screen says **Express secret** and its identifier (**Transfer** and its identifier for a transfer). A report never contains the text or the key: to examine the secret, paste the reported link in **Find a secret from its link** if you have it, then delete it or purge. Reading it would consume it. Then close the report.
+**Reports.** The reader of an express secret can use **Report an abuse** (see [Reports](topic:tenant-abuse-reports)). The **Concerns** column of the Reports screen says **Express secret** and its identifier (**Transfer** and its identifier for a transfer). A report never contains the text or the key: to examine the secret, paste the reported link in **Find a secret from its link** if you have it, then delete it or purge. Reading it would consume it. Then close the report.
 
 <!-- topic: tenant-audit -->
 ### Audit log
@@ -627,7 +627,7 @@ An alert is raised at most once per sender, per rule and per day. For a refusal 
 <!-- topic: tenant-abuse-reports -->
 ### Reports
 
-The Reports screen lists the reports made by recipients with the **Report abuse** button of the download page.
+The Reports screen lists the reports made by recipients with the **Report an abuse** button of the download page.
 
 ![The Reports screen: status filter and list of reports with their date, category, transfer and reporter](../screenshots/en/admin-abuse-reports.png)
 

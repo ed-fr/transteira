@@ -78,7 +78,7 @@ test.describe('public: report an abuse', () => {
   test('from the download page, with a category and a message', async ({ page, state }) => {
     const link = await transferLink(state.apiTokenA, 'report');
     await page.goto(`${ORIGINS.a}${link}`);
-    await expect(page.getByRole('heading', { name: 'Download files', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^\d+ files? for you$/, level: 1 })).toBeVisible();
     await page.getByRole('button', { name: 'Report an abuse', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Report an abuse' });
     await expect(dialog).toBeVisible();

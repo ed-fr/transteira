@@ -30,7 +30,7 @@
   <Alert severity="error">{flow.errorText}</Alert>
 {/if}
 
-<FileList files={expected} label={t('deposit.resume.expected')} />
+<FileList files={expected} label={t('deposit.resume.expected')} variant="cards" />
 
 <FileDrop
   label={t('deposit.resume.select')}

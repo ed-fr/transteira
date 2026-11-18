@@ -1,14 +1,15 @@
 <script lang="ts">
   // Public application (tenant hosts): start-up (tenant configuration, theme, language), page
-  // frame (logo, background, header link to the express secret when the tenant offers it, footer
-  // with legal links, help and language switch, maintenance banner) and the screen of the current
-  // route.
+  // frame of CLAUDE.md section 13.2 (logo, background, glass header actions: "My transfers", the
+  // express secret when the tenant offers it, language, theme and help; footer with the legal
+  // links, help and "Powered by TransTeira"; maintenance banner; public card sized by the
+  // CardFrame of frame/card.svelte.ts) and the screen of the current route.
   import { onMount } from 'svelte';
   import { pageTitleOf } from '../help/title.svelte';
   import { api } from '../shared/api/api';
   import { tenantSetup } from '../shared/api/setupSignal.svelte';
   import { problemMessage } from '../shared/api/problem';
-  import { Alert, Footer, PageLayout, Spinner, announce } from '../shared/components';
+  import { Alert, PageLayout, Spinner, announce } from '../shared/components';
   import {
     FALLBACK_LANGUAGE,
     i18n,
@@ -29,8 +30,11 @@
     type BootstrapDeps,
     type PublicTenant,
   } from './bootstrap';
+  import { CardFrame, provideCardFrame, routeCardSize } from './frame/card.svelte';
+  import HeaderActions from './frame/HeaderActions.svelte';
+  import PublicFooter from './frame/PublicFooter.svelte';
   import { isHelpRoute, notFoundRoute, routes } from './routes';
-  import { EXPRESS_PATH, expressFeatures, expressOffered } from './secret/express';
+  import { EXPRESS_PATH } from './secret/express';
   import ErrorPage from './screens/ErrorPage.svelte';
   import SetupPage from './screens/SetupPage.svelte';
 
@@ -116,6 +120,8 @@
   });
 
   const match = $derived(router.current);
+  // Width of the public card: the size of the route, unless the screen requests another one.
+  const frame = provideCardFrame(new CardFrame(() => routeCardSize(match.route.pattern)));
   const notice = $derived(tenant === undefined ? undefined : maintenanceNotice(tenant));
   // The deposit, invite and express secret screens show their own full maintenance page.
   const fullMaintenancePage = new Set(['/', '/invite', EXPRESS_PATH]);
@@ -126,8 +132,8 @@
       : showSetupPage(tenant, match.route.pattern, tenantSetup.inSetup),
   );
   const showBanner = $derived(notice !== undefined && !fullMaintenancePage.has(match.route.pattern));
-  // Header link to the express secret page (since 2.3), only when the tenant offers it.
-  const showExpressLink = $derived(tenant !== undefined && expressOffered(expressFeatures(tenant)));
+  // The help pages have no help link of their own.
+  const helpTopic = $derived(isHelpRoute(match.route) ? null : match.route.helpTopic);
 </script>
 
 {#if locale.current === ''}
@@ -136,25 +142,22 @@
   {@const current = tenant}
   {@const Screen = match.route.component}
   <PageLayout
+    variant="public"
+    cardSize={frame.size}
     tenantName={current.name}
     logoUrl={current.branding.logoUrl}
     backgroundUrl={current.branding.backgroundUrl}
-    wide={match.route.pattern === '/d/:token' || match.route.pattern === '/me'}
   >
     {#snippet header()}
-      {#if showExpressLink}
-        <nav class="tt-header-nav" aria-label={t('secretExpress.nav.label')}>
-          <a
-            id="tt-header-express"
-            class="tt-header-nav__link"
-            href={router.href(EXPRESS_PATH)}
-            use:router.link
-            aria-current={match.route.pattern === EXPRESS_PATH ? 'page' : undefined}
-          >
-            {t('secretExpress.nav.link')}
-          </a>
-        </nav>
-      {/if}
+      <HeaderActions
+        tenant={current}
+        nav={router}
+        pattern={match.route.pattern}
+        languages={current.availableLanguages}
+        currentLanguage={locale.current}
+        onlanguagechange={(lang) => void onLanguage(lang)}
+        {helpTopic}
+      />
     {/snippet}
     {#snippet banner()}
       {#if showBanner}
@@ -175,31 +178,25 @@
       {/if}
     {/key}
     {#snippet footer()}
-      <Footer
-        languages={current.availableLanguages}
-        currentLanguage={locale.current}
-        onlanguagechange={(lang) => void onLanguage(lang)}
-        helpTopic={isHelpRoute(match.route) ? null : match.route.helpTopic}
-        nav={router}
-      >
-        {#snippet legal()}
-          {#each current.legalDocuments as document (document)}
-            <li>
-              <a href={router.href(legalPath(document))} use:router.link>
-                {document === 'privacy-policy' ? t('legal.privacyPolicy') : t('legal.legalNotice')}
-              </a>
-            </li>
-          {/each}
-        {/snippet}
-      </Footer>
+      {#snippet legal()}
+        {#each current.legalDocuments as document (document)}
+          <li>
+            <a href={router.href(legalPath(document))} use:router.link>
+              {document === 'privacy-policy' ? t('legal.privacyPolicy') : t('legal.legalNotice')}
+            </a>
+          </li>
+        {/each}
+      {/snippet}
+      <!-- No empty "Legal information" navigation when the tenant published no legal text. -->
+      <PublicFooter {helpTopic} nav={router} legal={current.legalDocuments.length > 0 ? legal : undefined} />
     {/snippet}
   </PageLayout>
 {:else if status === 'error'}
-  <PageLayout tenantName={t('common.appName')}>
+  <PageLayout variant="public" tenantName={t('common.appName')}>
     <ErrorPage message={errorMessage} onretry={() => void retry()} {retrying} />
   </PageLayout>
 {:else}
-  <PageLayout tenantName={t('common.appName')}>
+  <PageLayout variant="public" tenantName={t('common.appName')}>
     <h1 tabindex="-1" class="visually-hidden">{t('common.appName')}</h1>
     <Spinner showLabel />
   </PageLayout>
@@ -208,21 +205,5 @@
 <style>
   .banner-text {
     white-space: pre-line;
-  }
-
-  .tt-header-nav__link {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.75rem;
-    padding: var(--tt-space-2) var(--tt-space-4);
-    border-radius: var(--tt-radius);
-    background: var(--tt-surface);
-    color: var(--tt-link);
-    font-weight: var(--tt-font-weight-bold);
-  }
-
-  .tt-header-nav__link[aria-current='page'] {
-    color: var(--tt-text);
-    text-decoration: none;
   }
 </style>

@@ -229,6 +229,93 @@ export function isNotScanned(status: ScanStatus): boolean {
   return NOT_SCANNED.includes(status);
 }
 
+/** Number of files delivered without antivirus analysis (summary banner of the download page). */
+export function notScannedCount(files: readonly { scanStatus: ScanStatus }[]): number {
+  return files.filter((f) => isNotScanned(f.scanStatus)).length;
+}
+
+/**
+ * Antivirus badge of a file row of the download page (CLAUDE.md sections 10 and 13.2): a short
+ * visible text ("Scanned", "Not scanned: too large") in a status colour, and for a file delivered
+ * without analysis the full explanation (detail), read by screen readers instead of the short text.
+ */
+export interface ScanBadge {
+  variant: 'success' | 'warning';
+  /** Translation key of the short visible text. */
+  label: string;
+  /** Translation key of the full explanation; undefined for an analysed file. */
+  detail: string | undefined;
+}
+
+/**
+ * Badge of a deliverable file by antivirus status: "Scanned" for a clean file, "Not scanned: …"
+ * with the reason for a file delivered without analysis, none for any other status (a download
+ * link only lists clean and not scanned files).
+ */
+export function scanBadge(status: ScanStatus): ScanBadge | undefined {
+  switch (status) {
+    case 'clean':
+      return { variant: 'success', label: 'download.scan.badge.clean', detail: undefined };
+    case 'not_scanned_too_large':
+      return {
+        variant: 'warning',
+        label: 'download.scan.badge.tooLarge',
+        detail: 'download.scan.notScannedTooLarge',
+      };
+    case 'not_scanned_encrypted':
+      return {
+        variant: 'warning',
+        label: 'download.scan.badge.encrypted',
+        detail: 'download.scan.notScannedEncrypted',
+      };
+    case 'not_scanned_disabled':
+      return {
+        variant: 'warning',
+        label: 'download.scan.badge.disabled',
+        detail: 'download.scan.notScannedDisabled',
+      };
+    case 'not_scanned_e2e':
+      return { variant: 'warning', label: 'download.scan.badge.e2e', detail: 'download.e2e.notScanned' };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Initial of the sender shown in the avatar of the download page (decorative): the first letter or
+ * digit of the address, uppercase; '' when it has none.
+ */
+export function senderInitial(email: string): string {
+  const match = /[\p{L}\p{N}]/u.exec(email);
+  return match === null ? '' : match[0].toLocaleUpperCase();
+}
+
+/** Expiry of a transfer as shown in the information pills of the download page. */
+export interface ExpiryView {
+  /** Expiry date, shown in full (tooltip, screen readers). */
+  date: Date;
+  /** Machine-readable value of the <time> element (ISO 8601). */
+  datetime: string;
+  /**
+   * Date to express relative to now: the expiry, or now itself once it has passed (the page then
+   * reads "expires now" rather than a date in the past, until the next check reports it gone).
+   */
+  relative: Date;
+}
+
+/** Expiry view of expiresAt at now (epoch milliseconds); undefined for an invalid date. */
+export function expiryView(expiresAt: string, now: number): ExpiryView | undefined {
+  const date = new Date(expiresAt);
+  if (Number.isNaN(date.getTime()) || Number.isNaN(now)) {
+    return undefined;
+  }
+  return {
+    date,
+    datetime: date.toISOString(),
+    relative: date.getTime() > now ? date : new Date(now),
+  };
+}
+
 /** One row of the download file table. */
 export interface FileRow {
   id: string;
@@ -250,6 +337,8 @@ export interface DownloadView {
   archiveHref: string | undefined;
   /** At least one file was not analysed by the antivirus. */
   hasUnscanned: boolean;
+  /** Number of files not analysed by the antivirus. */
+  notScanned: number;
   deleteAfterFirstDownload: boolean;
   /** Label of the confidentiality level, when the transfer has one. */
   levelLabel: string | undefined;
@@ -269,11 +358,13 @@ export function downloadView(transfer: PublicTransfer): DownloadView {
     href: safeApiHref(f.downloadUrl),
   }));
   const total = transfer.totalBytes ?? files.reduce((sum, f) => sum + Math.max(0, f.size), 0);
+  const notScanned = notScannedCount(files);
   return {
     files,
     totalBytes: total,
     archiveHref: files.length > 0 ? safeApiHref(transfer.archiveUrl) : undefined,
-    hasUnscanned: files.some((f) => isNotScanned(f.scanStatus)),
+    hasUnscanned: notScanned > 0,
+    notScanned,
     deleteAfterFirstDownload: transfer.deleteAfterFirstDownload === true,
     levelLabel: transfer.confidentialityLevel?.label,
     downloadsRemaining: transfer.downloadsRemaining,

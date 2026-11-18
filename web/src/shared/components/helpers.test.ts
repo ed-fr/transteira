@@ -1,15 +1,19 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
+  abbreviateHash,
   copyText,
   describedBy,
   dragHasFiles,
   dropTarget,
+  fileExtension,
   filesOf,
+  fileTypeLabel,
   helpHref,
   isFocusable,
   languageName,
   percentOf,
   totalBytes,
+  volumeState,
   type CopyDocument,
   type CopyTextArea,
   type DropElement,
@@ -302,5 +306,81 @@ describe('percentOf', () => {
     expect(percentOf(-1, 200)).toBe(0);
     expect(percentOf(1, 0)).toBe(0);
     expect(percentOf(Number.NaN, 10)).toBe(0);
+  });
+});
+
+describe('fileExtension / fileTypeLabel', () => {
+  it.each([
+    ['report.pdf', 'pdf', 'PDF'],
+    ['Report.PDF', 'pdf', 'PDF'],
+    ['archive.tar.gz', 'gz', 'GZ'],
+    ['budget-2027.xlsx', 'xlsx', 'XLSX'],
+    ['notes.markdown', 'markdown', 'MARK'],
+    ['photos/chantier/IMG_0001.jpeg', 'jpeg', 'JPEG'],
+    ['dossier\\plan.dwg', 'dwg', 'DWG'],
+    ['README', '', ''],
+    ['.bashrc', '', ''],
+    ['trailing.', '', ''],
+    ['folder.d/README', '', ''],
+    ['', '', ''],
+  ])('reads %j as %j (%j)', (name, ext, label) => {
+    expect(fileExtension(name)).toBe(ext);
+    expect(fileTypeLabel(name)).toBe(label);
+  });
+
+  it('cuts the label to the requested length', () => {
+    expect(fileTypeLabel('a.markdown', 2)).toBe('MA');
+    expect(fileTypeLabel('a.pdf', 0)).toBe('');
+    expect(fileTypeLabel('a.pdf', -1)).toBe('');
+  });
+});
+
+describe('abbreviateHash', () => {
+  const sha = '9f2c1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a377bda41e';
+
+  it('keeps the first and last 8 characters by default', () => {
+    expect(abbreviateHash(sha)).toBe('9f2c1a2b…77bda41e');
+  });
+
+  it('accepts other lengths', () => {
+    expect(abbreviateHash(sha, 4, 4)).toBe('9f2c…a41e');
+    expect(abbreviateHash(sha, 6, 0)).toBe('9f2c1a…');
+    expect(abbreviateHash(sha, -1, 4)).toBe('…a41e');
+  });
+
+  it('returns short values unchanged', () => {
+    expect(abbreviateHash('')).toBe('');
+    expect(abbreviateHash('abc')).toBe('abc');
+    expect(abbreviateHash('0123456789abcdefg')).toBe('0123456789abcdefg');
+    expect(abbreviateHash('0123456789abcdefgh')).toBe('01234567…abcdefgh');
+  });
+});
+
+describe('volumeState', () => {
+  const GB = 2 ** 30;
+
+  it('gives the share of the limit', () => {
+    expect(volumeState(4.2 * GB, 20 * GB)).toEqual({ value: 4.2 * GB, percent: 21, over: false });
+    expect(volumeState(0, 20 * GB)).toEqual({ value: 0, percent: 0, over: false });
+    expect(volumeState(20 * GB, 20 * GB)).toEqual({ value: 20 * GB, percent: 100, over: false });
+  });
+
+  it('shows at least 1 % when something is used', () => {
+    expect(volumeState(1, 20 * GB).percent).toBe(1);
+  });
+
+  it('reports a volume over the limit and clamps the meter', () => {
+    expect(volumeState(25 * GB, 20 * GB)).toEqual({ value: 20 * GB, percent: 125, over: true });
+  });
+
+  it('has no percentage without a positive limit', () => {
+    expect(volumeState(5, undefined)).toEqual({ value: 0, percent: undefined, over: false });
+    expect(volumeState(5, 0)).toEqual({ value: 0, percent: undefined, over: false });
+    expect(volumeState(5, Number.NaN)).toEqual({ value: 0, percent: undefined, over: false });
+  });
+
+  it('ignores invalid volumes', () => {
+    expect(volumeState(-5, 100)).toEqual({ value: 0, percent: 0, over: false });
+    expect(volumeState(Number.NaN, 100)).toEqual({ value: 0, percent: 0, over: false });
   });
 });
