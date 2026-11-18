@@ -76,6 +76,10 @@
         "passphrase": "A secret sent by e-mail must have a passphrase."
       }
     },
+    "express": {
+      "off": "Express secrets (a text shared without any identification, through the Express secret page) are not offered.",
+      "on": "Express secrets are offered, without identification, through the Express secret page: a text of {max} characters at most, kept for: {durations}."
+    },
     "levels": {
       "intro": "Confidentiality levels you can choose:",
       "default": "(default)",

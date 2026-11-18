@@ -386,7 +386,10 @@
         <p class="tt-text-bold tt-mb-0">{t('myTransfers.detail.link.shownOnce')}</p>
       </Alert>
       <p class="tt-mb-0" id="tt-mytransfer-link-label">{t('myTransfers.detail.link.label')}</p>
-      <code class="tt-new-link" aria-labelledby="tt-mytransfer-link-label">{newLink}</code>
+      <!-- translate="no": a page translation service must never receive the link and its key. -->
+      <code class="tt-new-link notranslate" aria-labelledby="tt-mytransfer-link-label" translate="no"
+        >{newLink}</code
+      >
       <div class="tt-mb-4">
         <CopyButton text={newLink} label={t('myTransfers.detail.link.copy')} />
       </div>

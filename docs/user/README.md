@@ -14,7 +14,7 @@ de chaque écran et par l’icône « ? » à côté du titre des écrans comple
 
 - [Sending files](en/depositor.md): for people who send files (internal users and invited
   external people): identification by code, the transfer form and its options, upload progress
-  and resume, antivirus analysis, invitations, one-time secrets and common problems.
+  and resume, antivirus analysis, invitations, one-time secrets, express secrets and common problems.
 - [Receiving files](en/recipient.md): for recipients: download page, password, single files or
   ZIP archive, SHA-256 fingerprints, antivirus status, expiry.
 - [Delegated administrator guide](en/delegated-admin.md): for the administrators of one or more

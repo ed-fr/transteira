@@ -21,6 +21,7 @@
   import type { AdminScreenProps } from '../types';
   import TokenEditDialog from './TokenEditDialog.svelte';
   import {
+    expressAllowed,
     isManageable,
     prefixLabel,
     revokeErrorMessage,
@@ -151,6 +152,14 @@
   {/if}
 {/snippet}
 
+{#snippet expressCell(row: ApiToken)}
+  {#if expressAllowed(row)}
+    <StatusBadge variant="info" label={t('opsTokens.list.expressYes')} />
+  {:else}
+    <span class="tt-text-muted">{t('opsTokens.list.expressNo')}</span>
+  {/if}
+{/snippet}
+
 {#snippet createdCell(row: ApiToken)}
   {t('opsTokens.list.createdBy', { date: date(row.createdAt), admin: row.createdBy })}
 {/snippet}
@@ -216,6 +225,7 @@
       { id: 'prefix', header: t('opsTokens.list.columns.prefix'), cell: prefixCell },
       { id: 'cidrs', header: t('opsTokens.list.columns.cidrs'), cell: cidrsCell },
       { id: 'senders', header: t('opsTokens.list.columns.senders'), cell: sendersCell },
+      { id: 'express', header: t('opsTokens.list.columns.express'), cell: expressCell },
       { id: 'created', header: t('opsTokens.list.columns.created'), cell: createdCell },
       { id: 'lastUsed', header: t('opsTokens.list.columns.lastUsed'), cell: lastUsedCell },
       { id: 'expires', header: t('opsTokens.list.columns.expires'), cell: expiresCell },

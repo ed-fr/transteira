@@ -335,6 +335,12 @@ describe('sections hidden for the tenant', () => {
     expect(featureOn({ ...features(true), secrets }, 'secrets')).toBe(true);
     expect(featureOn({ ...features(true), secrets: { ...secrets, enabled: false } }, 'secrets')).toBe(false);
     expect(featureOn(features(true), 'secrets')).toBe(false);
+    const express = { enabled: true, durations: ['1d' as const], maxChars: 10000 as const };
+    expect(featureOn({ ...features(true), expressSecrets: express }, 'expressSecrets')).toBe(true);
+    expect(
+      featureOn({ ...features(true), expressSecrets: { ...express, enabled: false } }, 'expressSecrets'),
+    ).toBe(false);
+    expect(featureOn(features(true), 'expressSecrets')).toBe(false);
     expect(featureOn(features(true), 'folders')).toBe(true);
     expect(featureOn(features(false), 'folders')).toBe(false);
   });

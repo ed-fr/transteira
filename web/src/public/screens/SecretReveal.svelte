@@ -8,14 +8,22 @@
   // clipboard warning, and the optional file is downloaded once with its 10-minute grant,
   // decrypted in memory and checked (reveal.ts). The bytes of K are wiped once the secret is
   // revealed or can no longer be (T-344, T-357).
+  //
+  // Since 2.3 an express secret (CLAUDE.md section 22.2) carries a "third-party content" banner
+  // and a "Report an abuse" button, before and after the reveal (T-397, T-407); the text is always
+  // plain text (RevealedText.svelte). While the express service is closed, the status or the
+  // reveal answers "closed": nothing is consumed, the key is kept, the page offers to try again.
   import { onMount, tick } from 'svelte';
   import { api } from '../../shared/api/api';
-  import { Alert, Button, CopyButton, Spinner, TextArea, TextField, announce } from '../../shared/components';
+  import { Alert, Button, CopyButton, Spinner, TextField, announce } from '../../shared/components';
   import { browserDeps } from '../../shared/e2e/download';
   import { formatBytes, formatDate, t } from '../../shared/i18n/i18n.svelte';
+  import ExpressBanner from '../secret/ExpressBanner.svelte';
+  import RevealedText from '../secret/RevealedText.svelte';
   import {
     downloadFile,
     grantExpired,
+    isExpress,
     loadStatus,
     revealSecret,
     type FileFailure,
@@ -29,6 +37,7 @@
   import { takeKeyFromLocation, webCryptoAvailable } from './e2e';
   import ErrorPage from './ErrorPage.svelte';
   import NotFound from './NotFound.svelte';
+  import ReportAbuse from './ReportAbuse.svelte';
   import type { ScreenProps } from './types';
 
   type State =
@@ -41,9 +50,10 @@
     | { kind: 'gone'; reason: GoneReason }
     | { kind: 'tampered' }
     | { kind: 'unsupported' }
+    | { kind: 'closed' }
     | { kind: 'error' };
 
-  let { params, nav }: ScreenProps = $props();
+  let { tenant, params, nav }: ScreenProps = $props();
   const token = $derived(params['token'] ?? '');
 
   const deps: RevealDeps = { api, fetch: (input, init) => globalThis.fetch(input, init) };
@@ -61,7 +71,8 @@
   let formAlert: HTMLDivElement | undefined = $state();
   let passphraseInput: HTMLInputElement | undefined = $state();
   let revealing = $state(false);
-  let textHidden = $state(false);
+  // An express secret (from its status): banner and report button, kept after the reveal.
+  let express = $state(false);
 
   let fileBusy = $state(false);
   let fileDone = $state(false);
@@ -109,8 +120,13 @@
   async function load(): Promise<void> {
     const outcome = await loadStatus(deps, token);
     if (outcome.kind === 'failure') {
-      view = terminal(outcome.failure) ?? { kind: 'error' };
-    } else if (key === undefined) {
+      // Closed express service: only express secrets are blocked, so the token is one.
+      express = outcome.failure.kind === 'closed';
+      view = express ? { kind: 'closed' } : (terminal(outcome.failure) ?? { kind: 'error' });
+      return;
+    }
+    express = isExpress(outcome.status);
+    if (key === undefined) {
       view = { kind: 'incomplete' };
     } else if (!webCryptoAvailable()) {
       view = { kind: 'unsupported' };
@@ -193,6 +209,10 @@
       case 'in-setup':
         await showFormError(t('secret.reveal.error.inSetup'));
         break;
+      case 'closed':
+        // Nothing consumed: the key is kept, the same link works again once the service reopens.
+        await showFormError(t('secret.reveal.closed.text'));
+        break;
       case 'network':
         await showFormError(t('secret.reveal.error.network'));
         break;
@@ -272,9 +292,20 @@
   />
 {:else if view.kind === 'error'}
   <ErrorPage message={t('secret.reveal.loadError')} onretry={() => void retry()} {retrying} />
+{:else if view.kind === 'closed'}
+  <ErrorPage
+    title={t('secret.reveal.closed.title')}
+    message={t('secret.reveal.closed.text')}
+    onretry={() => void retry()}
+    {retrying}
+  />
+  <ReportAbuse {token} target="secret" id="tt-secret-report" />
 {:else if view.kind === 'ready'}
   {@const status = view.status}
   <h1 tabindex="-1">{t('secret.reveal.title')}</h1>
+  {#if express}
+    <ExpressBanner entity={tenant.name} />
+  {/if}
   <p>{t('secret.reveal.intro')}</p>
   <dl class="tt-dl">
     <dt>{t('secret.reveal.expires')}</dt>
@@ -315,32 +346,18 @@
       </Button>
     </div>
   </form>
+  {#if express}
+    <ReportAbuse {token} target="secret" id="tt-secret-report" />
+  {/if}
 {:else}
   {@const secret = view.secret}
   <h1 tabindex="-1">{t('secret.reveal.revealed.title')}</h1>
+  {#if express}
+    <ExpressBanner entity={tenant.name} />
+  {/if}
   <Alert severity="warning" live={false}>{t('secret.reveal.revealed.warning')}</Alert>
   {#if secret.text !== ''}
-    {#if textHidden}
-      <p id="tt-secret-text-hidden">{t('secret.reveal.revealed.hidden')}</p>
-    {:else}
-      <TextArea
-        id="tt-secret-text"
-        class="secret-text"
-        label={t('secret.reveal.revealed.text')}
-        value={secret.text}
-        readonly
-        rows={8}
-        spellcheck={false}
-        autocomplete="off"
-      />
-    {/if}
-    <div class="tt-cluster">
-      <Button variant="secondary" aria-pressed={textHidden} onclick={() => (textHidden = !textHidden)}>
-        {t('secret.reveal.revealed.hide')}
-      </Button>
-      <CopyButton text={secret.text} label={t('secret.reveal.revealed.copy')} />
-    </div>
-    <p class="tt-text-sm tt-text-muted">{t('secret.reveal.revealed.clipboard')}</p>
+    <RevealedText text={secret.text} />
   {:else}
     <p>{t('secret.reveal.revealed.noText')}</p>
   {/if}
@@ -394,15 +411,13 @@
       {/if}
     </section>
   {/if}
+  {#if express}
+    <ReportAbuse {token} target="secret" id="tt-secret-report" />
+  {/if}
 {/if}
 
 <style>
   .file {
     margin: var(--tt-space-4) 0;
-  }
-
-  :global(.secret-text .tt-field__input) {
-    font-family: var(--tt-font-mono);
-    white-space: pre-wrap;
   }
 </style>

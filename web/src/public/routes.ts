@@ -3,6 +3,7 @@
 import type { Route } from '../shared/router/router.svelte';
 import DropLinkLanding from './screens/DropLinkLanding.svelte';
 import Download from './screens/Download.svelte';
+import ExpressSecret from './screens/ExpressSecret.svelte';
 import Help from './screens/Help.svelte';
 import HelpPrint from './screens/HelpPrint.svelte';
 import Home from './screens/Home.svelte';
@@ -42,6 +43,13 @@ export const routes: readonly Route<ScreenComponent>[] = [
     component: SecretReveal,
     titleKey: 'secret.reveal.title',
     helpTopic: 'secret-read',
+  },
+  // Since 2.3: the express secret (anonymous one-time text secret, CLAUDE.md section 22.2).
+  {
+    pattern: '/x',
+    component: ExpressSecret,
+    titleKey: 'secretExpress.title',
+    helpTopic: 'express-secret',
   },
   { pattern: '/invite', component: Invite, titleKey: 'invitation.invite.title', helpTopic: 'invite' },
   { pattern: '/me', component: MyTransfers, titleKey: 'myTransfers.title', helpTopic: 'my-transfers' },

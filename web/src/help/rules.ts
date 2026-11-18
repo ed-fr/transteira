@@ -69,6 +69,18 @@ export function secretItems(rules: Pick<HelpTenantRules, 'features'>, fmt: Rules
 }
 
 /**
+ * Rules of the anonymous express secrets in words (empty with a server that does not send them).
+ * The number of characters is the client-side limit announced by the server.
+ */
+export function expressItems(rules: Pick<HelpTenantRules, 'features'>, fmt: RulesFormat): string[] {
+  const express = rules.features?.expressSecrets;
+  if (express === undefined) return [];
+  if (!express.enabled) return [fmt.t('help.rules.express.off')];
+  const durations = fmt.list(express.durations.map((d) => fmt.t(`secretCreate.duration.${d}`)));
+  return [fmt.t('help.rules.express.on', { durations, max: express.maxChars })];
+}
+
+/**
  * Overview of the rules: size and durations, then the options that are on or off for the tenant
  * (absent with a server that does not send them).
  */
@@ -86,6 +98,7 @@ export function summaryItems(rules: HelpTenantRules, fmt: RulesFormat): string[]
   );
   items.push(fmt.t(`help.rules.features.antivirus.${features.antivirus === 'disabled' ? 'off' : 'on'}`));
   items.push(...secretItems(rules, fmt));
+  items.push(...expressItems(rules, fmt));
   return items;
 }
 

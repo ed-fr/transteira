@@ -252,6 +252,8 @@ Avec **Je copie le lien moi-même**, l’écran **Secret créé** affiche le lie
 
 **Préférez des durées courtes.** Une fois le secret lu, le serveur détruit son contenu et ses clés. Une sauvegarde du serveur faite pendant que le secret attendait encore conserve en revanche le texte chiffré, et ne peut plus être effacée ensuite. Ce qui protège alors le secret, c’est sa clé (la fin du lien) et la phrase de passe. Choisissez donc la **durée la plus courte** qui vous convient, et utilisez une phrase de passe, surtout pour la remise par mail.
 
+**Secret express.** Si votre organisation le propose, une page distincte **Secret express** (un lien dans l’en-tête des pages publiques) partage un court texte sans aucune identification ; elle n’a aucune des options ci-dessus.
+
 **Personnes externes invitées.** Si vous avez été invité, vous pouvez aussi partager un secret, uniquement par mail et uniquement à la personne qui vous a invité : le formulaire affiche **Le lien sera envoyé par mail à…** suivi de son adresse, et il n’y a rien à choisir. L’onglet est absent si votre organisation n’autorise pas les secrets par mail. Voir [Envoyer des fichiers avec une invitation](topic:invitation).
 
 **Depuis un script.** Un jeton d’API peut créer des secrets par l’API (voir `docs/api/` dans le dépôt TransTeira). Le client en ligne de commande `transteira-cli` ne gère pas les secrets.
@@ -259,6 +261,48 @@ Avec **Je copie le lien moi-même**, l’écran **Secret créé** affiche le lie
 ### Mes secrets
 
 Dans [Mes envois](topic:my-transfers), dès que vous avez créé au moins un secret et si votre organisation propose les secrets, la section **Mes secrets** liste vos secrets, du plus récent au plus ancien. Pour chacun, elle indique la date de création, la remise (un lien à transmettre, ou l’adresse mail), la taille du fichier joint s’il y en a un, l’état (**En attente**, **Disponible**, **Lu**, **Expiré**, **Supprimé** ou **Verrouillé**), la date d’expiration et la date de lecture. **En attente** désigne un secret inachevé (voir plus haut). Leur contenu n’y est jamais affiché, et le lien ne peut pas être retrouvé. Tant qu’un secret n’est pas lu, cliquez sur **Supprimer** : il est détruit aussitôt, même si le destinataire a déjà le lien. Il reste dans la liste avec l’état **Supprimé**. Vous y accédez avec le même lien d’accès que vos transferts.
+
+<!-- topic: express-secret -->
+<!-- when: expressSecrets -->
+## Secret express
+
+La page **Secret express** permet de transmettre un court texte (mot de passe, code, clé) par un lien qui ne s’ouvre qu’une seule fois, **sans vous identifier** : ni adresse mail, ni code, ni invitation. Toute personne qui peut atteindre l’adresse de ce service peut l’utiliser, depuis n’importe quel réseau, lorsque votre organisation l’a activé. Le lien **Secret express** de l’en-tête l’ouvre, tout comme l’adresse `/x` du service. C’est un outil différent de [Partager un secret](topic:secret-share), qui demande de vous identifier et offre davantage d’options.
+
+Le texte est chiffré dans votre navigateur avant de quitter votre ordinateur : le serveur ne le voit jamais en clair et ne reçoit pas non plus la clé. La clé reste dans la fin du lien, après le signe `#`.
+
+![Page Secret express avec le texte saisi, le compteur et le choix de la durée](../screenshots/fr/express-create.png)
+
+1. Saisissez le **Texte du secret** : 10 000 caractères au plus (un compteur indique ce que vous avez utilisé). Du texte uniquement : pas de fichier, pas de phrase de passe et pas d’envoi par mail.
+1. Choisissez la durée dans **Valable pendant** : **1 heure**, **1 jour** ou **7 jours**. Passé ce délai, le secret est détruit même si personne ne l’a lu. Choisissez la durée la plus courte qui vous convient.
+1. Cliquez sur **Créer le lien**.
+
+L’écran **Secret créé** affiche alors le **lien complet**, clé comprise, avec le bouton **Copier le lien**.
+
+![Écran Secret créé avec le lien complet affiché une seule fois et le bouton Copier le lien](../screenshots/fr/express-link-shown.png)
+
+**Le lien n’est affiché qu’une seule fois.** Copiez-le avant de quitter la page : il ne peut plus être affiché ensuite, et personne, administrateurs compris, ne peut le retrouver. Si votre navigateur refuse la copie, le lien est sélectionné pour que vous le copiiez avec Ctrl+C (⌘+C sur Mac). **Créer un autre secret** efface le texte et le lien de la page. Le lien copié peut rester dans l’historique du presse-papiers de votre appareil : videz-le une fois le lien transmis.
+
+**Le lien est le secret.** Quiconque l’ouvre en premier lit le texte, une fois, puis le texte est détruit sur le serveur. Donc :
+
+- Transmettez le lien par **un autre canal** que le contenu qu’il protège, et préférez une messagerie instantanée ou un appel téléphonique à un mail. Certains outils de sécurité du courrier ouvrent les liens des messages qu’ils analysent : ils peuvent consommer le secret avant son destinataire. Si le destinataire trouve le secret déjà lu, créez-en un nouveau.
+- Ne placez pas le lien dans un ticket, un wiki ou tout endroit lu par beaucoup de monde.
+- Ne transférez jamais un lien reçu : transmettez le secret lui-même.
+
+Votre organisation ne sait pas qui vous êtes : elle conserve seulement l’adresse d’où vient votre connexion, dans son journal d’audit, pendant 12 mois, jamais le contenu. Le destinataire voit un bandeau indiquant que le contenu a été créé par un tiers non vérifié, et peut signaler un abus.
+
+**Quand préférer un autre outil.** Utilisez plutôt [Partager un secret](topic:secret-share) si vous voulez une phrase de passe, un petit fichier, un envoi par mail avec accusé de lecture, ou si vous voulez retrouver vos secrets dans [Mes envois](topic:my-transfers).
+
+**Messages que vous pouvez rencontrer** (votre texte reste dans le formulaire et rien n’a été envoyé) :
+
+- **Saisissez le texte du secret.** : le texte est vide.
+- **Le texte est trop long : 10 000 caractères au plus.** : raccourcissez-le, ou passez par [Partager un secret](topic:secret-share) ou par un transfert.
+- **Le texte contient des caractères invalides** : retirez les caractères qu’un clavier ou un copier-coller a ajoutés par erreur, puis réessayez.
+- **Trop de secrets créés depuis votre connexion. Réessayez à partir de …** : la limite horaire est atteinte pour l’adresse de votre réseau. Le bouton reste désactivé jusqu’à l’heure indiquée.
+- **Trop de secrets express attendent d’être lus sur ce service. Réessayez plus tard.** : le service est plein pour le moment.
+- **… ne propose plus les secrets express.** : le service a été fermé par votre organisation pendant votre saisie.
+- **Le service est en maintenance** : réessayez plus tard, voir [Service en maintenance](topic:maintenance).
+
+Si la page indique que votre organisation ne propose pas les secrets express, le service est désactivé pour cette entité.
 
 <!-- topic: my-transfers -->
 ## Mes envois

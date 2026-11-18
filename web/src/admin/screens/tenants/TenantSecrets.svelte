@@ -4,20 +4,37 @@
   // from the catalogue) and the preselected one, the optional small file (size 1 to 25 MiB) and
   // the e-mail delivery with its passphrase rule. The PUT replaces every setting. Client-side
   // validation mirrors the specification, the server field errors are mapped to the fields.
-  // An auditor has no access (403 read-only-role, shown as a load error).
+  // Since 2.3 the screen also holds the express secrets (CLAUDE.md section 22.2): the anonymous
+  // mode switch (off by default), its three limits, a reminder to complete the legal texts while
+  // it is on (H24, T-404) and the emergency purge of the live anonymous express secrets
+  // (POST …/express-secrets/purge, after a confirmation). An auditor has no access (403
+  // read-only-role, shown as a load error); the fields and the purge are also disabled for the
+  // read-only role in case the screen is shown.
   // The tenant sub-navigation is rendered by App.svelte.
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Checkbox, HelpIcon, Spinner, TextField } from '../../../shared/components';
+  import {
+    Alert,
+    Button,
+    Checkbox,
+    HelpIcon,
+    Spinner,
+    TextField,
+    announce,
+  } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
-  import { adminApi } from '../../api';
+  import { adminApi, adminSession } from '../../api';
+  import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import SelectField from '../../components/SelectField.svelte';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
+  import { isAuditor, tenantPath } from '../../shell';
   import type { AdminScreenProps } from '../types';
   import {
+    EXPRESS_LIMITS,
     MAX_FILE_MIB,
     MIN_FILE_MIB,
     SECRET_DURATIONS,
+    purgeResultText,
     secretDraftChanged,
     secretSettingsBody,
     toDraft,
@@ -35,6 +52,9 @@
     durations: `${uid}-durations`,
     defaultDuration: `${uid}-default`,
     fileMaxBytes: `${uid}-file`,
+    expressPerIp: `${uid}-express-ip`,
+    expressPerToken: `${uid}-express-token`,
+    expressPending: `${uid}-express-pending`,
   };
 
   let loading = $state(true);
@@ -48,14 +68,25 @@
     fileMibText: '10',
     emailAllowed: true,
     emailRequiresPassphrase: false,
+    expressEnabled: false,
+    expressPerHourPerIpText: String(EXPRESS_LIMITS.perHourPerIp.def),
+    expressPerHourPerTokenText: String(EXPRESS_LIMITS.perHourPerToken.def),
+    expressMaxPendingText: String(EXPRESS_LIMITS.maxPending.def),
   });
   let errors = $state<SummaryError[]>([]);
+  let purgeOpen = $state(false);
+  let purgeDone = $state('');
+
+  const readOnly = $derived(isAuditor(adminSession.me?.role));
 
   const tenantId = $derived(params['id'] ?? '');
   const fields = $derived({
     durations: { id: ids.durations, label: t('adminSecrets.settings.durations.label') },
     defaultDuration: { id: ids.defaultDuration, label: t('adminSecrets.settings.defaultDuration.label') },
     fileMaxBytes: { id: ids.fileMaxBytes, label: t('adminSecrets.settings.fileMaxBytes.label') },
+    expressPerHourPerIp: { id: ids.expressPerIp, label: t('adminSecrets.express.perIp.label') },
+    expressPerHourPerToken: { id: ids.expressPerToken, label: t('adminSecrets.express.perToken.label') },
+    expressMaxPending: { id: ids.expressPending, label: t('adminSecrets.express.maxPending.label') },
   });
   const dirty = $derived(saved !== undefined && secretDraftChanged(saved, draft));
   const defaultOptions = $derived(
@@ -87,6 +118,18 @@
 
   function toggle(duration: SecretDuration, on: boolean): void {
     draft = { ...draft, ...toggleDuration(draft, duration, on) };
+  }
+
+  async function purge(): Promise<string | void> {
+    try {
+      const res = await adminApi.post('/admin/tenants/{tenantId}/express-secrets/purge', {
+        path: { tenantId },
+      });
+      purgeDone = purgeResultText(res.data.deleted, t);
+      announce(purgeDone);
+    } catch (err) {
+      return describeError(i18n, err).message;
+    }
   }
 
   async function save(): Promise<SubmitOutcome> {
@@ -190,7 +233,83 @@
       disabled={!draft.emailAllowed}
       bind:checked={draft.emailRequiresPassphrase}
     />
+
+    <fieldset class="tt-secrets__group" id="{uid}-express">
+      <legend>{t('adminSecrets.express.legend')}</legend>
+      <p class="tt-text-sm tt-text-muted">{t('adminSecrets.express.intro')}</p>
+      <Checkbox
+        label={t('adminSecrets.express.enabled.label')}
+        hint={t('adminSecrets.express.enabled.hint')}
+        disabled={readOnly}
+        bind:checked={draft.expressEnabled}
+      />
+      {#if draft.expressEnabled}
+        <div class="tt-secrets__reminder" id="{uid}-express-reminder">
+          <Alert severity="info">
+            <p>{t('adminSecrets.express.reminder.text')}</p>
+            <p>
+              <a href={nav.href(tenantPath(tenantId, 'legal'))} use:nav.link>
+                {t('adminSecrets.express.reminder.link')}
+              </a>
+            </p>
+          </Alert>
+        </div>
+      {/if}
+      <TextField
+        id={ids.expressPerIp}
+        label={t('adminSecrets.express.perIp.label')}
+        hint={t('adminSecrets.express.perIp.hint', EXPRESS_LIMITS.perHourPerIp)}
+        inputmode="numeric"
+        autocomplete="off"
+        disabled={readOnly}
+        bind:value={draft.expressPerHourPerIpText}
+        error={errorFor(errors, ids.expressPerIp)}
+      />
+      <TextField
+        id={ids.expressPerToken}
+        label={t('adminSecrets.express.perToken.label')}
+        hint={t('adminSecrets.express.perToken.hint', EXPRESS_LIMITS.perHourPerToken)}
+        inputmode="numeric"
+        autocomplete="off"
+        disabled={readOnly}
+        bind:value={draft.expressPerHourPerTokenText}
+        error={errorFor(errors, ids.expressPerToken)}
+      />
+      <TextField
+        id={ids.expressPending}
+        label={t('adminSecrets.express.maxPending.label')}
+        hint={t('adminSecrets.express.maxPending.hint', EXPRESS_LIMITS.maxPending)}
+        inputmode="numeric"
+        autocomplete="off"
+        disabled={readOnly}
+        bind:value={draft.expressMaxPendingText}
+        error={errorFor(errors, ids.expressPending)}
+      />
+    </fieldset>
   </FormSection>
+
+  <section class="tt-secrets__purge" id="{uid}-purge" aria-labelledby="{uid}-purge-title">
+    <h2 class="tt-text-lg" id="{uid}-purge-title">{t('adminSecrets.express.purge.title')}</h2>
+    <p>{t('adminSecrets.express.purge.intro')}</p>
+    <p>
+      <Button variant="danger" disabled={readOnly} onclick={() => (purgeOpen = true)}>
+        {t('adminSecrets.express.purge.button')}
+      </Button>
+    </p>
+    {#if purgeDone !== ''}
+      <Alert severity="success" live={false}>{purgeDone}</Alert>
+    {/if}
+  </section>
+
+  <ConfirmDialog
+    bind:open={purgeOpen}
+    title={t('adminSecrets.express.purge.confirmTitle')}
+    text={t('adminSecrets.express.purge.confirmText')}
+    confirmLabel={t('adminSecrets.express.purge.confirm')}
+    busyLabel={t('adminSecrets.express.purge.busy')}
+    danger
+    onconfirm={purge}
+  />
 {/if}
 
 <style>
@@ -198,6 +317,14 @@
     margin: 0 0 var(--tt-space-4);
     padding: 0;
     border: 0;
+  }
+
+  .tt-secrets__reminder {
+    margin: 0 0 var(--tt-space-4);
+  }
+
+  .tt-secrets__purge {
+    margin-top: var(--tt-space-6);
   }
 
   .tt-secrets__inline {

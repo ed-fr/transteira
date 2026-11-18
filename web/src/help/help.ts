@@ -9,12 +9,15 @@ import type { GuideId, HelpFeature, HelpGuide, HelpGuideSet, HelpSection } from 
 export type HelpFeatures = HelpTenantRules['features'];
 
 /**
- * Reports whether a tenant feature is on. The one-time secrets module is an object whose
- * "enabled" flag decides; the other features are booleans.
+ * Reports whether a tenant feature is on. The one-time secrets module and the express secrets
+ * (anonymous, since 2.3) are objects whose "enabled" flag decides; the other features are booleans.
  */
 export function featureOn(features: NonNullable<HelpFeatures>, feature: HelpFeature): boolean {
   if (feature === 'secrets') {
     return features.secrets?.enabled === true;
+  }
+  if (feature === 'expressSecrets') {
+    return features.expressSecrets?.enabled === true;
   }
   return features[feature] === true;
 }

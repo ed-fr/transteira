@@ -94,6 +94,11 @@ func TestWebUITenantHost(t *testing.T) {
 		// The page of a one-time secret link (since 2.1) is never stored.
 		{"/s/tts_abc", 200, publicPage, html, SecretPageCacheControl, true},
 		{"/s/tts_abc/x", 404, publicPage, html, SecretPageCacheControl, false},
+		// The express secret page (since 2.3) is never stored either.
+		{"/x", 200, publicPage, html, SecretPageCacheControl, true},
+		{"/x/", 404, publicPage, html, cache, false},
+		{"/x/tts_abc", 404, publicPage, html, cache, false},
+		{"/xx", 404, publicPage, html, cache, false},
 		{"/legal/privacy", 200, publicPage, html, cache, true},
 		{"/invite", 200, publicPage, html, cache, true},
 		{"/me", 200, publicPage, html, cache, true},
@@ -529,7 +534,8 @@ func TestIsPublicRoute(t *testing.T) {
 	for p, want := range map[string]bool{
 		"/": true, "/invite": true, "/me": true, "/help": true, "/help/": true, "/help/a/b": true, "/d/x": true, "/d/x/reply": true, "/d/reply": true, "/i/x": true, "/drop/ttd_x": true, "/s/tts_x": true, "/legal/terms": true,
 		"": false, "/helpx": false, "/invite/": false, "/d/": false, "/d/x/": false, "/d": false, "/d//reply": false, "/d/x/reply/": false, "/d/x/other": false, "/d/x/reply/reply": false, "/i/x/reply": false, "/drop/": false, "/drop": false, "/drop/x/": false, "/drop/x/reply": false, "/s/": false, "/s": false, "/s/x/": false, "/s/x/reveal": false, "/legal/a/b": false,
-		"/admin/": false, "/x": false, "/dx": false, "/me/": false, "/me/x": false,
+		"/x": true, "/x/": false, "/x/y": false, "/xx": false,
+		"/admin/": false, "/dx": false, "/me/": false, "/me/x": false,
 	} {
 		if got := isPublicRoute(p); got != want {
 			t.Errorf("isPublicRoute(%q) = %v", p, got)

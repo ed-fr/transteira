@@ -1,9 +1,15 @@
-// Logic of the "Report an abuse" dialog of the download page (CLAUDE.md section 10, version 1.1),
-// kept out of the component so that it is unit tested in Node: categories, request body and
-// classification of the API errors.
-import { ApiProblem } from '../../shared/api/client';
+// Logic of the "Report an abuse" dialog of the download page (CLAUDE.md section 10, version 1.1)
+// and, since 2.3, of the read page of an express secret (section 22.2, reportSecretAbuse), kept
+// out of the component so that it is unit tested in Node: categories, request body, request and
+// classification of the API errors. A report never carries the key nor the text of a secret: only
+// the token of its link (in the path), the category and the reporter's message (threat model
+// T-399, T-407).
+import { ApiProblem, type ApiClient } from '../../shared/api/client';
 import type { components } from '../../shared/api/schema';
 import type { Translate } from '../../shared/i18n/messages';
+
+/** What is reported: a transfer (download link) or, since 2.3, an express secret (secret link). */
+export type ReportTarget = 'transfer' | 'secret';
 
 /** Category of an abuse report. */
 export type AbuseCategory = components['schemas']['AbuseReportCategory'];
@@ -45,6 +51,25 @@ export function reportBody(
   return trimmed === '' ? { category } : { category, message: trimmed };
 }
 
+/** Sends the report of the transfer or express secret whose link token is token. */
+export async function sendAbuseReport(
+  api: Pick<ApiClient, 'post'>,
+  target: ReportTarget,
+  token: string,
+  body: components['schemas']['AbuseReportCreate'],
+): Promise<void> {
+  if (target === 'secret') {
+    await api.post('/secret-links/{secretToken}/abuse-reports', { path: { secretToken: token }, body });
+  } else {
+    await api.post('/downloads/{linkToken}/abuse-reports', { path: { linkToken: token }, body });
+  }
+}
+
+/** Message key of the introduction of the dialog. */
+export function reportIntroKey(target: ReportTarget): string {
+  return target === 'secret' ? 'secret.reveal.report.intro' : 'download.report.intro';
+}
+
 /** Outcome of a failed report. */
 export type ReportFailure =
   | { kind: 'rate-limited' }
@@ -70,7 +95,13 @@ export function reportFailure(err: unknown): ReportFailure {
   return { kind: 'error' };
 }
 
-/** Message key (download.report.errors.*) of a failure. */
-export function reportFailureKey(failure: ReportFailure): string {
+/**
+ * Message key of a failure: download.report.errors.*, except the end of an express secret
+ * (secret.reveal.report.gone).
+ */
+export function reportFailureKey(failure: ReportFailure, target: ReportTarget = 'transfer'): string {
+  if (target === 'secret' && failure.kind === 'gone') {
+    return 'secret.reveal.report.gone';
+  }
   return `download.report.errors.${failure.kind === 'not-found' ? 'notFound' : failure.kind === 'rate-limited' ? 'rateLimited' : failure.kind}`;
 }

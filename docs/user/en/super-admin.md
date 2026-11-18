@@ -93,6 +93,13 @@ On the [General](topic:tenant-general) screen of an entity, you can change the s
 
 **One-time secrets** are not reserved to you: you manage them like a delegated administrator, on the **Secrets settings** screen of any entity, **Enable one-time secrets** included (see the delegated administrator guide, [One-time secrets](topic:tenant-secrets)). Since 2.1 the module is **enabled by default in every entity, including those that existed before the upgrade**, with file attachments (10 MiB) and delivery by email allowed, and a delegated administrator can change these settings too, the file option included. After upgrading, review the settings of every entity, especially those with no delegated administrator, and turn off what an entity does not need.
 
+**Express secrets** (anonymous text shared without any identification, see the delegated administrator guide) are managed like the one-time secrets, on the same **Secrets settings** screen, but they are **off by default** in every entity. Two things concern you in particular:
+
+- **The kill switch of the instance.** Setting `TT_EXPRESS_SECRETS_DISABLED=true` in the environment and restarting the service closes the express secrets for the **whole instance**: no express secret can be created, anonymously or with an API token, and **none can be read**, whatever the settings of the entities. Readers see that the secret is temporarily unavailable, and nothing is consumed: the links work again once the variable is removed and the service restarted. A secret that expires meanwhile is lost. The one-time secrets are not affected. The variable cannot be changed from the administration, and the entities show the service as not offered. Use it as an emergency stop when the service is misused.
+- **Import and duplication.** A configuration imported (or duplicated) never turns the express secrets on: **Allow anonymous express secrets** is always off in the new entity, even if the file says otherwise; the delegated administrator turns it on deliberately, after completing the legal information. The limits of the file are imported as given.
+
+Before turning the service on for an entity, check that its legal information gives a contact for abuse reports, and tell the administrators of the entity that they cannot read or moderate what is stored there. Your own screens show, in the **One-time secrets** list, the **Express** badge and the search by link described in the delegated administrator guide.
+
 > **Note** The sum of the quotas may exceed the size of the disk. Watch the disk use in the [System overview](topic:system-overview).
 
 <!-- topic: tenant-import -->

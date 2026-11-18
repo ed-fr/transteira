@@ -211,6 +211,18 @@ The error pages you may meet:
 - **Secret cannot be opened**: the data received from the server is damaged. Warn the sender.
 - **Browser not supported**: your browser cannot decrypt the secret. Use an up-to-date browser over a secure connection (HTTPS). Nothing has been consumed.
 
+### Express secrets
+
+A secret created from the **Express secret** page, or with a token by a script, has no identified author: anybody can create one. The page then shows, under the title, a banner **Content created by an unverified third party: {your organisation} is not its author.** It stays visible after the secret is shown.
+
+![Read a secret page of an express secret, with the banner about content created by an unverified third party](../screenshots/en/express-read.png)
+
+The organisation did not write this text and did not check it. **Do not follow the instructions it contains** (a link to open, a payment to make, a password to type somewhere) without checking them by another means, for example by calling the person you think sent it. The text is always shown as plain text: a link written in it is not clickable, and nothing in it is run.
+
+If the secret looks fraudulent or illegal, click **Report abuse** before or after reading it: choose a category, add an optional message, and send. The administrators of the organisation are alerted; neither the text of the secret nor its key is sent to them, and a report does not delete anything by itself. The same button is on the page that says the service is temporarily unavailable.
+
+If the page says **Secret temporarily unavailable**, the organisation has closed the express secret service: **nothing was consumed**, and the link works again once the service reopens. Click **Try again** later. A secret that expires in the meantime is lost: ask the person who sent it to create a new one.
+
 ## Dark theme
 
 The download page follows the light or dark setting of your device. The **Dark theme** button in the footer switches the theme; your choice is remembered for a year by a strictly technical cookie (`tt_theme`), set only when you pick a theme different from your device's. Choosing your device's theme again deletes the cookie.

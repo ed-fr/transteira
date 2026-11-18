@@ -41,7 +41,9 @@
       <p class="tt-text-bold tt-mb-0">{t('secretCreate.done.shownOnce')}</p>
     </Alert>
     <p class="tt-mb-0">{t('secretCreate.done.linkLabel')}</p>
-    <code class="tt-secret-link" data-testid="secret-done-link">{secret.link}</code>
+    <!-- translate="no": a page translation service must never receive the link and its key. -->
+    <code class="tt-secret-link notranslate" data-testid="secret-done-link" translate="no">{secret.link}</code
+    >
     <div>
       <CopyButton text={secret.link} label={t('secretCreate.done.copy')} />
     </div>

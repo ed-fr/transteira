@@ -11,6 +11,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/cli/client"
 	"github.com/ed-fr/transteira/internal/cli/download"
+	"github.com/ed-fr/transteira/internal/cli/secret"
 	"github.com/ed-fr/transteira/internal/textsafe"
 )
 
@@ -65,6 +66,9 @@ func runDownload(ctx context.Context, args []string, s streams) int {
 	}
 	link, err := download.ParseLink(raw)
 	if err != nil {
+		if _, serr := secret.ParseLink(raw); serr == nil {
+			return usageError(s, "this is a one-time secret link, not a download link: use \"%s secret read -\"", prog)
+		}
 		return usageError(s, "%s", err)
 	}
 	opts := download.Options{

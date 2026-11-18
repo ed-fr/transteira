@@ -1,7 +1,8 @@
 <script lang="ts">
   // Public application (tenant hosts): start-up (tenant configuration, theme, language), page
-  // frame (logo, background, footer with legal links, help and language switch, maintenance
-  // banner) and the screen of the current route.
+  // frame (logo, background, header link to the express secret when the tenant offers it, footer
+  // with legal links, help and language switch, maintenance banner) and the screen of the current
+  // route.
   import { onMount } from 'svelte';
   import { pageTitleOf } from '../help/title.svelte';
   import { api } from '../shared/api/api';
@@ -29,6 +30,7 @@
     type PublicTenant,
   } from './bootstrap';
   import { isHelpRoute, notFoundRoute, routes } from './routes';
+  import { EXPRESS_PATH, expressFeatures, expressOffered } from './secret/express';
   import ErrorPage from './screens/ErrorPage.svelte';
   import SetupPage from './screens/SetupPage.svelte';
 
@@ -115,8 +117,8 @@
 
   const match = $derived(router.current);
   const notice = $derived(tenant === undefined ? undefined : maintenanceNotice(tenant));
-  // The deposit and invite screens show their own full maintenance page.
-  const fullMaintenancePage = new Set(['/', '/invite']);
+  // The deposit, invite and express secret screens show their own full maintenance page.
+  const fullMaintenancePage = new Set(['/', '/invite', EXPRESS_PATH]);
   const inSetup = $derived(
     // Maintenance wins over setup, as on the server.
     tenant === undefined || notice !== undefined
@@ -124,6 +126,8 @@
       : showSetupPage(tenant, match.route.pattern, tenantSetup.inSetup),
   );
   const showBanner = $derived(notice !== undefined && !fullMaintenancePage.has(match.route.pattern));
+  // Header link to the express secret page (since 2.3), only when the tenant offers it.
+  const showExpressLink = $derived(tenant !== undefined && expressOffered(expressFeatures(tenant)));
 </script>
 
 {#if locale.current === ''}
@@ -137,6 +141,21 @@
     backgroundUrl={current.branding.backgroundUrl}
     wide={match.route.pattern === '/d/:token' || match.route.pattern === '/me'}
   >
+    {#snippet header()}
+      {#if showExpressLink}
+        <nav class="tt-header-nav" aria-label={t('secretExpress.nav.label')}>
+          <a
+            id="tt-header-express"
+            class="tt-header-nav__link"
+            href={router.href(EXPRESS_PATH)}
+            use:router.link
+            aria-current={match.route.pattern === EXPRESS_PATH ? 'page' : undefined}
+          >
+            {t('secretExpress.nav.link')}
+          </a>
+        </nav>
+      {/if}
+    {/snippet}
     {#snippet banner()}
       {#if showBanner}
         <Alert severity="warning" live={false} title={t('common.maintenance.banner')}>
@@ -189,5 +208,21 @@
 <style>
   .banner-text {
     white-space: pre-line;
+  }
+
+  .tt-header-nav__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding: var(--tt-space-2) var(--tt-space-4);
+    border-radius: var(--tt-radius);
+    background: var(--tt-surface);
+    color: var(--tt-link);
+    font-weight: var(--tt-font-weight-bold);
+  }
+
+  .tt-header-nav__link[aria-current='page'] {
+    color: var(--tt-text);
+    text-decoration: none;
   }
 </style>

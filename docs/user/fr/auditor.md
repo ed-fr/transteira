@@ -171,6 +171,8 @@ Vous ne pouvez ni créer, ni modifier, ni renouveler, ni révoquer un lien. Le s
 
 L’écran **Secrets à usage unique** liste, en lecture seule, les secrets de l’entité, du plus récent au plus ancien : **Création**, **Auteur**, **Remise**, **Fichier**, **État** (**En attente**, **Actif**, **Lu**, **Expiré**, **Supprimé** ou **Verrouillé**), **Expiration** et **Lecture**. Filtrez par **État**. Le filtre **Adresse de l’auteur** ne vous est pas proposé, comme pour les transferts et le journal d’audit. Un secret terminé reste listé 30 jours comme trace, sans aucun contenu, puis disparaît. Vous ne voyez jamais le contenu d’un secret, son lien ni sa phrase de passe, et vous ne pouvez supprimer aucun secret. Les réglages des secrets ne vous sont pas proposés.
 
+**Secrets express.** La liste contient aussi les **secrets express** de l’entité, créés sans authentification (voir le guide de l’administrateur délégué) : ils portent un badge **Express**, et l’auteur d’un secret anonyme est **Anonyme (secret express)**, sans adresse. **Retrouver un secret depuis son lien** permet de coller un lien de secret pour voir ses métadonnées (identifiant, type, état, dates). Votre navigateur n’envoie que l’identifiant du secret (`tts_…`) extrait du lien, jamais la clé, même depuis un lien réécrit par un filtre de messagerie (dont le `#` est encodé en `%23`), et le lien n’est pas conservé ; la recherche est inscrite dans le journal d’audit (**Secret recherché à partir d’un lien**). Vous ne voyez jamais le contenu, et le résultat n’a pas de bouton **Supprimer** pour vous. Dans le journal d’audit, la création d’un secret express indique l’adresse de la connexion d’où elle vient, ou le jeton d’API utilisé.
+
 <!-- topic: auditor-account -->
 ## Mon compte
 

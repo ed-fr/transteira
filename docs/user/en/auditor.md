@@ -171,6 +171,8 @@ You can neither create, change, rotate nor revoke a link. The secret of a link, 
 
 The **One-time secrets** screen lists, read-only, the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State** (**Pending**, **Active**, **Read**, **Expired**, **Deleted** or **Locked**), **Expiry** and **Read**. Filter by **State**. The **Author address** filter is not offered to you, as for the transfers and the audit log. An ended secret stays listed for 30 days as a tombstone, without any content, then disappears. You never see the content of a secret, its link or its passphrase, and you cannot delete any secret. The secrets settings are not offered to you.
 
+**Express secrets.** The list also holds the **express secrets** of the entity, created without authentication (see the delegated administrator guide): they carry an **Express** badge, and the author of an anonymous one is **Anonymous (express secret)**, with no address. **Find a secret from its link** lets you paste a secret link to see its metadata (identifier, type, state, dates). Your browser sends only the identifier of the secret (`tts_…`) extracted from the link, never the key, even from a link rewritten by a mail filter (whose `#` is encoded as `%23`), and the link is not kept; the lookup is recorded in the audit log (**Secret looked up from a link**). You never see the content, and the result has no **Delete** button for you. In the audit log, the creation of an express secret shows the address of the connection it came from, or the API token used.
+
 <!-- topic: auditor-account -->
 ## My account
 

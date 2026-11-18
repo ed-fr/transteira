@@ -20,7 +20,8 @@
     "category": "Reason",
     "reporter": "Reported by",
     "status": "Status",
-    "actions": "Actions"
+    "actions": "Actions",
+    "subject": "Concerns"
   },
   "status": {
     "open": "Open",
@@ -57,6 +58,13 @@
     "reopen": "Reopen the report",
     "cancel": "Close",
     "closedDone": "Report closed.",
-    "reopenedDone": "Report reopened."
+    "reopenedDone": "Report reopened.",
+    "secretLink": "Open the secrets of this entity",
+    "secretHint": "To find it, paste its link in the search of that screen. Express secrets can also all be deleted from the secrets settings."
+  },
+  "subject": {
+    "secret": "Express secret {id}",
+    "transfer": "Transfer {id}",
+    "unknown": "Unknown"
   }
 }

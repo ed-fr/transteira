@@ -23,6 +23,7 @@ import {
   descriptorValid,
   downloadFile,
   grantExpired,
+  isExpress,
   loadStatus,
   passphraseProblem,
   revealSecret,
@@ -144,6 +145,8 @@ describe('classifyFailure', () => {
       { kind: 'wrong-passphrase', attemptsRemaining: 2 },
     ],
     [problem(403, { code: 'forbidden' }), { kind: 'error' }],
+    // Since 2.3: an express secret while the service is closed (nothing consumed).
+    [problem(403, { code: 'express-secrets-disabled' }), { kind: 'closed' }],
     [
       problem(429, { code: 'rate-limited', retryAfterSeconds: 30 }),
       { kind: 'rate-limited', retryAfterSeconds: 30 },
@@ -172,6 +175,36 @@ describe('loadStatus', () => {
       kind: 'failure',
       failure: { kind: 'gone', reason: 'read' },
     });
+  });
+});
+
+describe('express secrets (since 2.3)', () => {
+  it('tells an express secret from a 2.1 one', () => {
+    const base: SecretStatus = { state: 'active', expiresAt: '2026-11-10T09:00:00Z', file: null };
+    expect(isExpress(base)).toBe(false);
+    expect(isExpress({ ...base, express: false })).toBe(false);
+    expect(isExpress({ ...base, express: true, anonymous: true })).toBe(true);
+    expect(isExpress({ ...base, express: true, anonymous: false })).toBe(true);
+  });
+
+  it('reports a closed service on the status call', async () => {
+    const deps = server(await fixture());
+    deps.get.mockRejectedValueOnce(problem(403, { code: 'express-secrets-disabled' }));
+    expect(await loadStatus(deps, TOKEN)).toEqual({ kind: 'failure', failure: { kind: 'closed' } });
+  });
+
+  it('reports a closed service on the reveal, which consumed nothing', async () => {
+    const fx = await fixture({ text: 'express text' });
+    const status: SecretStatus = { ...fx.status, express: true, anonymous: true };
+    const deps = server(fx);
+    deps.post.mockRejectedValueOnce(problem(403, { code: 'express-secrets-disabled' }));
+    expect(await revealSecret(deps, TOKEN, fx.key, '', status)).toEqual({
+      kind: 'failure',
+      failure: { kind: 'closed' },
+    });
+    // The same link works again once the service reopens.
+    const out = await revealSecret(deps, TOKEN, fx.key, '', status);
+    expect(out.kind === 'revealed' && out.secret.text).toBe('express text');
   });
 });
 

@@ -19,7 +19,8 @@
       "lastUsed": "Last used",
       "expires": "Expires",
       "status": "Status",
-      "actions": "Actions"
+      "actions": "Actions",
+      "express": "Express secrets"
     },
     "anySender": "Any address of the internal domains",
     "createdBy": "{date} by {admin}",
@@ -27,7 +28,9 @@
     "noExpiry": "Never",
     "lastUsedNote": "The last use is recorded at most once a minute per token: it may lag behind by up to a minute.",
     "edit": "Edit",
-    "revoke": "Revoke"
+    "revoke": "Revoke",
+    "expressYes": "Allowed",
+    "expressNo": "No"
   },
   "edit": {
     "title": "Edit the token {name}",
@@ -65,6 +68,10 @@
     "expiry": {
       "label": "Expiry date (optional)",
       "hint": "The token stops working at the end of this day (your local time). Leave empty for a token that never expires; you can revoke it at any time."
+    },
+    "expressAllowed": {
+      "label": "Allowed to create express secrets",
+      "hint": "Lets the scripts using this token create express secrets, even when the anonymous mode of the entity is off, with a limit of their own per token (see the secrets settings). Off by default."
     }
   },
   "secret": {

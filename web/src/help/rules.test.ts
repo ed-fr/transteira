@@ -7,6 +7,7 @@ import {
   levelRuleItems,
   levelViews,
   limitItems,
+  expressItems,
   secretItems,
   summaryItems,
   type HelpLevel,
@@ -261,5 +262,34 @@ describe('HelpRules', () => {
     const summary = html({ set: 'summary', rules: { ...tenant, name: '<b>**Entity**</b>' } });
     expect(summary).not.toContain('<b>');
     expect(summary).toContain('&lt;b>**Entity**&lt;/b>');
+  });
+});
+
+describe('express secret rules in words', () => {
+  const express = {
+    enabled: true,
+    durations: ['1h', '1d', '7d'] as ('1h' | '1d' | '7d')[],
+    maxChars: 10000 as const,
+  };
+  const withExpress = (e: typeof express): HelpTenantRules => ({
+    ...tenant,
+    features: { ...features, expressSecrets: e },
+  });
+
+  it('says nothing without express features', () => {
+    expect(expressItems(tenant, fmt)).toEqual([]);
+  });
+
+  it('says only that the service is off when disabled', () => {
+    expect(expressItems(withExpress({ ...express, enabled: false }), fmt)).toEqual([
+      'help.rules.express.off',
+    ]);
+  });
+
+  it('gives the durations and the size, and adds them to the summary', () => {
+    const expected =
+      'help.rules.express.on{"durations":"secretCreate.duration.1h + secretCreate.duration.1d + secretCreate.duration.7d","max":10000}';
+    expect(expressItems(withExpress(express), fmt)).toEqual([expected]);
+    expect(summaryItems(withExpress(express), fmt).at(-1)).toBe(expected);
   });
 });

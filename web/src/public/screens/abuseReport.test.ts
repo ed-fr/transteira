@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { ApiProblem, type Problem } from '../../shared/api/client';
+import { describe, expect, it, vi } from 'vitest';
+import { ApiProblem, type ApiClient, type Problem } from '../../shared/api/client';
 import {
   ABUSE_CATEGORIES,
   categoryOptions,
@@ -8,6 +8,8 @@ import {
   reportBody,
   reportFailure,
   reportFailureKey,
+  reportIntroKey,
+  sendAbuseReport,
 } from './abuseReport';
 
 const problem = (status: number): ApiProblem =>
@@ -40,5 +42,29 @@ describe('abuse report', () => {
     expect(reportFailureKey({ kind: 'not-found' })).toBe('download.report.errors.notFound');
     expect(reportFailureKey({ kind: 'rate-limited' })).toBe('download.report.errors.rateLimited');
     expect(reportFailureKey({ kind: 'gone' })).toBe('download.report.errors.gone');
+  });
+
+  it('words the end of an express secret and the introduction per target', () => {
+    expect(reportFailureKey({ kind: 'gone' }, 'secret')).toBe('secret.reveal.report.gone');
+    expect(reportFailureKey({ kind: 'gone' }, 'transfer')).toBe('download.report.errors.gone');
+    expect(reportFailureKey({ kind: 'not-found' }, 'secret')).toBe('download.report.errors.notFound');
+    expect(reportIntroKey('secret')).toBe('secret.reveal.report.intro');
+    expect(reportIntroKey('transfer')).toBe('download.report.intro');
+  });
+
+  it('posts to the path of the target, with the category and the message only', async () => {
+    const post = vi.fn(async () => ({ status: 202, data: undefined, headers: new Headers() }));
+    const api = { post } as unknown as Pick<ApiClient, 'post'>;
+    await sendAbuseReport(api, 'transfer', 'dl_abc', { category: 'spam' });
+    expect(post).toHaveBeenLastCalledWith('/downloads/{linkToken}/abuse-reports', {
+      path: { linkToken: 'dl_abc' },
+      body: { category: 'spam' },
+    });
+    const token = 'tts_' + 'a'.repeat(43);
+    await sendAbuseReport(api, 'secret', token, { category: 'phishing', message: 'fake bank' });
+    expect(post).toHaveBeenLastCalledWith('/secret-links/{secretToken}/abuse-reports', {
+      path: { secretToken: token },
+      body: { category: 'phishing', message: 'fake bank' },
+    });
   });
 });

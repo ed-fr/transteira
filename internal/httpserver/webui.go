@@ -49,7 +49,13 @@ const (
 	// SecretPageCacheControl is the Cache-Control of the page of a secret
 	// link: never stored, not even by the browser (threat model T-345,
 	// T-355). Its Referrer-Policy is the no-referrer of every response.
+	// The express secret page gets it too.
 	SecretPageCacheControl = "no-store"
+	// ExpressSecretPagePath is the path of the express secret page (since
+	// 2.3, specification section 22.2), where anyone creates a one-time
+	// text secret whose full link is shown once. Never stored either, so
+	// that going back to it never restores a link from a cache.
+	ExpressSecretPagePath = "/x"
 )
 
 // Paths of the entry pages inside the build.
@@ -189,8 +195,9 @@ func (ui *webUI) tenantHandler() http.Handler {
 			status = http.StatusNotFound
 		}
 		app := ui.public
-		if strings.HasPrefix(r.URL.Path, SecretPagePrefix) {
-			// The page of a secret link (since 2.1), whatever its status.
+		if strings.HasPrefix(r.URL.Path, SecretPagePrefix) || r.URL.Path == ExpressSecretPagePath {
+			// The page of a secret link (since 2.1), whatever its status,
+			// and the express secret page (since 2.3).
 			app.cacheControl = SecretPageCacheControl
 		}
 		ui.serveApp(w, r, app, status)
@@ -311,9 +318,9 @@ func etagMatches(header, etag string) bool {
 // secret link, since 2.1), /legal/{document},
 // /invite, /me ("my transfers",
 // since 1.1; its access token travels in the URL fragment, never in the
-// path), /help and anything under /help/.
+// path), /x (express secret, since 2.3), /help and anything under /help/.
 func isPublicRoute(p string) bool {
-	if p == "/" || p == "/invite" || p == "/me" || p == "/help" || strings.HasPrefix(p, "/help/") {
+	if p == "/" || p == "/invite" || p == "/me" || p == ExpressSecretPagePath || p == "/help" || strings.HasPrefix(p, "/help/") {
 		return true
 	}
 	for _, prefix := range []string{"/d/", "/i/", "/drop/", SecretPagePrefix, "/legal/"} {

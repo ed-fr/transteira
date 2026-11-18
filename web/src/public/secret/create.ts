@@ -269,15 +269,16 @@ export async function sealSecretForm(
 ): Promise<SealedSecret> {
   const key = (options.newKey ?? generateTransferKey)();
   const descriptor: PassphraseDescriptor | null = form.passphrase === '' ? null : newPassphraseDescriptor();
-  const rootKey = await deriveSecretKey(key, form.passphrase, descriptor);
-  const encryptedText = await sealSecret(rootKey, form.text);
-  if ((await openSecret(rootKey, encryptedText)) !== form.text) {
-    throw new Error('secret: the sealed text does not open to the same text');
-  }
+  const { rootKey, encryptedText, verifier, keyVerifier } = await sealSecretText(
+    key,
+    form.passphrase,
+    descriptor,
+    form.text,
+  );
   const body: SecretCreate = {
     encryptedText,
-    verifier: encodeProof(await secretVerifier(await secretProof(rootKey))),
-    keyVerifier: encodeProof(await secretVerifier(await secretKeyProof(key))),
+    verifier,
+    keyVerifier,
     expiresIn: form.expiresIn as SecretDuration,
     delivery: effectiveDelivery(form, creator),
   };
@@ -293,6 +294,44 @@ export async function sealSecretForm(
     body.file = { size: file.length, encryptedMetadata: sealed.metadata };
   }
   return { key, body, file };
+}
+
+/** The sealed text of a secret, its two verifiers and the root key K' they come from. */
+export interface SealedSecretText {
+  /** K', for the file of a 2.1 secret; the caller wipes it once no longer needed. */
+  rootKey: Uint8Array<ArrayBuffer>;
+  /** The text sealed under K' (e2e-format section 3.3.3). */
+  encryptedText: string;
+  /** SHA-256 of the proof derived from K', in hexadecimal (section 3.3.4). */
+  verifier: string;
+  /** SHA-256 of the key proof derived from K, in hexadecimal (section 3.3.4). */
+  keyVerifier: string;
+}
+
+/**
+ * Derives K' from K (and the passphrase, if any), seals the text and checks that it opens again
+ * (a verifier must never certify a text that cannot be opened, e2e-format section 3.3.4), then
+ * computes the verifier from K' and the key verifier from K. Shared by the 2.1 secrets and the
+ * express secrets (section 3.3.9: no passphrase, null descriptor). Errors of the crypto layer
+ * (E2EError) are rethrown.
+ */
+export async function sealSecretText(
+  key: Uint8Array,
+  passphrase: string,
+  descriptor: PassphraseDescriptor | null,
+  text: string,
+): Promise<SealedSecretText> {
+  const rootKey = await deriveSecretKey(key, passphrase, descriptor);
+  const encryptedText = await sealSecret(rootKey, text);
+  if ((await openSecret(rootKey, encryptedText)) !== text) {
+    throw new Error('secret: the sealed text does not open to the same text');
+  }
+  return {
+    rootKey,
+    encryptedText,
+    verifier: encodeProof(await secretVerifier(await secretProof(rootKey))),
+    keyVerifier: encodeProof(await secretVerifier(await secretKeyProof(key))),
+  };
 }
 
 /** Encrypts the file (stream index 0 under K') in memory and seals its metadata. */

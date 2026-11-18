@@ -50,7 +50,8 @@ export type HelpFeature =
   | 'recipientVerification'
   | 'maxDownloads'
   | 'folders'
-  | 'secrets';
+  | 'secrets'
+  | 'expressSecrets';
 
 /** A section: a heading and the blocks up to the next heading. */
 export interface HelpSection {

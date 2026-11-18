@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EXPRESS_LIMITS,
   MAX_FILE_MIB,
   MIB,
   MIN_FILE_MIB,
   SECRET_DURATIONS,
   bytesToMibText,
+  parseBoundedInt,
   parseFileMib,
+  purgeResultText,
   secretDraftChanged,
   secretSettingsBody,
   sortDurations,
@@ -22,6 +25,9 @@ const fields = {
   durations: { id: 'd', label: 'Durations' },
   defaultDuration: { id: 'def', label: 'Default' },
   fileMaxBytes: { id: 'f', label: 'File' },
+  expressPerHourPerIp: { id: 'xi', label: 'Per IP' },
+  expressPerHourPerToken: { id: 'xt', label: 'Per token' },
+  expressMaxPending: { id: 'xp', label: 'Pending' },
 };
 
 const saved: SecretSettings = {
@@ -65,6 +71,26 @@ describe('draft', () => {
       fileMibText: '10',
       emailAllowed: true,
       emailRequiresPassphrase: false,
+      expressEnabled: false,
+      expressPerHourPerIpText: '10',
+      expressPerHourPerTokenText: '100',
+      expressMaxPendingText: '1000',
+    });
+  });
+
+  it('reads the express settings of a 2.3 server', () => {
+    const draft = toDraft({
+      ...saved,
+      expressEnabled: true,
+      expressPerHourPerIp: 5,
+      expressPerHourPerToken: 50,
+      expressMaxPending: 200,
+    });
+    expect(draft).toMatchObject({
+      expressEnabled: true,
+      expressPerHourPerIpText: '5',
+      expressPerHourPerTokenText: '50',
+      expressMaxPendingText: '200',
     });
   });
 
@@ -89,6 +115,28 @@ describe('draft', () => {
       durations: ['7d'],
       defaultDuration: '7d',
     });
+  });
+});
+
+describe('bounded integers', () => {
+  it('parses digits within the bounds only', () => {
+    expect(parseBoundedInt(' 10 ', 1, 1000)).toBe(10);
+    expect(parseBoundedInt('1000', 1, 1000)).toBe(1000);
+    for (const bad of ['', '0', '1001', '1.5', '-2', 'abc', '1e2', '1234567890']) {
+      expect(parseBoundedInt(bad, 1, 1000), bad).toBeUndefined();
+    }
+  });
+
+  it('documents the limits', () => {
+    expect(EXPRESS_LIMITS.perHourPerIp).toEqual({ min: 1, max: 1000, def: 10 });
+    expect(EXPRESS_LIMITS.perHourPerToken).toEqual({ min: 1, max: 10000, def: 100 });
+    expect(EXPRESS_LIMITS.maxPending).toEqual({ min: 1, max: 100000, def: 1000 });
+  });
+});
+
+describe('purge', () => {
+  it('words the number of deleted secrets', () => {
+    expect(purgeResultText(412, t)).toBe('adminSecrets.express.purge.done {"count":412}');
   });
 });
 
@@ -118,6 +166,24 @@ describe('validation', () => {
   });
 });
 
+describe('express limits validation', () => {
+  it('refuses each limit out of its bounds, with its own field', () => {
+    const base = toDraft(saved);
+    const out = validateSecretSettings(
+      {
+        ...base,
+        expressPerHourPerIpText: '0',
+        expressPerHourPerTokenText: '10001',
+        expressMaxPendingText: 'x',
+      },
+      fields,
+      t,
+    );
+    expect(out.map((e) => e.id)).toEqual(['xi', 'xt', 'xp']);
+    expect(out[1]?.message).toBe('adminSecrets.settings.errors.expressLimit {"min":1,"max":10000}');
+  });
+});
+
 describe('body and dirty state', () => {
   it('builds the body that replaces every setting', () => {
     expect(secretSettingsBody(toDraft(saved))).toEqual({
@@ -128,7 +194,35 @@ describe('body and dirty state', () => {
       fileMaxBytes: 10 * MIB,
       emailAllowed: true,
       emailRequiresPassphrase: false,
+      expressEnabled: false,
+      expressPerHourPerIp: 10,
+      expressPerHourPerToken: 100,
+      expressMaxPending: 1000,
     });
+  });
+
+  it('sends the express settings typed, and the defaults for an invalid text', () => {
+    const draft = {
+      ...toDraft(saved),
+      expressEnabled: true,
+      expressPerHourPerIpText: '3',
+      expressPerHourPerTokenText: '40',
+      expressMaxPendingText: '500',
+    };
+    expect(secretSettingsBody(draft)).toMatchObject({
+      expressEnabled: true,
+      expressPerHourPerIp: 3,
+      expressPerHourPerToken: 40,
+      expressMaxPending: 500,
+    });
+    expect(
+      secretSettingsBody({
+        ...draft,
+        expressPerHourPerIpText: 'x',
+        expressPerHourPerTokenText: 'x',
+        expressMaxPendingText: 'x',
+      }),
+    ).toMatchObject({ expressPerHourPerIp: 10, expressPerHourPerToken: 100, expressMaxPending: 1000 });
   });
 
   it('sends the passphrase rule only with e-mail delivery, and no empty default', () => {
@@ -146,6 +240,7 @@ describe('body and dirty state', () => {
     const base = toDraft(saved);
     expect(secretDraftChanged(base, { ...base })).toBe(false);
     expect(secretDraftChanged(base, { ...base, fileMibText: ' 10 ' })).toBe(false);
+    expect(secretDraftChanged(base, { ...base, expressMaxPendingText: ' 1000 ' })).toBe(false);
     const changes = [
       { enabled: false },
       { durations: ['1h' as const] },
@@ -154,6 +249,10 @@ describe('body and dirty state', () => {
       { fileMibText: '12' },
       { emailAllowed: false },
       { emailRequiresPassphrase: true },
+      { expressEnabled: true },
+      { expressPerHourPerIpText: '11' },
+      { expressPerHourPerTokenText: '101' },
+      { expressMaxPendingText: '1001' },
     ];
     for (const change of changes) {
       expect(secretDraftChanged(base, { ...base, ...change }), JSON.stringify(change)).toBe(true);

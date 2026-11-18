@@ -1352,3 +1352,71 @@ test.describe('one-time secrets', () => {
     }
   });
 });
+
+test.describe('express secrets', () => {
+  const TEXT: Record<Lang, string> = {
+    en: 'Door code of the loading dock: 4821-B',
+    fr: 'Code de la porte du quai de chargement : 4821-B',
+  };
+
+  test('creation, reading, lookup and settings', async ({ newContext, state }) => {
+    test.setTimeout(240_000);
+    // The service is off by default: it is turned on for entity A for the length of the captures.
+    const api = superAdminApi();
+    const settingsPath = `/admin/tenants/${state.tenants.a.id}/secret-settings`;
+    const original = await api.ok<Record<string, unknown>>('GET', settingsPath);
+    try {
+      await api.ok('PUT', settingsPath, { ...original, expressEnabled: true });
+      for (const lang of LANGS) {
+        // The anonymous author: no identification, the text is typed, the link is shown once.
+        const page = await openPage(newContext, lang);
+        await page.goto(`${ORIGINS.a}/x`);
+        await heading(page, lang, 'secretExpress.title');
+        await page.locator('#tt-express-text').fill(TEXT[lang]);
+        await shoot(page, lang, 'express-create');
+        await page.locator('#tt-express-submit').click();
+        await heading(page, lang, 'secretExpress.done.title');
+        const link = page.getByTestId('express-done-link');
+        await expect(link).toBeVisible();
+        const url = ((await link.textContent()) ?? '').trim();
+        await shoot(page, lang, 'express-link-shown', [link]);
+
+        // The recipient opens the link: the banner warns that the author is not verified.
+        const reader = await openPage(newContext, lang);
+        await reader.goto(`${ORIGINS.a}${pathOf(url)}`);
+        await heading(reader, lang, 'secret.reveal.title');
+        await expect(reader.getByTestId('secret-express-banner')).toBeVisible();
+        await shoot(reader, lang, 'express-read');
+
+        // The administrator pastes the link of the secret to find it (the key is never sent).
+        const admin = await openPage(newContext, lang, STORAGE_DELEGATE);
+        await admin.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/secrets`);
+        await heading(admin, lang, 'adminOps.secrets.title');
+        await admin.getByLabel(startsWith(msg(lang, 'adminSecrets.lookup.label'))).fill(url);
+        await admin
+          .getByRole('button', { name: msg(lang, 'adminSecrets.lookup.button'), exact: true })
+          .click();
+        const found = admin.getByRole('heading', {
+          level: 2,
+          name: msg(lang, 'adminSecrets.lookup.result.title'),
+          exact: true,
+        });
+        await expect(found).toBeVisible();
+        // The lookup form and its result in one viewport.
+        await admin
+          .getByRole('heading', { level: 2, name: msg(lang, 'adminSecrets.lookup.title'), exact: true })
+          .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await shoot(admin, lang, 'admin-secret-lookup');
+
+        // The express settings of the entity, with the emergency purge.
+        await admin.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/secret-settings`);
+        await heading(admin, lang, 'adminTenants.secrets.title');
+        const express = admin.getByRole('group', { name: msg(lang, 'adminSecrets.express.legend') });
+        await express.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+        await shoot(admin, lang, 'admin-express-settings');
+      }
+    } finally {
+      await api.ok('PUT', settingsPath, original);
+    }
+  });
+});

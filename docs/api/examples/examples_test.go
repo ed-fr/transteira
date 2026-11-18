@@ -2,7 +2,9 @@
 // the reference implementation of the secret format (internal/tte2) and its
 // shared test vectors (internal/tte2/testdata/vectors.json, e2e-format.md
 // section 3.3): secret-create.mjs with the local Node.js, secret-create.ps1
-// with PowerShell in a pinned Docker image.
+// with PowerShell in a pinned Docker image, and since 2.3 the express secret
+// examples express-secret.go, express-secret.py and express-secret.ps1
+// (express_test.go).
 package examples_test
 
 import (

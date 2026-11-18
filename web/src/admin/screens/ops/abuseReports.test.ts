@@ -7,6 +7,7 @@ import {
   noteTooLong,
   reportStatusView,
   reporterText,
+  reportSubject,
   statusFilterOptions,
   updateBody,
   type AbuseReport,
@@ -86,5 +87,13 @@ describe('update', () => {
     expect(afterUpdate(list, closed, undefined).items[0]?.status).toBe('closed');
     expect(afterUpdate(list, closed, 'open').items).toEqual([]);
     expect(afterUpdate(list, closed, 'closed').items).toHaveLength(1);
+  });
+});
+
+describe('subject', () => {
+  it('names the express secret, the transfer, or says unknown', () => {
+    expect(reportSubject({ secretId: 'sec_1' }, t)).toBe('opsAbuse.subject.secret:sec_1');
+    expect(reportSubject({ transferId: 'trf_1' }, t)).toBe('opsAbuse.subject.transfer:trf_1');
+    expect(reportSubject({}, t)).toBe('opsAbuse.subject.unknown');
   });
 });

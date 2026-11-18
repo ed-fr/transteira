@@ -100,6 +100,56 @@ export function creatorKindLabel(kind: string, t: Translate): string {
     : kind;
 }
 
+/** The secret is an express secret (since 2.3; absent from a server older than 2.3 means no). */
+export function isExpress(secret: Pick<AdminSecret, 'express'>): boolean {
+  return secret.express === true;
+}
+
+/** Who created a secret, for a sentence: the address, else the kind (an express secret has no address). */
+export function creatorText(secret: Pick<AdminSecret, 'senderEmail' | 'creatorKind'>, t: Translate): string {
+  return secret.senderEmail ?? creatorKindLabel(secret.creatorKind, t);
+}
+
+/** Largest pasted text searched for a token (SecretLookup accepts links of up to 2 048 characters). */
+export const LOOKUP_MAX_LENGTH = 2048;
+
+/** The secret token of a link: "tts_" and exactly 43 base62 characters, not followed by another one. */
+const LOOKUP_TOKEN = /tts_[A-Za-z0-9]{43}(?![A-Za-z0-9])/;
+
+/** Outcome of the validation of the link typed in the lookup field. */
+export type LookupInput = { ok: true; body: { link: string } } | { ok: false; message: string };
+
+/**
+ * Validates the pasted link and builds the body of the lookup. Only the token is sent: the
+ * fragment ("#k=<key>"), a percent-encoded fragment ("%23k%3D<key>", as in a link rewritten by a
+ * mail filter) and every other part of the link stay in the browser (T-408). The token is taken
+ * before the first "#" only, and goes in the body of the POST, never in a URL.
+ */
+export function lookupInput(text: string, t: Translate): LookupInput {
+  const trimmed = text.trim();
+  if (trimmed === '') {
+    return { ok: false, message: t('adminSecrets.lookup.errors.required') };
+  }
+  const hash = trimmed.indexOf('#');
+  const beforeFragment = hash === -1 ? trimmed : trimmed.slice(0, hash);
+  const match = trimmed.length <= LOOKUP_MAX_LENGTH ? LOOKUP_TOKEN.exec(beforeFragment) : null;
+  if (match === null) {
+    return { ok: false, message: t('adminSecrets.lookup.errors.invalid') };
+  }
+  return { ok: true, body: { link: match[0] } };
+}
+
+/** Message of a failed lookup: the dedicated texts for 400 and 404, the general message otherwise. */
+export function lookupErrorMessage(
+  view: { status: number | undefined; message: string },
+  t: Translate,
+): string {
+  if (view.status === 400) {
+    return t('adminSecrets.lookup.errors.invalid');
+  }
+  return view.status === 404 ? t('adminSecrets.lookup.errors.notFound') : view.message;
+}
+
 /** A date, or the fallback text when there is none. */
 export function dateOr(
   value: string | undefined,

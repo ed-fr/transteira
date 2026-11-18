@@ -19,7 +19,8 @@
       "lastUsed": "Dernière utilisation",
       "expires": "Expiration",
       "status": "Statut",
-      "actions": "Actions"
+      "actions": "Actions",
+      "express": "Secrets express"
     },
     "anySender": "Toute adresse des domaines internes",
     "createdBy": "{date} par {admin}",
@@ -27,7 +28,9 @@
     "noExpiry": "Jamais",
     "lastUsedNote": "La dernière utilisation est enregistrée au plus une fois par minute et par jeton : elle peut avoir jusqu’à une minute de retard.",
     "edit": "Modifier",
-    "revoke": "Révoquer"
+    "revoke": "Révoquer",
+    "expressYes": "Autorisé",
+    "expressNo": "Non"
   },
   "edit": {
     "title": "Modifier le jeton {name}",
@@ -65,6 +68,10 @@
     "expiry": {
       "label": "Date d’expiration (facultative)",
       "hint": "Le jeton cesse de fonctionner à la fin de cette journée (heure locale). Laissez vide pour un jeton sans expiration ; vous pouvez le révoquer à tout moment."
+    },
+    "expressAllowed": {
+      "label": "Autorisé à créer des secrets express",
+      "hint": "Permet aux scripts qui utilisent ce jeton de créer des secrets express, même lorsque le mode anonyme de l’entité est désactivé, avec une limite propre à chaque jeton (voir les réglages des secrets). Désactivé par défaut."
     }
   },
   "secret": {

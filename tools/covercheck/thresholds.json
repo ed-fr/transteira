@@ -21,6 +21,7 @@
     "internal/branding": 100,
     "internal/cli/client": 100,
     "internal/cli/safepath": 100,
+    "internal/cli/secret": 100,
     "internal/crypto": 100,
     "internal/datasubject": 100,
     "internal/deposit": 100,

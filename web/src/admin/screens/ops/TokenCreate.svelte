@@ -11,7 +11,7 @@
   // The tenant sub-navigation is rendered by App.svelte.
   import { onDestroy } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, HelpIcon, TextField } from '../../../shared/components';
+  import { Alert, Button, Checkbox, HelpIcon, TextField } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
@@ -182,6 +182,12 @@
     min={minDate}
     bind:value={form.expiry}
     error={errorFor(errors, ids.expiry)}
+  />
+
+  <Checkbox
+    label={t('opsTokens.form.expressAllowed.label')}
+    hint={t('opsTokens.form.expressAllowed.hint')}
+    bind:checked={form.expressAllowed}
   />
 </FormSection>
 

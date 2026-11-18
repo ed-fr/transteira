@@ -54,6 +54,12 @@
     "path": "{lang}/admin-drop-links.png"
   },
   {
+    "name": "admin-express-settings",
+    "screen": "admin /admin/tenants/:id/secret-settings (express section)",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-express-settings.png"
+  },
+  {
     "name": "admin-home-auditor",
     "screen": "admin /admin/ (auditor)",
     "profile": "auditor",
@@ -100,6 +106,12 @@
     "screen": "admin /admin/system/provisioning-tokens",
     "profile": "super-admin",
     "path": "{lang}/admin-provisioning-tokens.png"
+  },
+  {
+    "name": "admin-secret-lookup",
+    "screen": "admin /admin/tenants/:id/secrets (secret found from its link)",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-secret-lookup.png"
   },
   {
     "name": "admin-secret-settings",
@@ -394,6 +406,24 @@
     "screen": "public /drop/:token (drop link landing)",
     "profile": "depositor",
     "path": "{lang}/drop-link.png"
+  },
+  {
+    "name": "express-create",
+    "screen": "public /x (text typed, duration chosen)",
+    "profile": "depositor",
+    "path": "{lang}/express-create.png"
+  },
+  {
+    "name": "express-link-shown",
+    "screen": "public /x (secret created: link shown once)",
+    "profile": "depositor",
+    "path": "{lang}/express-link-shown.png"
+  },
+  {
+    "name": "express-read",
+    "screen": "public /s/:token (express secret: third-party content banner)",
+    "profile": "recipient",
+    "path": "{lang}/express-read.png"
   },
   {
     "name": "invitation-landing",

@@ -252,6 +252,8 @@ With **I copy the link myself**, the **Secret created** screen shows the full li
 
 **Keep secrets short-lived.** Once the secret is read, the server destroys its content and its keys. A backup of the server made while the secret was still waiting, however, keeps the encrypted text, and cannot be erased afterwards. What protects the secret then is its key (the end of the link) and the passphrase. So choose the **shortest duration** that suits you, and use a passphrase, especially for delivery by email.
 
+**Express secret.** If your organisation offers it, a separate **Express secret** page (a link in the header of the public pages) shares a short text without any identification; it has none of the options above.
+
 **Invited external people.** If you were invited, you can also share a secret, by email only and only to the person who invited you: the form shows **The link will be sent by email to…** followed by their address, and there is nothing to choose. The tab is absent if your organisation does not allow secrets by email. See [Sending files with an invitation](topic:invitation).
 
 **From a script.** An API token can create secrets through the API (see `docs/api/` in the TransTeira repository). The command-line client `transteira-cli` does not handle secrets.
@@ -259,6 +261,48 @@ With **I copy the link myself**, the **Secret created** screen shows the full li
 ### My secrets
 
 In [My transfers](topic:my-transfers), once you have created at least one secret and if your organisation offers secrets, the **My secrets** section lists your secrets, most recent first. For each one it shows the creation date, the delivery (a link to hand over, or the email address), the size of the attached file if any, the state (**Pending**, **Available**, **Read**, **Expired**, **Deleted** or **Locked**), the expiry date and the date of reading. **Pending** is a secret that is not finished (see above). Its content is never shown there, and the link cannot be recovered. As long as a secret has not been read, click **Delete**: it is destroyed at once, even if the recipient already has the link. It stays in the list with the state **Deleted**. You reach it with the same access link as your transfers.
+
+<!-- topic: express-secret -->
+<!-- when: expressSecrets -->
+## Express secret
+
+The **Express secret** page passes on a short text (a password, a code, a key) through a link that opens only once, **without identifying yourself**: no email address, no code, no invitation. Anyone who can reach the address of this service can use it, from any network, when your organisation has turned it on. The link in the header, **Express secret**, opens it, and so does the address `/x` of the service. It is a different tool from [Share a secret](topic:secret-share), which asks you to identify yourself and offers more.
+
+The text is encrypted in your browser before it leaves your computer: the server never sees it in clear, and never receives the key either. The key stays in the end of the link, after the `#` sign.
+
+![Express secret page with the text typed, the counter and the validity choice](../screenshots/en/express-create.png)
+
+1. Type the **Secret text**: 10,000 characters at most (a counter shows how many you have used). Text only: there is no file, no passphrase and no email delivery.
+1. Choose the duration in **Valid for**: **1 hour**, **1 day** or **7 days**. After this delay, the secret is destroyed even if nobody read it. Choose the shortest duration that suits you.
+1. Click **Create the link**.
+
+The **Secret created** screen then shows the **full link**, key included, with the **Copy the link** button.
+
+![Secret created screen with the full link shown once and the Copy the link button](../screenshots/en/express-link-shown.png)
+
+**The link is shown only once.** Copy it before leaving the page: it cannot be displayed again, and nobody, administrators included, can recover it. If the copy button is refused by your browser, the link is selected so that you can copy it with Ctrl+C (⌘+C on a Mac). **Create another secret** clears the text and the link from the page. The copied link can stay in the clipboard history of your device: clear it once you have passed it on.
+
+**The link is the secret.** Whoever opens it first reads the text, once, and then the text is destroyed on the server. So:
+
+- Pass the link on through **another channel** than the content it protects, and prefer an instant messaging service or a phone call to an email. Some mail security tools open the links of the messages they scan: they can consume the secret before its recipient does. If the recipient finds the secret already read, create a new one.
+- Do not put the link in a ticket, a wiki or any place that many people read.
+- Never forward a link you received: pass on the secret itself instead.
+
+Your organisation does not know who you are: it only keeps the address your connection comes from, in its audit log, for 12 months, never the content. The recipient sees a banner saying that the content was created by an unverified third party, and can report an abuse.
+
+**When to prefer another tool.** Use [Share a secret](topic:secret-share) instead if you need a passphrase, a small file, an email delivery with a read receipt, or if you want to find your secrets again in [My transfers](topic:my-transfers).
+
+**Messages you may meet** (your text is kept in the form and nothing was sent):
+
+- **Enter the text of the secret.**: the text is empty.
+- **The text is too long: 10,000 characters at most.**: shorten it, or send it through [Share a secret](topic:secret-share) or a transfer.
+- **The text contains invalid characters**: remove the characters that your keyboard or a copy and paste added by mistake, then try again.
+- **Too many secrets were created from your connection. Try again from …**: the hourly limit is reached for your network address. The button stays disabled until the time shown.
+- **Too many express secrets are waiting to be read on this service. Try again later.**: the service is full for now.
+- **… no longer offers express secrets.**: the service was closed by your organisation while you were typing.
+- **The service is under maintenance**: try again later, see [Service under maintenance](topic:maintenance).
+
+If the page says that your organisation does not offer express secrets, the service is off for this entity.
 
 <!-- topic: my-transfers -->
 ## My transfers

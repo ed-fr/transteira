@@ -5,8 +5,13 @@ import {
   afterSecretDelete,
   canDeleteSecret,
   creatorKindLabel,
+  creatorText,
   dateOr,
   deliveryText,
+  isExpress,
+  lookupErrorMessage,
+  LOOKUP_MAX_LENGTH,
+  lookupInput,
   secretStateOptions,
   secretStateView,
   secretsResultText,
@@ -106,5 +111,58 @@ describe('deletion', () => {
   it('drops the row of a list filtered on another state, ignores an unknown one', () => {
     expect(afterSecretDelete(list, 'a', { state: 'active' }, 'x').items.map((s) => s.id)).toEqual(['b']);
     expect(afterSecretDelete(list, 'zzz', {}, 'x')).toBe(list);
+  });
+});
+
+describe('express secrets', () => {
+  it('tells an express secret, which may have no creator address', () => {
+    expect(isExpress(secret('s'))).toBe(false);
+    expect(isExpress({ express: true })).toBe(true);
+    expect(creatorText({ creatorKind: 'anonymous' }, t)).toBe('adminSecrets.creatorKind.anonymous');
+    expect(creatorText({ creatorKind: 'internal', senderEmail: 'a@example.com' }, t)).toBe('a@example.com');
+  });
+});
+
+describe('lookup', () => {
+  const token = `tts_${'A'.repeat(43)}`;
+
+  it('refuses an empty field and a text without token', () => {
+    expect(lookupInput('  ', t)).toEqual({ ok: false, message: 'adminSecrets.lookup.errors.required' });
+    for (const bad of [
+      'hello',
+      'tts_short',
+      `https://x.example.com/s/${'a'.repeat(60)}`,
+      `tts_${'A'.repeat(2100)}`,
+    ]) {
+      expect(lookupInput(bad, t), bad).toEqual({ ok: false, message: 'adminSecrets.lookup.errors.invalid' });
+    }
+  });
+
+  it('accepts a bare token or a full link and sends the token only', () => {
+    expect(lookupInput(` ${token} `, t)).toEqual({ ok: true, body: { link: token } });
+    const link = `https://transfer.entity-a.example.com/s/${token}`;
+    expect(lookupInput(`${link}#k=secretkey`, t)).toEqual({ ok: true, body: { link: token } });
+    expect(lookupInput(`#k=abc${token}`, t).ok).toBe(false);
+    // A token followed by another base62 character is not a token.
+    expect(lookupInput(`${token}B`, t).ok).toBe(false);
+  });
+
+  it('never sends the key of a percent-encoded or wrapped link (T-408)', () => {
+    const key = 'K3yK3yK3yK3yK3yK3yK3yK3yK3yK3yK3yK3yK3yK3yK';
+    const encoded = `https%3A%2F%2Ftransfer.entity-a.example.com%2Fs%2F${token}%23k%3D${key}`;
+    const safeLinks = `https://eur01.safelinks.protection.outlook.com/?url=${encoded}&data=05%7C02&reserved=0`;
+    for (const pasted of [encoded, safeLinks, `${encoded}#k=${key}`]) {
+      const got = lookupInput(pasted, t);
+      expect(got, pasted).toEqual({ ok: true, body: { link: token } });
+      expect(JSON.stringify(got)).not.toContain(key);
+    }
+    expect(lookupInput(`${safeLinks}${'x'.repeat(LOOKUP_MAX_LENGTH)}`, t).ok).toBe(false);
+  });
+
+  it('words the failures', () => {
+    expect(lookupErrorMessage({ status: 400, message: 'x' }, t)).toBe('adminSecrets.lookup.errors.invalid');
+    expect(lookupErrorMessage({ status: 404, message: 'x' }, t)).toBe('adminSecrets.lookup.errors.notFound');
+    expect(lookupErrorMessage({ status: 500, message: 'boom' }, t)).toBe('boom');
+    expect(lookupErrorMessage({ status: undefined, message: 'net' }, t)).toBe('net');
   });
 });

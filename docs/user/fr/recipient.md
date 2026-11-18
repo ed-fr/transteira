@@ -211,6 +211,18 @@ Les pages d’erreur possibles :
 - **Secret illisible** : les données reçues du serveur sont endommagées. Prévenez l’expéditeur.
 - **Navigateur non pris en charge** : votre navigateur ne peut pas déchiffrer le secret. Utilisez un navigateur à jour, sur une connexion sécurisée (HTTPS). Rien n’a été consommé.
 
+### Secrets express
+
+Un secret créé depuis la page **Secret express**, ou avec un jeton par un script, n’a pas d’auteur identifié : n’importe qui peut en créer un. La page affiche alors, sous le titre, un bandeau **Contenu créé par un tiers non vérifié : {votre organisation} n’en est pas l’auteur.** Il reste visible après l’affichage du secret.
+
+![Page Lire un secret d’un secret express, avec le bandeau sur le contenu créé par un tiers non vérifié](../screenshots/fr/express-read.png)
+
+L’organisation n’a ni écrit ni vérifié ce texte. **Ne suivez pas les instructions qu’il contient** (un lien à ouvrir, un paiement à faire, un mot de passe à saisir quelque part) sans les vérifier par un autre moyen, par exemple en appelant la personne dont vous pensez qu’elle l’a envoyé. Le texte est toujours affiché comme du texte brut : un lien qui s’y trouve n’est pas cliquable et rien de ce qu’il contient n’est exécuté.
+
+Si le secret vous paraît frauduleux ou illicite, cliquez sur **Signaler un abus** avant ou après l’avoir lu : choisissez un motif, ajoutez un message facultatif, puis envoyez. Les administrateurs de l’organisation sont alertés ; ni le texte du secret ni sa clé ne leur sont transmis, et un signalement ne supprime rien à lui seul. Le même bouton est présent sur la page qui indique que le service est temporairement indisponible.
+
+Si la page indique **Secret temporairement indisponible**, l’organisation a fermé le service de secrets express : **rien n’a été consommé**, et le lien refonctionne dès la réouverture du service. Cliquez sur **Réessayer** plus tard. Un secret qui expire entre-temps est perdu : demandez à son auteur d’en créer un nouveau.
+
 ## Thème sombre
 
 La page de téléchargement suit le réglage clair ou sombre de votre appareil. Le bouton **Thème sombre** du bas de page change le thème ; votre choix est mémorisé pendant un an par un cookie strictement technique (`tt_theme`), posé uniquement si vous choisissez un thème différent de celui de votre appareil. Rechoisir le thème de votre appareil supprime le cookie.

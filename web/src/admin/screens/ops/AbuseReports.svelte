@@ -5,7 +5,9 @@
   // - columns: date, category, reporter, status; a button opens the detail (a dialog);
   // - detail: category, reporter (verified address, or the number of the recipient link used,
   //   unverified, or a shared link), sender, the message as TEXT (never HTML), the transfer (a
-  //   link to its detail while it exists), and close (with an optional note) or reopen.
+  //   link to its detail while it exists) or, since 2.3, the express secret (its identifier and a
+  //   link to the secrets screen, where it is found from its link; never a transfer link), and
+  //   close (with an optional note) or reopen.
   // The tenant sub-navigation is rendered by App.svelte.
   import { tick, untrack } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
@@ -28,6 +30,7 @@
     noteTooLong,
     reportStatusView,
     reporterText,
+    reportSubject,
     statusFilterOptions,
     updateBody,
     type AbuseReport,
@@ -203,6 +206,10 @@
   {categoryLabel(row.category, t)}
 {/snippet}
 
+{#snippet subjectCell(row: AbuseReport)}
+  <span class="tt-break">{reportSubject(row, t)}</span>
+{/snippet}
+
 {#snippet reporterCell(row: AbuseReport)}
   <span class="tt-break">{reporterText(row, t)}</span>
 {/snippet}
@@ -259,6 +266,7 @@
     columns={[
       { id: 'reportedAt', header: t('opsAbuse.columns.reportedAt'), cell: dateCell, rowHeader: true },
       { id: 'category', header: t('opsAbuse.columns.category'), cell: categoryCell },
+      { id: 'subject', header: t('opsAbuse.columns.subject'), cell: subjectCell },
       { id: 'reporter', header: t('opsAbuse.columns.reporter'), cell: reporterCell },
       { id: 'status', header: t('opsAbuse.columns.status'), cell: statusCell },
       { id: 'actions', header: t('opsAbuse.columns.actions'), cell: actionsCell, headerHidden: true },
@@ -310,7 +318,15 @@
       {/if}
       {#if report.secretId !== undefined}
         <dt>{t('opsAbuse.detail.secret')}</dt>
-        <dd class="tt-break">{report.secretId}</dd>
+        <dd class="tt-break">
+          <code>{report.secretId}</code>
+          <span class="tt-abuse-secret">
+            <a href={nav.href(tenantPath(tenantId, 'secrets'))} use:nav.link
+              >{t('opsAbuse.detail.secretLink')}</a
+            >
+          </span>
+          <span class="tt-text-sm tt-text-muted tt-abuse-secret">{t('opsAbuse.detail.secretHint')}</span>
+        </dd>
       {/if}
     </dl>
     <h3 class="tt-text-lg">{t('opsAbuse.detail.message')}</h3>
@@ -372,6 +388,10 @@
 </Dialog>
 
 <style>
+  .tt-abuse-secret {
+    display: block;
+  }
+
   .tt-abuse-message {
     white-space: pre-wrap;
   }

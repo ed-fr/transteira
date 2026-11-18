@@ -541,6 +541,35 @@ The **One-time secrets** screen lists the secrets of the entity, most recent fir
 
 ![List of one-time secrets with the filters, the state, the expiry and the Delete button](../screenshots/en/admin-secrets.png)
 
+### Express secrets (administration)
+
+An **express secret** is a text of at most 10,000 characters that **anybody who reaches the address of your entity** can turn into a one-time link, without identifying themselves (see “Express secret” in the depositor guide and “Read a secret” in the recipient guide for what the reader sees). The text is encrypted in the browser: like the one-time secrets, you never see it. The service is **separate from the one-time secrets module**: **Enable one-time secrets** has no effect on it, and the express secret has its own switch on the same **Secrets settings** screen.
+
+> **Warning** The service is **off by default**, in new entities and in existing ones. Once on, anyone on the Internet can store a text on your server under the name of your entity, and you cannot read or moderate it. It can be misused to pass on illegal content or credentials, or for phishing under your domain. Turn it on knowingly.
+
+In the **Express secrets (anonymous)** section of the **Secrets settings** screen:
+
+- **Allow anonymous express secrets**: off by default. While it is on, a reminder asks you to complete the [legal information](topic:tenant-legal) of the entity first: a contact for abuse reports, and a privacy policy that says the IP addresses of the authors are kept 12 months in the audit log.
+- **Secrets per hour and per client address**: from 1 to 1,000, default 10. Above it, the creation is refused until the hour has passed.
+- **Secrets per hour and per API token**: from 1 to 10,000, default 100.
+- **Express secrets waiting at the same time**: from 1 to 100,000, default 1,000. Once reached, anonymous creations are refused until some are read or expire.
+
+![Secrets settings screen, express secrets section: the switch, the three limits and the emergency purge](../screenshots/en/admin-express-settings.png)
+
+The durations are fixed (1 hour, 1 day, 7 days), whatever you offer for the one-time secrets. An express secret has no file, passphrase, email delivery or read receipt. Maintenance mode and the setup of the entity refuse creations as for transfers. Each change of a setting is recorded in the [audit log](topic:tenant-audit) (**Secrets settings updated**).
+
+**Turning the service off also makes the anonymous express secrets unreadable.** Their recipients see that the secret is temporarily unavailable. **Nothing is consumed**, and the links work again if you turn the service back on before they expire; a secret that expires meanwhile is lost. This is deliberate: it is the way to stop a wave of abuse at once. Express secrets created with an API token stay readable when you turn off the anonymous mode. The operator can also close the service for the whole instance, see the super administrator guide.
+
+**Finding a secret from its link.** On the **One-time secrets** screen, **Find a secret from its link** lets you paste the link a report points to (or a recipient gives you): the screen shows the identifier, the type (**Express secret** or **One-time secret**), the state, the creator, the dates and, for a secret that is still live, a **Delete** button. Your browser extracts the identifier of the secret from the link (`tts_` followed by 43 letters and digits) and sends only that: the key, which follows the `#`, never leaves your browser, even from a link rewritten by a mail filter (a *Safe Links* address, for example, where the `#` is encoded as `%23`), and the identifier sent is neither stored nor logged: you see **metadata, never the content**. You can also paste the identifier alone. If the link does not match a secret of your entity, you get **No secret of this entity matches this link**. In the table, express secrets carry an **Express** badge, and the creator of an anonymous one is **Anonymous (express secret)**, with no address. Every lookup is recorded in the audit log (**Secret looked up from a link**).
+
+![Secret found from its link: identifier, Express secret type, state, dates and Delete button](../screenshots/en/admin-secret-lookup.png)
+
+**Emergency purge.** At the bottom of the **Secrets settings** screen, **Delete all live anonymous express secrets** destroys, after a confirmation, every anonymous express secret still waiting to be read, for example after a misuse. The number of deleted secrets is shown, and recorded in the audit log (**Anonymous express secrets purged**). Express secrets created with an API token, one-time secrets and secrets that already ended are not touched. The purge does not turn the service off: untick **Allow anonymous express secrets** first to stop new creations.
+
+**API tokens.** A token can create express secrets only if you tick **Allowed to create express secrets** when you create it, or in **Edit**. It is off by default: an ordinary token cannot create any. A token allowed to do it works **even when the anonymous mode is off**, and with its own limit per token (see above). The **Express secrets** column of the token list shows **Allowed** or **No**. Each creation is recorded in the audit log with the token used.
+
+**Reports.** The reader of an express secret can use **Report abuse** (see [Reports](topic:tenant-abuse-reports)). The **Concerns** column of the Reports screen says **Express secret** and its identifier (**Transfer** and its identifier for a transfer). A report never contains the text or the key: to examine the secret, paste the reported link in **Find a secret from its link** if you have it, then delete it or purge. Reading it would consume it. Then close the report.
+
 <!-- topic: tenant-audit -->
 ### Audit log
 

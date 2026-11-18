@@ -14,9 +14,11 @@ The reference is the OpenAPI specification:
   admins (also on the tenant FQDNs, without authentication, when the operator sets
   `TT_API_DOCS_PUBLIC=true`).
 
-Since 2.1 a token can also create one-time secrets, see [section 13](#13-one-time-secrets-by-script).
+Since 2.1 a token can also create one-time secrets, see [section 13](#13-one-time-secrets-by-script),
+and since 2.3 express secrets, text-only secrets that a script creates with or without a token,
+see [section 14](#14-express-secrets-by-script).
 A ready-made command-line client, `transteira-cli`, deposits and downloads without a script:
-see [cli.md](cli.md) (it does not handle secrets). Error codes are described in [errors.md](errors.md). Managed service providers that create
+see [cli.md](cli.md) (since 2.3 it also creates and reads express secrets). Error codes are described in [errors.md](errors.md). Managed service providers that create
 entities by script should read [provisioning.md](provisioning.md). The examples use fictitious hosts:
 `transfer.entity-a.example.com` for the tenant, `admin.transfer.example.com` for the
 administration.
@@ -37,6 +39,7 @@ administration.
 - [11. Link-only transfers and drop links](#11-link-only-transfers-and-drop-links)
 - [12. End-to-end encrypted transfer by script](#12-end-to-end-encrypted-transfer-by-script)
 - [13. One-time secrets by script](#13-one-time-secrets-by-script)
+- [14. Express secrets by script](#14-express-secrets-by-script)
 - Also: the [command-line client](cli.md), which does all of this for you
 
 ## Basics
@@ -903,6 +906,7 @@ attached to answers `404`, like a token of another tenant.
 |---|---|
 | List (secrets never shown, revoked tokens included) | `GET /api/v1/admin/tenants/{tenantId}/api-tokens` |
 | Rename, change the ranges or the allowed senders | `PATCH /api/v1/admin/tenants/{tenantId}/api-tokens/{tokenId}`, `Content-Type: application/merge-patch+json`, body `{"allowedCidrs": ["203.0.113.11/32"]}`, `{"allowedSenders": ["reporting@entity-a.example.com"]}` or `{"name": "..."}` |
+| Allow or forbid express secrets (since 2.3, [section 14](#14-express-secrets-by-script)) | `PATCH /api/v1/admin/tenants/{tenantId}/api-tokens/{tokenId}`, `Content-Type: application/merge-patch+json`, body `{"expressAllowed": true}` (or `false`); also accepted at creation |
 | Revoke | `DELETE /api/v1/admin/tenants/{tenantId}/api-tokens/{tokenId}` |
 
 For example, with curl and the session header file (never the cookie or the CSRF token on the
@@ -1317,9 +1321,11 @@ end-to-end `403 e2e-forbidden` or `400 e2e-required`, level rules `422`, recipie
 Since 2.1 a person can share a password, a key or a code as a **one-time secret**: the text is
 sealed in the browser (or by your script), the server only holds ciphertext, and the secret is
 destroyed after the first reading or at its expiry. This section is for scripts that create or
-read secrets. The browser does it for people; the command-line client does **not** handle
-secrets (no `secret` command, and `transteira-cli download` refuses the `/s/` links), so a
-script uses the API as described here.
+read secrets. The browser does it for people. Since 2.3 the command-line client creates express
+secrets and reads the secrets that have neither passphrase nor file
+([section 14](#14-express-secrets-by-script), [cli.md](cli.md#secret-create)); for the secrets
+of this section with a passphrase, a file or e-mail delivery, a script uses the API as described
+here.
 
 The format (key derivation, sealing, the two proofs, the optional file) is specified in
 [`docs/architecture/e2e-format.md`](../architecture/e2e-format.md), section 3.3 (and section 4.1
@@ -1415,9 +1421,11 @@ $env:TT_SENDER = 'reporting@entity-a.example.com'
 $env:TT_EXPIRES = '1d'
 # $env:TT_RECIPIENT = 'jane.doe@example.org'       # e-mail delivery; without it, the link is printed
 # $env:TT_PASSPHRASE_FILE = "$HOME/.transteira/passphrase"
-$text = New-TemporaryFile
-Set-Content -NoNewline -LiteralPath $text -Value 'the secret text'
+$typed = Read-Host -AsSecureString -Prompt 'Text of the secret'   # no echo, no history
+$text = New-TemporaryFile                                          # readable by you only
+[Net.NetworkCredential]::new('', $typed).Password | Set-Content -NoNewline -LiteralPath $text
 ./secret-create.ps1 create -TextFile $text
+Remove-Item -LiteralPath $text
 ```
 
 Environment variables of both scripts: `TT_URL` (must start with `https://`), `TT_TOKEN_FILE`,
@@ -1443,7 +1451,7 @@ error as `secret-create: <operation>: <status> <code> <detail>` with exit code 1
   stays until it is purged, one hour later, and counts toward the 50 open secrets of the token.
   A retry must use a **new** key `K` and makes a new secret.
 - Limits: 50 active or pending secrets per token and 200 creations per rolling 24 hours.
-- The CLI offers nothing for secrets; use the scripts above.
+- The CLI does not create these secrets (only express secrets, [section 14](#14-express-secrets-by-script)); use the scripts above.
 
 ### Reading a secret by script
 
@@ -1498,3 +1506,347 @@ rate-limited`, security log).
 
 The other answers (`401`, `403 ip-not-allowed`, `403 deposit-not-allowed`, `5xx`) are those of
 [section 5](#5-errors-and-retries). Details of each code are in [errors.md](errors.md).
+
+## 14. Express secrets by script
+
+Since 2.3 an entity can offer **express secrets** (specification section 22.2): a one-time
+**text**, encrypted on the client, shared by a link and destroyed at its first reading or at its
+expiry. It is the simplest form of the one-time secrets of
+[section 13](#13-one-time-secrets-by-script): no passphrase, no file, no e-mail, no read receipt,
+no sender address. People create one on the page `/x` of the entity when it allows it; a script
+creates one **without any credential**, or with an API token of the entity. Typical
+integrations: a ticketing tool that hands a new password to a user, a password vault that shares
+an entry, an operations script that sends a key to a colleague.
+
+**Zero knowledge.** The client draws the key, seals the text and **composes the link itself**; the
+server receives only the sealed text and two verifiers. It never sees the text nor the key, never
+composes an express link and never mails one (there is no `send` call). The link
+`https://<fqdn>/s/<token>#k=<key>` is the secret: whoever holds it reads the text, once.
+
+The format is the restricted profile of [`e2e-format.md`](../architecture/e2e-format.md),
+section 3.3.9, on top of sections 3.3.1 to 3.3.4. The test vectors without passphrase of
+`internal/tte2/testdata/vectors.json` (`secrets` and `secretNegative`) are the reference for any
+implementation.
+
+Ready-made tools, the scripts being checked against these vectors by `go test
+./docs/api/examples/` (part of `make check`):
+
+| Tool | Requirements | Modes |
+|---|---|---|
+| [`transteira-cli`](cli.md#secret-create) | the signed binary of the client | `secret create`, `secret read` |
+| [`express-secret.ps1`](examples/express-secret.ps1) | PowerShell 7.4 or later, no module | `create`, `seal`, `status`, `read`, `self-test` |
+| [`express-secret.py`](examples/express-secret.py) | Python 3.11 or later and the `cryptography` package, pinned with its hashes in [`requirements.txt`](examples/requirements.txt) | the same |
+| [`express-secret.go`](examples/express-secret.go) | Go 1.24 or later, standard library only, one file | the same |
+
+The test runs the PowerShell script in its pinned image and the Python script in an image built
+once from [`examples/python/Dockerfile`](examples/python/Dockerfile) (pinned Python image,
+packages installed from wheels checked against their hashes: the first run downloads them), the
+self-tests without network; the Go file is built with the local toolchain. Each script also goes
+through a creation, a status and a reveal against a fake server that checks that neither the
+text nor the key reaches it, against a hostile server whose answers hold escape sequences, and
+with a terminal as output; the containers reach the fake server through the host network of the
+Linux Docker Engine, or through `host.docker.internal` with Docker Desktop. Rootless Docker
+reaches neither: these parts then fail under `make check` (and are skipped by a plain `go test`).
+
+### Express prerequisites and limits
+
+- **Off by default.** Read `GET /api/v1/tenant` (no authentication): `features.expressSecrets`
+  gives `enabled` (the anonymous mode is offered), `durations` (always `1h`, `1d`, `7d`) and
+  `maxChars` (always 10 000).
+- **Anonymous creation** (no `Authorization` header): accepted only when the entity has enabled
+  express secrets (`expressEnabled`, off by default, set by its administrators), otherwise
+  `403 express-secrets-disabled`.
+- **Creation with an API token** (`Authorization: Bearer`, as in [Basics](#basics)): the token
+  needs the opt-in **`expressAllowed`**, off by default, including for the tokens created before
+  2.3 (set it at creation or with the `PATCH` of
+  [section 6](#6-managing-tokens-list-change-revoke)); without it, the answer is
+  `403 express-token-not-allowed`. Such a token creates express secrets **even when the anonymous
+  mode is off**, and its `allowedCidrs` apply (`403 ip-not-allowed`); its `allowedSenders` play no
+  part, an express secret having no sender address. An invalid token is an error
+  (`401 invalid-credentials`), never downgraded to an anonymous creation.
+- **Instance switch.** The operator can disable express secrets for the whole instance
+  (`TT_EXPRESS_SECRETS_DISABLED=true`): every creation is refused, with or without a token, and
+  the existing express secrets cannot be read until the switch is lifted.
+- **Independent of section 13.** The switch of the one-time secrets (`features.secrets.enabled`),
+  their durations and their per-token limits do not apply to express secrets.
+- **Same-origin rule.** The creation, the reveal and the abuse report refuse cross-site browser
+  requests (`403 csrf-invalid`); a script sends no `Origin` nor `Sec-Fetch-Site` header and is
+  not affected. No CSRF token is needed.
+
+| Limit | Value |
+|---|---|
+| Text | 1 to 10 000 Unicode code points of valid UTF-8, counted by the client (the server only sees the ciphertext) |
+| Durations | `1h`, `1d` or `7d` from the creation, whatever the entity offers for the secrets of section 13 |
+| Anonymous creations | `expressPerHourPerIp` per client (an IPv4 address or an IPv6 /64) per hour, 10 by default: beyond, `429 rate-limited` with `Retry-After` |
+| Creations with a token | `expressPerHourPerToken` per token per hour, 100 by default, instead of the per-client limit: beyond, `429 rate-limited` with `Retry-After` |
+| Unread express secrets of the entity | `expressMaxPending`, 1 000 by default, anonymous and token ones together: beyond, an **anonymous** creation gets `429 express-secret-limit-reached` without `Retry-After`; a creation with a token is still accepted |
+| Maintenance | `503 maintenance` with `Retry-After` |
+
+### Creating an express secret
+
+1. **Make a new key `K`**: 32 bytes from a cryptographically secure generator
+   (`RandomNumberGenerator` in .NET, `secrets.token_bytes` in Python, `crypto/rand` in Go). Never
+   reuse a key, not even to retry a failed creation.
+2. **Check the text**: 1 to 10 000 Unicode code points, counted on the text as given (no
+   normalization, no trimming; line breaks count, and a character outside the Basic Multilingual
+   Plane, such as most emoji, counts once). It must be valid UTF-8: a string holding a lone
+   surrogate is refused.
+3. **Derive `K'`** without passphrase: `K' = HKDF-SHA-256(IKM = K, salt = empty, info =
+   "transteira/tte2/v1/secret")`, 32 bytes.
+4. **Seal the text** with AES-256-GCM under the text key `HKDF-SHA-256(K', empty salt,
+   "transteira/tte2/v1/secret/text")`, a random 12-byte nonce and the additional data `TTE2S`:
+   `encryptedText = base64url(0x01 || nonce || ciphertext || tag)`, without padding.
+5. **Compute the two verifiers**, 64 lowercase hex characters each: `keyVerifier =
+   SHA-256(HKDF(K, empty salt, "transteira/tte2/v1/secret/key-proof"))` and `verifier =
+   SHA-256(HKDF(K', empty salt, "transteira/tte2/v1/secret/proof"))`. Then **open your own sealed
+   text** with `K'` and compare it with the text, so that the verifiers never certify a text the
+   reader could not open.
+6. **Create**: `POST /api/v1/express-secrets` with `Content-Type: application/json` and exactly
+   these four members (any other member is `400 validation-failed`):
+
+   ```json
+   {"encryptedText": "AQvm_LNcuMssDUaZI6WQ3iGRK4gIg8iiNhOpsnYu-dMoF2eTMvmbWpRI1yivl-6L03VwgcaRxEruSIQs7Q",
+    "verifier": "2efe6abcc112e614f12b2074e79d465dd5d572d0947646f62ddd9b0d01e3cfb1",
+    "keyVerifier": "78de3bf0687a69d48ed14af11c89b1bfdc7f117f378a88bf070c9d1d968a0ca8",
+    "expiresIn": "1h"}
+   ```
+
+   The answer, `201`, is the secret, already `active`; its `token` is shown once:
+
+   ```json
+   {"id": "sec_01JABCS3T4V5W6X7Y8Z9A0B1C2", "token": "tts_Xp4kQ7mZr2Lw9TfB3nHc8VyJd5Gs1KqA6eWu0RtNb7M",
+    "state": "active", "expiresAt": "2026-11-18T09:00:00Z"}
+   ```
+
+7. **Compose the link**: `https://<fqdn>/s/<token>#k=<K in base64url without padding>` (43
+   characters), where `<fqdn>` is the host the request was sent to, and give it to its reader
+   through a private channel.
+
+There is no `Idempotency-Key`. If the `201` is lost, the secret stays unread until it expires
+(counted in `expressMaxPending` until then), and a retry is a new secret with a new key. The
+scripts never retry by themselves.
+
+### Reading and polling an express secret
+
+Reading needs no credential, only the link: the token is the path segment after `/s/`, the key
+is the fragment after `#k=`.
+
+1. **Status**, `GET /api/v1/secret-links/{token}`: it **consumes nothing** and can be repeated.
+   An express secret answers `200` with `express: true`, `anonymous` (created without credential,
+   or with a token), no `passphrase` member and `file: null`.
+2. **Reveal**, `POST /api/v1/secret-links/{token}/reveal` with `{"keyProof": "<64 hex>", "proof":
+   "<64 hex>"}`: the key proof `HKDF(K, empty salt, "transteira/tte2/v1/secret/key-proof")` and
+   the proof `HKDF(K', empty salt, "transteira/tte2/v1/secret/proof")`, sent as such (the server
+   hashes them and compares with the verifiers). **This is one-time**: the answer
+   `{"encryptedText": "..."}` is the only copy, and a lost answer loses the secret. A wrong key
+   gives `403 secret-proof-invalid` and consumes nothing.
+3. **Open** the sealed text with `K'` and apply the text rules again (`ErrInvalidSecret` beyond
+   10 000 code points). Show it as **plain text**: it was written by a third party (see the
+   [security notes](#express-secret-security-notes)).
+
+The creator can **poll the status** to know whether the secret was read, with the token alone:
+the key is not needed, and must not be sent.
+
+| Status answer | State |
+|---|---|
+| `200`, `state: active` | **pending**: not read yet (`expiresAt` gives its end) |
+| `410 secret-gone`, `reason: read` | **read** (if the intended reader did not read it, the link leaked) |
+| `410 secret-gone`, `reason: expired` | **expired** unread |
+| `410 secret-gone`, `reason: deleted` | **deleted** by an administrator, after an abuse report for example |
+| `410 secret-gone`, `reason: locked` | **locked** after 5 wrong proofs with the right key: only a faulty client does that, an express secret having no passphrase |
+| `403 express-secrets-disabled` | **closed**: the instance switch is on, or the anonymous mode was turned off (for an anonymous secret); nothing is consumed, and the secret is readable again if the service reopens before its expiry |
+
+The tombstone (`410`) is kept 30 days, then the token is unknown (`404 not-found`). Poll at most
+once a minute and **stop at the first `410`**: the status and reveal calls share a limit of 30
+per minute per client, and unknown tokens count as failures (10 within 15 minutes lock the
+client for 15 minutes and are written to the security log read by fail2ban and CrowdSec).
+
+With curl, the token can be taken from the link file and kept off the command line (`curl -K -`
+reads the URL from its standard input, and `printf` is a shell built-in):
+
+```bash
+token=$(sed -E 's|^https://[^/]+/s/([^#]+).*$|\1|' ./secret-link.txt)
+printf 'url = "%s/api/v1/secret-links/%s"\n' "$TT_URL" "$token" \
+  | curl -sS -K - -o /dev/null -w '%{http_code}\n'      # 200 pending, 410 ended, 403 closed
+```
+
+**Report an abuse.** The reader of an express secret, also after reading it, can alert the
+administrators of the entity with the token alone: `POST
+/api/v1/secret-links/{token}/abuse-reports` with a `category` (`malware`, `phishing`,
+`illegal_content`, `spam`, `unknown_sender` or `other`) and an optional plain-text `message` of
+1 000 characters at most. The answer is `202`; at most 3 reports per secret per day and 5 per
+client per hour. The report names the secret, never its content: describe the facts in the
+message, without the link.
+
+```bash
+printf 'url = "%s/api/v1/secret-links/%s/abuse-reports"\n' "$TT_URL" "$token" \
+  | curl -sS -K - -X POST -H 'Content-Type: application/json' \
+      --data '{"category": "phishing", "message": "The text asks me to log in on a fake bank site."}' \
+      -o /dev/null -w '%{http_code}\n'
+```
+
+### Express secret scripts
+
+The three scripts behave alike. The text comes from the standard input or from a file, **never
+from the command line** (other users of the host can read the process list); it is sent as is,
+with no trimming (write it with `printf '%s'`, not `echo`, or with `Set-Content -NoNewline`).
+**`transteira-cli secret create`, unlike the scripts, drops one final line break and a leading
+byte order mark** (its `--raw` option sends the input byte for byte): the same file gives two
+different secrets, a password that differs by its final line break, if one tool creates and the
+other expects the text as is. Use one rule on both sides: `--raw` with the scripts' files, or
+files without a final line break.
+The link is written on the **standard output only**, followed by a line break; errors and
+notices go to the standard error, never with the link, the token or the key.
+
+| Variable | Use |
+|---|---|
+| `TT_URL` | `create`: the entity, `https://<fqdn>` without a path |
+| `TT_TOKEN_FILE` | `create`: file holding an API token allowed for express secrets (`expressAllowed`); without it the creation is anonymous |
+| `TT_EXPIRES` | `create`, `seal`: `1h`, `1d` (default) or `7d` |
+| `TT_LINK_FILE` | `status`, `read`: file holding the link; without it, the link is read from the standard input |
+| `TT_CA_FILE` | Python and Go: extra CA certificates (PEM) to trust, for an internal PKI; PowerShell uses the system store |
+
+| Mode | What it does |
+|---|---|
+| `create` | seals the text, creates the secret, prints the link |
+| `seal` | prints `{"fragmentKey": "...", "body": {...}}`, where `body` is the complete creation body, for your own HTTP client |
+| `status` | prints `pending <expiresAt>`, `read`, `expired`, `deleted`, `locked` or `closed`; consumes nothing |
+| `read` | reveals the secret once and prints its exact text; on a terminal, control and bidirectional characters, a lone carriage return included, are replaced with U+FFFD (redirect the output to keep them) |
+| `self-test VECTORS` | checks the format against `internal/tte2/testdata/vectors.json`: every vector without passphrase, the others being counted as skipped |
+
+The exit code is 0 on success, 1 on an error (the operation, the status and the problem code,
+then a hint), 2 on a usage error. A link can name any server, so what the server answers is
+never printed raw: the error lines replace its control and bidirectional characters with U+FFFD,
+and `status` prints a reason only if it is a plain word, and a date only in the RFC 3339 form. `read` refuses a secret with a passphrase or a file before
+revealing it (use `secret-create.mjs`, `secret-create.ps1` or a browser), and for an express
+secret writes a notice on the standard error: created by a third party, not by the entity.
+
+**PowerShell 7.4** (`AesGcm`, `HKDF` and `RandomNumberGenerator` of .NET, no module):
+
+```powershell
+$env:TT_URL = 'https://transfer.entity-a.example.com'
+$env:TT_EXPIRES = '1h'
+# $env:TT_TOKEN_FILE = "$HOME/.transteira/token"   # optional: a token allowed for express secrets
+# The text is typed without echo: it is never on a command line, so never in the history.
+$typed = Read-Host -AsSecureString -Prompt 'Text of the secret'
+$text = New-TemporaryFile                          # created readable by you only
+[Net.NetworkCredential]::new('', $typed).Password |
+  Set-Content -NoNewline -Encoding utf8NoBOM -LiteralPath $text
+$linkFile = New-TemporaryFile                      # the link is the secret: a private file too
+./express-secret.ps1 create -TextFile $text | Set-Content -LiteralPath $linkFile
+Remove-Item -LiteralPath $text
+
+$env:TT_LINK_FILE = $linkFile.FullName
+./express-secret.ps1 status                      # pending 2026-11-18T09:00:00Z
+$secret = ./express-secret.ps1 read -PassThru     # the exact text, as a string
+Remove-Item -LiteralPath $linkFile
+```
+
+`New-TemporaryFile` creates each file readable by you only (mode 0600 on Linux and macOS, your
+own temporary folder on Windows), whereas `>` creates a file with the default permissions, which
+other users of a Linux or macOS host can often read: never redirect the link or the text into a
+new file with `>` without `umask 077` first. `read` writes the text to the standard output of the
+process: from a Bash shell, `umask 077; pwsh -File ./express-secret.ps1 read > ./received.txt`
+gets the exact UTF-8 bytes in a private file, but the `>` of a PowerShell session does not
+capture it, hence `-PassThru` there.
+
+**Python 3.11** (the `cryptography` package for AES-GCM and HKDF, the standard library for the
+rest):
+
+```bash
+python3 -m venv ~/.venvs/transteira && . ~/.venvs/transteira/bin/activate
+python -m pip install --require-hashes --only-binary=:all: -r requirements.txt
+export TT_URL=https://transfer.entity-a.example.com TT_EXPIRES=1h
+# export TT_TOKEN_FILE=~/.transteira/token        # optional: a token allowed for express secrets
+umask 077
+printf '%s' "$TEXT" | python express-secret.py create > ./secret-link.txt     # or --file FILE
+TT_LINK_FILE=./secret-link.txt python express-secret.py status
+python express-secret.py read < ./secret-link.txt > ./received.txt
+```
+
+**Go 1.24** (one file, standard library only, kept out of the module by `//go:build ignore`):
+
+```bash
+export TT_URL=https://transfer.entity-a.example.com TT_EXPIRES=1d
+umask 077
+go run express-secret.go create -file ./db-password.txt > ./secret-link.txt
+TT_LINK_FILE=./secret-link.txt go run express-secret.go status
+go run express-secret.go read < ./secret-link.txt > ./received.txt
+# Or build it once: go build -o express-secret express-secret.go
+```
+
+### Without a script: curl and the command-line client
+
+**curl alone cannot create an express secret**: the text must be sealed with AES-GCM on the
+client, which neither curl nor `openssl enc` can do. Use the command-line client, which does it
+all ([cli.md](cli.md#secret-create)):
+
+```bash
+export TT_URL=https://transfer.entity-a.example.com
+umask 077
+# The text from a private file (mode 0600); the link alone on the standard output.
+transteira-cli secret create --anonymous --expires 1h --file ./db-password.txt > ./secret-link.txt
+# With the token of the configuration (allowed for express secrets), drop --anonymous.
+transteira-cli secret read - < ./secret-link.txt
+```
+
+Or let a script seal and keep the HTTP calls in curl: `seal` prints the key and the complete
+body. The work folder is private and removed on exit, so that the key does not linger on disk:
+
+```bash
+umask 077
+work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
+TT_EXPIRES=1h python express-secret.py seal --file ./db-password.txt > "$work/sealed.json"
+# With a token allowed for express secrets, add -H @"$work/auth-header.txt" (written as in section 13).
+jq .body "$work/sealed.json" \
+  | curl -sS --fail-with-body -X POST "$TT_URL/api/v1/express-secrets" \
+      -H 'Content-Type: application/json' --data-binary @- > "$work/created.json"
+echo "$TT_URL/s/$(jq -r .token "$work/created.json")#k=$(jq -r .fragmentKey "$work/sealed.json")"
+```
+
+### Express secret errors and retries
+
+| Answer | Meaning | What to do |
+|---|---|---|
+| `403 express-secrets-disabled` (creation) | Anonymous creation while the entity has not enabled express secrets, or the instance switch is on (with or without a token). | Use a token allowed for express secrets, or ask the administrators. |
+| `403 express-token-not-allowed` | The token lacks `expressAllowed`. | Ask an administrator of the entity to allow it. |
+| `401 invalid-credentials` | The token is unknown, revoked, expired or of another entity. | Fix the token; it is never downgraded to an anonymous creation. |
+| `403 ip-not-allowed` | The token is used outside its `allowedCidrs`. | Run from an allowed address. |
+| `429 rate-limited` | Hourly limit of the client (anonymous) or of the token; on the status and the reveal, the per-client limits of the secret links. `Retry-After` gives the wait. | Wait; a new creation draws a **new key**. |
+| `429 express-secret-limit-reached` | The entity holds `expressMaxPending` unread express secrets (anonymous creations only). No `Retry-After`. | Try later, or use a token. |
+| `400 validation-failed`, `400 secret-format-invalid` | A member other than the four, a duration other than `1h`, `1d`, `7d`, a malformed sealed text or verifier, an empty text. | A bug in the sealing: do not retry unchanged. |
+| `404 not-found` (creation) | The server is older than 2.3. | Upgrade, or use the secrets of section 13. |
+| `403 express-secrets-disabled` (status, reveal) | The express service is closed for this secret. Nothing consumed, no attempt counted. | Wait for it to reopen before the expiry, or ask the sender for another channel. |
+| `403 secret-proof-invalid` (reveal) | The key of the link is wrong (truncated or altered link). Not counted. | Check the link. |
+| `410 secret-gone` | Read, expired, deleted or locked (`reason`). | Stop; if you did not read it, tell the sender. |
+| `404 not-found` (status, reveal) | Unknown token: mistyped link, another entity, or ended more than 30 days ago. | Stop. |
+| `503 maintenance` | Maintenance mode. | Wait `Retry-After`. |
+
+Details of each code are in [errors.md](errors.md).
+
+### Express secret security notes
+
+- **The full link is the secret.** Print it to the standard output only, hand it to its reader
+  through a private channel, and never write it to a log, a ticket comment, a chat channel, a URL
+  query or the trace of a scheduler; a tool that must keep it stores it in a secret field.
+- **Mail gateways can consume it.** A link pasted in a mail may be opened by a gateway that
+  follows links in a sandbox; the reader then finds it already read. Prefer an instant message,
+  or a secret of section 13 with a passphrase sent by another channel.
+- **Keep the text and the token off the command line.** Read the text from the standard input or
+  a private file (mode 0600), and the API token from a file, never from an argument: the process
+  list and the shell history are readable by others.
+- **The server never sees the text nor the key.** Add them to no request (no header, no query,
+  no extra member), send the full link to no endpoint except the administrators' lookup below,
+  and draw a new key from the cryptographic generator for every secret.
+- **Third-party content.** Anyone can create an express secret on an entity that allows it: its
+  content is neither written nor checked by the entity. Display it as plain text (no HTML, no
+  Markdown, no clickable link), neutralize its control characters on a terminal, and report an
+  abuse as above.
+- **Short durations.** A database backup taken while a secret was live keeps its sealed text,
+  protected by the key alone (there is no passphrase): prefer `1h` or `1d`.
+- **Administrators** find a secret from a link received in a complaint with `POST
+  /api/v1/admin/tenants/{tenantId}/secrets/lookup` and `{"link": "<link or bare token>"}` in the
+  body (never in a URL; the fragment is ignored, and the token is neither stored nor logged),
+  then delete it; `POST /api/v1/admin/tenants/{tenantId}/express-secrets/purge` deletes every live
+  anonymous express secret at once (answer `{"deleted": <count>}`). Both use the admin session
+  of [section 6](#6-managing-tokens-list-change-revoke).

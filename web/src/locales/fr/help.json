@@ -76,6 +76,10 @@
         "passphrase": "Un secret envoyé par mail doit avoir une phrase de passe."
       }
     },
+    "express": {
+      "off": "Les secrets express (un texte partagé sans aucune identification, par la page Secret express) ne sont pas proposés.",
+      "on": "Les secrets express sont proposés, sans identification, par la page Secret express : un texte de {max} caractères au plus, conservé : {durations}."
+    },
     "levels": {
       "intro": "Niveaux de confidentialité que vous pouvez choisir :",
       "default": "(par défaut)",

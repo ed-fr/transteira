@@ -1,11 +1,16 @@
 // Command transteira-cli is the TransTeira command-line client.
 //
-// It is a plain consumer of the public API (/api/v1) with an API token:
+// It is a plain consumer of the public API (/api/v1), with an API token
+// when the command needs one:
 //
 //	upload        Deposit files and folders as one transfer (tus, resumable
 //	              across runs, optional end-to-end encryption).
 //	download      Download the files of a link, including end-to-end
 //	              encrypted transfers.
+//	secret        "secret create" seals a text read from the standard input
+//	              or a file and creates a one-time express secret, printing
+//	              its link; "secret read" reads a secret link once (express
+//	              secrets, and 2.1 secrets without passphrase nor file).
 //	proof verify  Check a sealed proof of deposit or delivery.
 //	config        "config check" resolves and reports the configuration,
 //	              "config profiles" lists the profiles of the configuration file.
@@ -105,6 +110,7 @@ func commands() []command {
 	return []command{
 		{"upload", "Deposit files and folders as one transfer: upload [options] FILE|FOLDER...", runUpload},
 		{"download", "Download a link: download [options] LINK|-  (\"-\" reads the link from the standard input)", runDownload},
+		{"secret", "One-time text secret: secret create [options] < TEXT (prints the link), secret read [options] LINK|-", runSecret},
 		{"proof", "Check a sealed proof: proof verify FILE.pdf (--url URL | --keys-file FILE)", runProof},
 		{"config", "config check (resolve and report the configuration), config profiles (list the profiles)", runConfig},
 		{"version", "Print the build version (--json for JSON output)", runVersion},

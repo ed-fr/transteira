@@ -109,3 +109,13 @@ export function afterUpdate(
 export function loadedText(count: number, hasMore: boolean, t: Translate): string {
   return t(hasMore ? 'opsAbuse.loadedMore' : 'opsAbuse.loaded', { count });
 }
+
+/** What a report is about: the express secret (since 2.3), the transfer, or nothing known. */
+export function reportSubject(report: Pick<AbuseReport, 'secretId' | 'transferId'>, t: Translate): string {
+  if (report.secretId !== undefined) {
+    return t('opsAbuse.subject.secret', { id: report.secretId });
+  }
+  return report.transferId === undefined
+    ? t('opsAbuse.subject.unknown')
+    : t('opsAbuse.subject.transfer', { id: report.transferId });
+}

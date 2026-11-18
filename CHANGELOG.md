@@ -25,6 +25,30 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `express_token`; the shipped fail2ban and CrowdSec rules count `express_ip` only.
 - Migration 0036 (express settings of the entities, `secrets.express`, `api_tokens.express_allowed`,
   abuse reports on secrets).
+- Express secret, web interface: the `/x` page (text of 10 000 characters at most, durations 1 hour,
+  1 day and 7 days, the link composed in the browser and shown once with a Copy button), a header
+  link shown only when the entity offers the service, and on the `/s/` page a banner for content
+  created by an unverified third party, a "Report abuse" button and a "temporarily unavailable"
+  page when the service is closed (nothing is consumed).
+- Express secret, administration: express section of the secrets settings (switch and limits),
+  emergency purge, lookup of a secret from a pasted link, `expressAllowed` option of the API
+  tokens, express and anonymous markers in the lists, and abuse reports on secrets.
+- Express secret, user documentation and integrated help: new "Express secret" section of the
+  depositor guide (shown only when the entity offers it), express subsections of the recipient,
+  delegated administrator, super administrator and auditor guides, the express rules in the
+  summary of the entity rules, and five new screenshots (fr, en).
+- Express secret, command-line client: `transteira-cli secret create` reads the text from the
+  standard input or `--file` (never from an argument), seals it on the machine and prints only
+  the link (`--expires`, `--anonymous`, `--raw`, `--json`); `transteira-cli secret read` reads an
+  express secret, or a 2.1 secret without passphrase nor file, once, from a link given on the
+  standard input or as an argument, and writes the text to the standard output (made safe on a
+  terminal) or to a new private file (`--output`). New `internal/cli/secret` package.
+- Express secret, integration guide: section 14 of `docs/api/integration.md` (prerequisites and
+  limits, creation, status and reading, curl, errors, security notes) and the `secret create`
+  and `secret read` sections of `docs/api/cli.md`, with three example scripts checked against
+  the shared test vectors and a fake server: `express-secret.ps1` (PowerShell 7.4),
+  `express-secret.py` (Python 3.11, `cryptography` pinned by hash in `requirements.txt`) and
+  `express-secret.go` (Go, standard library only).
 
 ### Changed
 

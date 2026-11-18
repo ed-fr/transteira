@@ -541,6 +541,35 @@ L’écran **Secrets à usage unique** liste les secrets de l’entité, du plus
 
 ![Liste des secrets à usage unique avec les filtres, l’état, l’expiration et le bouton Supprimer](../screenshots/fr/admin-secrets.png)
 
+### Secrets express (administration)
+
+Un **secret express** est un texte d’au plus 10 000 caractères que **toute personne qui atteint l’adresse de votre entité** peut transformer en lien à usage unique, sans s’identifier (voir « Secret express » dans le guide de l’expéditeur et « Lire un secret » dans le guide du destinataire pour ce que voit le lecteur). Le texte est chiffré dans le navigateur : comme pour les secrets à usage unique, vous ne le voyez jamais. Le service est **distinct du module des secrets à usage unique** : **Activer les secrets à usage unique** n’a aucun effet sur lui, et le secret express a son propre interrupteur sur le même écran **Réglages des secrets**.
+
+> **Attention** Le service est **désactivé par défaut**, dans les nouvelles entités comme dans les existantes. Une fois activé, n’importe qui sur Internet peut stocker un texte sur votre serveur au nom de votre entité, et vous ne pouvez ni le lire ni le modérer. Il peut être détourné pour transmettre des contenus illicites ou des identifiants, ou pour de l’hameçonnage sous votre domaine. Activez-le en connaissance de cause.
+
+Dans la section **Secrets express (anonymes)** de l’écran **Réglages des secrets** :
+
+- **Autoriser les secrets express anonymes** : désactivé par défaut. Tant qu’il est activé, un rappel vous demande de compléter d’abord les [mentions légales](topic:tenant-legal) de l’entité : un contact pour les signalements d’abus, et une politique de confidentialité qui précise que les adresses IP des auteurs sont conservées 12 mois dans le journal d’audit.
+- **Secrets par heure et par adresse cliente** : de 1 à 1 000, 10 par défaut. Au-delà, la création est refusée jusqu’à la fin de l’heure.
+- **Secrets par heure et par jeton d’API** : de 1 à 10 000, 100 par défaut.
+- **Secrets express en attente simultanément** : de 1 à 100 000, 1 000 par défaut. Une fois la limite atteinte, les créations anonymes sont refusées jusqu’à ce que des secrets soient lus ou expirent.
+
+![Écran Réglages des secrets, section des secrets express : l’interrupteur, les trois limites et la purge d’urgence](../screenshots/fr/admin-express-settings.png)
+
+Les durées sont fixes (1 heure, 1 jour, 7 jours), quelles que soient celles que vous proposez pour les secrets à usage unique. Un secret express n’a ni fichier, ni phrase de passe, ni envoi par mail, ni accusé de lecture. Le mode maintenance et la mise en service de l’entité refusent les créations comme pour les transferts. Chaque modification d’un réglage est inscrite dans le [journal d’audit](topic:tenant-audit) (**Réglages des secrets modifiés**).
+
+**Désactiver le service rend aussi les secrets express anonymes illisibles.** Leurs destinataires voient que le secret est temporairement indisponible. **Rien n’est consommé**, et les liens refonctionnent si vous réactivez le service avant leur expiration ; un secret qui expire entre-temps est perdu. C’est voulu : c’est le moyen d’arrêter aussitôt une vague d’abus. Les secrets express créés avec un jeton d’API restent lisibles quand vous désactivez le mode anonyme. L’exploitant peut aussi fermer le service pour toute l’instance, voir le guide du super administrateur.
+
+**Retrouver un secret depuis son lien.** Sur l’écran **Secrets à usage unique**, **Retrouver un secret depuis son lien** permet de coller le lien auquel renvoie un signalement (ou que vous donne un destinataire) : l’écran affiche l’identifiant, le type (**Secret express** ou **Secret à usage unique**), l’état, l’auteur, les dates et, pour un secret encore vivant, un bouton **Supprimer**. Votre navigateur extrait du lien l’identifiant du secret (`tts_` suivi de 43 lettres et chiffres) et n’envoie que lui : la clé, qui suit le `#`, ne quitte jamais votre navigateur, même depuis un lien réécrit par un filtre de messagerie (une adresse *Safe Links*, par exemple, où le `#` est encodé en `%23`), et l’identifiant envoyé n’est ni conservé ni journalisé : vous voyez des **métadonnées, jamais le contenu**. Vous pouvez aussi coller l’identifiant seul. Si le lien ne correspond à aucun secret de votre entité, vous obtenez **Aucun secret de cette entité ne correspond à ce lien**. Dans le tableau, les secrets express portent un badge **Express**, et l’auteur d’un secret anonyme est **Anonyme (secret express)**, sans adresse. Chaque recherche est inscrite dans le journal d’audit (**Secret recherché à partir d’un lien**).
+
+![Secret retrouvé depuis son lien : identifiant, type Secret express, état, dates et bouton Supprimer](../screenshots/fr/admin-secret-lookup.png)
+
+**Purge d’urgence.** En bas de l’écran **Réglages des secrets**, **Supprimer tous les secrets express anonymes actifs** détruit, après confirmation, tous les secrets express anonymes encore en attente de lecture, par exemple après un détournement. Le nombre de secrets supprimés est affiché et inscrit dans le journal d’audit (**Secrets express anonymes supprimés en masse**). Les secrets express créés avec un jeton d’API, les secrets à usage unique et les secrets déjà terminés ne sont pas touchés. La purge ne désactive pas le service : décochez d’abord **Autoriser les secrets express anonymes** pour arrêter les nouvelles créations.
+
+**Jetons d’API.** Un jeton ne peut créer des secrets express que si vous cochez **Autorisé à créer des secrets express** à sa création, ou dans **Modifier**. C’est désactivé par défaut : un jeton ordinaire n’en crée aucun. Un jeton autorisé fonctionne **même quand le mode anonyme est désactivé**, avec sa propre limite par jeton (voir plus haut). La colonne **Secrets express** de la liste des jetons indique **Autorisé** ou **Non**. Chaque création est inscrite dans le journal d’audit avec le jeton utilisé.
+
+**Signalements.** Le lecteur d’un secret express peut utiliser **Signaler un abus** (voir [Signalements](topic:tenant-abuse-reports)). La colonne **Concerne** de l’écran des signalements indique **Secret express** et son identifiant (**Transfert** et son identifiant pour un transfert). Un signalement ne contient jamais le texte ni la clé : pour examiner le secret, collez le lien signalé dans **Retrouver un secret depuis son lien** si vous l’avez, puis supprimez-le ou purgez. Le lire le consommerait. Clôturez ensuite le signalement.
+
 <!-- topic: tenant-audit -->
 ### Journal d’audit
 

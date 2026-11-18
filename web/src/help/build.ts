@@ -80,6 +80,7 @@ export const HELP_FEATURES: readonly HelpFeature[] = [
   'maxDownloads',
   'folders',
   'secrets',
+  'expressSecrets',
 ];
 
 /** A build error, located in a guide. */

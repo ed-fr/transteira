@@ -6,6 +6,10 @@
 // the grant of the reveal, decrypted in memory under K' (file index 0), checked against the size
 // and SHA-256 of its sealed metadata, and saved under a sanitized name (T-324).
 //
+// Since 2.3 the page also reads express secrets (section 22.2): the status says so (express,
+// anonymous) for the "third-party content" banner, and while the express service is closed the
+// status and the reveal answer 403 express-secrets-disabled, which consumes nothing ("closed").
+//
 // Browser dependencies (API client, fetch) are injected so that the module is tested in Node.
 import { ApiProblem, NetworkError, buildUrl, expandPath, type ApiClient } from '../../shared/api/client';
 import type { components } from '../../shared/api/schema';
@@ -53,6 +57,11 @@ export type SecretFailure =
   | { kind: 'gone'; reason: GoneReason }
   /** 403 secret-proof-invalid without attemptsRemaining: the key of the link is wrong. */
   | { kind: 'wrong-key' }
+  /**
+   * 403 express-secrets-disabled (since 2.3): an express secret while the service is closed by
+   * the organisation; nothing was consumed, the link works again if the service reopens.
+   */
+  | { kind: 'closed' }
   /** 403 secret-proof-invalid with attemptsRemaining: the passphrase is wrong (counted). */
   | { kind: 'wrong-passphrase'; attemptsRemaining: number }
   /** The secret has a passphrase and none was typed (nothing sent). */
@@ -156,6 +165,7 @@ export function classifyFailure(err: unknown): SecretFailure {
       };
     }
     case 403:
+      if (err.code === 'express-secrets-disabled') return { kind: 'closed' };
       if (err.code !== 'secret-proof-invalid') return { kind: 'error' };
       return err.attemptsRemaining === undefined
         ? { kind: 'wrong-key' }
@@ -169,6 +179,11 @@ export function classifyFailure(err: unknown): SecretFailure {
     default:
       return { kind: 'error' };
   }
+}
+
+/** Whether the status describes an express secret (third-party content, reportable). */
+export function isExpress(status: SecretStatus): boolean {
+  return status.express === true;
 }
 
 /** Reads the status of a secret (consumes nothing). */

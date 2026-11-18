@@ -243,6 +243,8 @@ export interface CreateForm {
   senderText: string;
   /** Date input value ("YYYY-MM-DD"), empty for no expiry. */
   expiry: string;
+  /** The token may create express secrets (since 2.3, off by default). */
+  expressAllowed: boolean;
 }
 
 /** Fields of the edition form (the expiry cannot be changed). */
@@ -250,16 +252,20 @@ export interface EditForm {
   name: string;
   cidrText: string;
   senderText: string;
+  expressAllowed: boolean;
 }
 
 /** Empty creation form. */
 export function emptyCreateForm(): CreateForm {
-  return { name: '', cidrText: '', senderText: '', expiry: '' };
+  return { name: '', cidrText: '', senderText: '', expiry: '', expressAllowed: false };
 }
 
 /** Reports whether the creation form holds something typed. */
 export function createFormTouched(form: CreateForm): boolean {
-  return [form.name, form.cidrText, form.senderText, form.expiry].some((v) => v.trim() !== '');
+  return (
+    form.expressAllowed ||
+    [form.name, form.cidrText, form.senderText, form.expiry].some((v) => v.trim() !== '')
+  );
 }
 
 /** Edition form of a token. */
@@ -268,6 +274,7 @@ export function editFormFrom(token: ApiToken): EditForm {
     name: token.name,
     cidrText: joinLines(token.allowedCidrs),
     senderText: joinLines(token.allowedSenders),
+    expressAllowed: token.expressAllowed === true,
   };
 }
 
@@ -282,6 +289,9 @@ export function createBody(form: CreateForm): ApiTokenCreate {
   if (expiresAt !== undefined) {
     body.expiresAt = expiresAt;
   }
+  if (form.expressAllowed) {
+    body.expressAllowed = true;
+  }
   return body;
 }
 
@@ -294,13 +304,15 @@ export function buildTokenPatch(token: ApiToken, form: EditForm): ApiTokenUpdate
     name: form.name.trim(),
     allowedCidrs: [...parseTokenCidrList(form.cidrText).values],
     allowedSenders: [...parseSenderList(form.senderText).values],
+    expressAllowed: form.expressAllowed,
   };
   const original = {
     name: token.name,
     allowedCidrs: token.allowedCidrs,
     allowedSenders: token.allowedSenders,
+    expressAllowed: token.expressAllowed === true,
   };
-  return buildPatch(original, edited, ['name', 'allowedCidrs', 'allowedSenders']);
+  return buildPatch(original, edited, ['name', 'allowedCidrs', 'allowedSenders', 'expressAllowed']);
 }
 
 /** The fields of the token forms, for the error summary (keys are the API field names). */
@@ -489,4 +501,9 @@ export function revokeErrorMessage(view: ErrorView, t: Translate): string {
 /** Text of the allowed senders column: the entries, or "internal domains" when empty. */
 export function sendersText(token: Pick<ApiToken, 'allowedSenders'>, t: Translate): string {
   return token.allowedSenders.length === 0 ? t('opsTokens.list.anySender') : token.allowedSenders.join(', ');
+}
+
+/** Whether a token may create express secrets (absent, from a server older than 2.3, means no). */
+export function expressAllowed(token: Pick<ApiToken, 'expressAllowed'>): boolean {
+  return token.expressAllowed === true;
 }

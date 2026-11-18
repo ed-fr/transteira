@@ -20,7 +20,8 @@
     "category": "Motif",
     "reporter": "Signalé par",
     "status": "Statut",
-    "actions": "Actions"
+    "actions": "Actions",
+    "subject": "Concerne"
   },
   "status": {
     "open": "Ouvert",
@@ -57,6 +58,13 @@
     "reopen": "Rouvrir le signalement",
     "cancel": "Fermer",
     "closedDone": "Signalement clos.",
-    "reopenedDone": "Signalement rouvert."
+    "reopenedDone": "Signalement rouvert.",
+    "secretLink": "Ouvrir les secrets de cette entité",
+    "secretHint": "Pour le retrouver, collez son lien dans la recherche de cet écran. Les secrets express peuvent aussi tous être supprimés depuis les réglages des secrets."
+  },
+  "subject": {
+    "secret": "Secret express {id}",
+    "transfer": "Transfert {id}",
+    "unknown": "Inconnu"
   }
 }

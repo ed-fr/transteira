@@ -1,13 +1,13 @@
 <script lang="ts">
   // Edition of an API token in a modal dialog (PATCH …/api-tokens/{tokenId}, JSON Merge Patch):
-  // name, allowed ranges and allowed senders; only the changed fields are sent, an emptied sender
+  // name, allowed ranges, allowed senders and the express secrets opt-in; only the changed fields are sent, an emptied sender
   // list is sent as [] (any internal address again). The expiry cannot be changed. A revoked
   // token answers 409, shown as a general message. The form is rebuilt from the token at each
   // opening and dropped when the dialog closes; closing with unsaved changes (Cancel, Escape,
   // close button) asks for a confirmation first, as leaving a page with unsaved changes does.
   import { untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Button, Dialog, TextField } from '../../../shared/components';
+  import { Button, Checkbox, Dialog, TextField } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
@@ -154,6 +154,11 @@
           return t(m.key, m.params);
         }}
         error={errorFor(errors, ids.senders)}
+      />
+      <Checkbox
+        label={t('opsTokens.form.expressAllowed.label')}
+        hint={t('opsTokens.form.expressAllowed.hint')}
+        bind:checked={form.expressAllowed}
       />
       {#snippet actions()}
         <Button variant="secondary" onclick={cancel}>

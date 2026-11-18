@@ -248,6 +248,28 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     profile: 'delegated-admin',
   },
   { name: 'admin-secrets', screen: 'admin /admin/tenants/:id/secrets', profile: 'delegated-admin' },
+  // Express secrets (since 2.3).
+  { name: 'express-create', screen: 'public /x (text typed, duration chosen)', profile: 'depositor' },
+  {
+    name: 'express-link-shown',
+    screen: 'public /x (secret created: link shown once)',
+    profile: 'depositor',
+  },
+  {
+    name: 'express-read',
+    screen: 'public /s/:token (express secret: third-party content banner)',
+    profile: 'recipient',
+  },
+  {
+    name: 'admin-express-settings',
+    screen: 'admin /admin/tenants/:id/secret-settings (express section)',
+    profile: 'delegated-admin',
+  },
+  {
+    name: 'admin-secret-lookup',
+    screen: 'admin /admin/tenants/:id/secrets (secret found from its link)',
+    profile: 'delegated-admin',
+  },
 ];
 
 /** Directory of the screenshots (versioned). */

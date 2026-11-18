@@ -54,8 +54,12 @@
       <p class="tt-mb-0" id="tt-done-link-label">
         {e2eKey ? t('deposit.e2e.done.linkLabel') : t('deposit.done.linkOnly.label')}
       </p>
-      <code class="tt-done-link" aria-labelledby="tt-done-link-label" data-testid="deposit-done-link"
-        >{fullLink}</code
+      <!-- translate="no": a page translation service must never receive the link and its key. -->
+      <code
+        class="tt-done-link notranslate"
+        aria-labelledby="tt-done-link-label"
+        data-testid="deposit-done-link"
+        translate="no">{fullLink}</code
       >
       {#if e2eKey}
         <p class="tt-text-sm tt-mb-0">{t('deposit.e2e.done.linkNote')}</p>
@@ -85,7 +89,8 @@
     </Alert>
     <p class="tt-mb-0" id="tt-done-key-label">{t('deposit.e2e.done.label')}</p>
     <code
-      class="tt-done-link"
+      class="tt-done-link notranslate"
+      translate="no"
       id="tt-done-key"
       aria-labelledby="tt-done-key-label"
       data-testid="deposit-e2e-key">{e2eKey}</code

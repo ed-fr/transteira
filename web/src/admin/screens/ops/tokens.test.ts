@@ -8,6 +8,7 @@ import {
   createBody,
   createFormTouched,
   editFormFrom,
+  expressAllowed,
   emptyCreateForm,
   expiryFromDate,
   hasAllAnyAddress,
@@ -260,6 +261,7 @@ describe('createBody', () => {
         cidrText: '10.10.20.15\n10.10.20.15/32\nbad',
         senderText: 'Reporting@example.com',
         expiry: '',
+        expressAllowed: false,
       }),
     ).toEqual({
       name: 'ERP',
@@ -274,7 +276,9 @@ describe('createBody', () => {
       cidrText: withAnyAddress(''),
       senderText: '',
       expiry: '2027-06-30',
+      expressAllowed: true,
     });
+    expect(body.expressAllowed).toBe(true);
     expect(body.allowedCidrs).toEqual(['0.0.0.0/0', '::/0']);
     expect(body.allowedSenders).toEqual([]);
     expect(body.expiresAt).toBe(new Date(2027, 5, 30, 23, 59, 59).toISOString());
@@ -283,6 +287,35 @@ describe('createBody', () => {
   it('tells whether the form was touched', () => {
     expect(createFormTouched(emptyCreateForm())).toBe(false);
     expect(createFormTouched({ ...emptyCreateForm(), expiry: '2027-01-01' })).toBe(true);
+    expect(createFormTouched({ ...emptyCreateForm(), expressAllowed: true })).toBe(true);
+  });
+});
+
+describe('express opt-in', () => {
+  it('is off by default and not sent when off', () => {
+    expect(emptyCreateForm().expressAllowed).toBe(false);
+    expect('expressAllowed' in createBody({ ...emptyCreateForm(), name: 'x', cidrText: '10.0.0.1' })).toBe(
+      false,
+    );
+  });
+
+  it('reads the token and tells whether it may create express secrets', () => {
+    expect(expressAllowed(token())).toBe(false);
+    expect(expressAllowed(token({ expressAllowed: true }))).toBe(true);
+    expect(editFormFrom(token({ expressAllowed: true })).expressAllowed).toBe(true);
+    expect(editFormFrom(token()).expressAllowed).toBe(false);
+  });
+
+  it('patches the opt-in only when it changed', () => {
+    const tok = token({ expressAllowed: true });
+    expect(buildTokenPatch(tok, editFormFrom(tok))).toEqual({});
+    expect(buildTokenPatch(tok, { ...editFormFrom(tok), expressAllowed: false })).toEqual({
+      expressAllowed: false,
+    });
+    const plain = token();
+    expect(buildTokenPatch(plain, { ...editFormFrom(plain), expressAllowed: true })).toEqual({
+      expressAllowed: true,
+    });
   });
 });
 
@@ -314,7 +347,7 @@ describe('buildTokenPatch', () => {
 });
 
 describe('validation', () => {
-  const valid = { name: 'ERP', cidrText: '10.0.0.0/8', senderText: '', expiry: '' };
+  const valid = { name: 'ERP', cidrText: '10.0.0.0/8', senderText: '', expiry: '', expressAllowed: false };
 
   it('accepts a valid form', () => {
     expect(validateCreate(valid, fields, t, NOW)).toEqual([]);
