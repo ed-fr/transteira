@@ -94,11 +94,7 @@ func TestAPITokenDeposit(t *testing.T) {
 			t.Fatalf("offset after the reset = %d, want in [%d, %d]", off2, off, off+sent2)
 		}
 		// Resume to the end, chunk by chunk.
-		for off = off2; off < size; {
-			n := min(int64(chunk), size-off)
-			script.mustPatch(t, url, off, content[off:off+n])
-			off += n
-		}
+		script.resumeAfterReset(t, url, content, chunk)
 		if resp := script.tokenFinalize(t, tr.ID); resp.status != http.StatusAccepted {
 			t.Fatalf("finalize with the token: %d %s", resp.status, resp.body)
 		}

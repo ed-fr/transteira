@@ -54,7 +54,7 @@ func TestHealthz(t *testing.T) {
 
 	t.Run("ClamAV unreachable", func(t *testing.T) {
 		forEngine(t, func(t *testing.T, e storetest.Engine) {
-			addr := closedPort(t)
+			addr := deadPort(t)
 			s := startServer(t, e, serverOptions{clamd: addr})
 			resp := s.get(t, "", "/healthz")
 			if resp.status != http.StatusServiceUnavailable {
@@ -144,11 +144,11 @@ func TestHealthcheckCommand(t *testing.T) {
 		t.Errorf("URL from TT_LISTEN_ADDR: exit %d, want 0; output %s", code, out)
 	}
 
-	degraded := startServer(t, storetest.SQLite(t), serverOptions{clamd: closedPort(t)})
+	degraded := startServer(t, storetest.SQLite(t), serverOptions{clamd: deadPort(t)})
 	if code, out := run(t, nil, "-url", degraded.url("/healthz")); code != 1 {
 		t.Errorf("degraded server: exit %d, want 1; output %s", code, out)
 	}
-	if code, _ := run(t, nil, "-url", "http://"+closedPort(t)+"/healthz"); code != 1 {
+	if code, _ := run(t, nil, "-url", "http://"+deadPort(t)+"/healthz"); code != 1 {
 		t.Errorf("no server: exit %d, want 1", code)
 	}
 	if code, _ := run(t, nil, "-url", "ftp://127.0.0.1/healthz"); code != 2 {

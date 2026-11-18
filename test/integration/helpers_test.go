@@ -590,16 +590,28 @@ func fakeClamd(t *testing.T) string {
 	return ln.Addr().String()
 }
 
-// closedPort returns a loopback address on which nothing listens.
-func closedPort(t *testing.T) string {
+// deadPort returns a loopback address where no service answers: every
+// connection is closed at once, before any byte. The port stays bound until
+// the end of the test. Closing the listener at once and returning its bare
+// address let a parallel test bind the same port, so that a check meant to
+// fail found a live server.
+func deadPort(t *testing.T) string {
 	t.Helper()
 	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := ln.Addr().String()
-	_ = ln.Close()
-	return addr
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+	return ln.Addr().String()
 }
 
 // watchBuffer is a concurrency-safe buffer that signals when a substring

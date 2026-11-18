@@ -33,7 +33,7 @@ func e2eFiles(t *testing.T) []e2ePlain {
 // uploadWithCuts uploads the ciphertext of the file 0 of s the way a flaky
 // client would: slices cut inside the 32-byte header, a connection cut in the
 // middle of a request, then the resume from the offset the server reports.
-func uploadWithCuts(t *testing.T, c *depositor, trfID, url string, ct []byte) {
+func uploadWithCuts(t *testing.T, c *depositor, url string, ct []byte) {
 	t.Helper()
 	n := int64(len(ct))
 	if off, length := c.offsetOf(t, url); off != 0 || length != n {
@@ -50,13 +50,18 @@ func uploadWithCuts(t *testing.T, c *depositor, trfID, url string, ct []byte) {
 		t.Fatalf("offset after 20 bytes = %d", off)
 	}
 	c.mustPatch(t, url, 20, ct[20:5000])
-	// A cut in the middle of a request, past the header.
+	// A cut in the middle of a request, past the header. The half-close
+	// lets the test wait for the server's answer: after a plain close, the
+	// server could still be reading the request once the lock was found
+	// free, and take it again under the resume below (409).
 	conn := c.rawPatch(t, url, 5000, n-5000)
 	if _, err := conn.Write(ct[5000:70000]); err != nil {
 		t.Fatalf("write the partial body: %v", err)
 	}
-	_ = conn.Close()
-	c.waitUnlocked(t, trfID)
+	if err := conn.CloseWrite(); err != nil {
+		t.Fatalf("half-close the PATCH: %v", err)
+	}
+	expectTusError(t, "cut PATCH", readRawResponse(t, conn), http.StatusBadRequest)
 	off, length := c.offsetOf(t, url)
 	if off < 5000 || off > 70000 || length != n {
 		t.Fatalf("offset after the cut = %d (length %d), want within [5000, 70000] of %d", off, length, n)
@@ -105,7 +110,7 @@ func runE2EJourney(t *testing.T, o *opsEnv, password string) {
 		t.Fatalf("offset after 31 bytes = %d", off)
 	}
 	alice.mustPatch(t, url1, 31, set.cipher[1][31:])
-	uploadWithCuts(t, alice, tr.ID, tr.Files[0].UploadURL, set.cipher[0])
+	uploadWithCuts(t, alice, tr.Files[0].UploadURL, set.cipher[0])
 
 	// Finalization: no antivirus, the transfer is available.
 	finPath := pathTransfers + "/" + tr.ID + "/finalize"

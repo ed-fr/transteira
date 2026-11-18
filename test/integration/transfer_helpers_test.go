@@ -374,6 +374,33 @@ func (c *depositor) mustPatch(t *testing.T, uploadURL string, offset int64, data
 	}
 }
 
+// resumeAfterReset uploads content from the offset the server reports to
+// the end, in PATCHes of at most chunk bytes. After an abrupt reset, nothing
+// proves that the server had read the request when waitUnlocked found the
+// lock free: it may still take the lock or move the offset, so a 409
+// rereads the offset and retries, until waitTimeout.
+func (c *depositor) resumeAfterReset(t *testing.T, uploadURL string, content []byte, chunk int64) {
+	t.Helper()
+	size := int64(len(content))
+	deadline := time.Now().Add(waitTimeout)
+	for {
+		off, _ := c.offsetOf(t, uploadURL)
+		if off == size {
+			return
+		}
+		n := min(chunk, size-off)
+		resp := c.patch(t, uploadURL, off, content[off:off+n])
+		switch {
+		case resp.status == http.StatusNoContent:
+			expectTusHeaders(t, "resume PATCH", resp)
+		case resp.status == http.StatusConflict && time.Now().Before(deadline):
+			time.Sleep(pollInterval)
+		default:
+			t.Fatalf("resume PATCH %s at %d (%d bytes): status %d, want 204\nserver errors:\n%s", uploadURL, off, n, resp.status, c.d.errorLines())
+		}
+	}
+}
+
 // upload sends data entirely in one PATCH from offset 0.
 func (c *depositor) upload(t *testing.T, uploadURL string, data []byte) {
 	t.Helper()
