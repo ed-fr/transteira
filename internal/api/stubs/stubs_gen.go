@@ -455,6 +455,11 @@ func (Unimplemented) GetSystemSettings(_ context.Context, _ gen.GetSystemSetting
 	return nil, ErrNotImplemented
 }
 
+// GetSystemStatus answers 404 not-found until the operation is implemented.
+func (Unimplemented) GetSystemStatus(_ context.Context, _ gen.GetSystemStatusRequestObject) (gen.GetSystemStatusResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // GetSystemVersion answers 404 not-found until the operation is implemented.
 func (Unimplemented) GetSystemVersion(_ context.Context, _ gen.GetSystemVersionRequestObject) (gen.GetSystemVersionResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -742,6 +747,11 @@ func (Unimplemented) RotateDropLink(_ context.Context, _ gen.RotateDropLinkReque
 
 // SearchDataSubject answers 404 not-found until the operation is implemented.
 func (Unimplemented) SearchDataSubject(_ context.Context, _ gen.SearchDataSubjectRequestObject) (gen.SearchDataSubjectResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// SearchTransfers answers 404 not-found until the operation is implemented.
+func (Unimplemented) SearchTransfers(_ context.Context, _ gen.SearchTransfersRequestObject) (gen.SearchTransfersResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 

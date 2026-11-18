@@ -1885,6 +1885,63 @@ func (e SsoTestResultStage) Valid() bool {
 	}
 }
 
+// Defines values for SystemStatusAntivirusStatus.
+const (
+	SystemStatusAntivirusStatusDisabled    SystemStatusAntivirusStatus = "disabled"
+	SystemStatusAntivirusStatusOk          SystemStatusAntivirusStatus = "ok"
+	SystemStatusAntivirusStatusUnavailable SystemStatusAntivirusStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the SystemStatusAntivirusStatus enum.
+func (e SystemStatusAntivirusStatus) Valid() bool {
+	switch e {
+	case SystemStatusAntivirusStatusDisabled:
+		return true
+	case SystemStatusAntivirusStatusOk:
+		return true
+	case SystemStatusAntivirusStatusUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SystemStatusDatabaseEngine.
+const (
+	Postgres SystemStatusDatabaseEngine = "postgres"
+	Sqlite   SystemStatusDatabaseEngine = "sqlite"
+)
+
+// Valid indicates whether the value is a known member of the SystemStatusDatabaseEngine enum.
+func (e SystemStatusDatabaseEngine) Valid() bool {
+	switch e {
+	case Postgres:
+		return true
+	case Sqlite:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SystemStatusStatus.
+const (
+	SystemStatusStatusDegraded SystemStatusStatus = "degraded"
+	SystemStatusStatusOk       SystemStatusStatus = "ok"
+)
+
+// Valid indicates whether the value is a known member of the SystemStatusStatus enum.
+func (e SystemStatusStatus) Valid() bool {
+	switch e {
+	case SystemStatusStatusDegraded:
+		return true
+	case SystemStatusStatusOk:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TenantStatus.
 const (
 	TenantStatusActive   TenantStatus = "active"
@@ -2089,6 +2146,24 @@ func (e TransferOrigin) Valid() bool {
 	case TransferOriginInternalRemote:
 		return true
 	case TransferOriginReply:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TransferSearchResultKind.
+const (
+	TransferSearchResultKindEmail      TransferSearchResultKind = "email"
+	TransferSearchResultKindTransferId TransferSearchResultKind = "transfer_id"
+)
+
+// Valid indicates whether the value is a known member of the TransferSearchResultKind enum.
+func (e TransferSearchResultKind) Valid() bool {
+	switch e {
+	case TransferSearchResultKindEmail:
+		return true
+	case TransferSearchResultKindTransferId:
 		return true
 	default:
 		return false
@@ -3935,8 +4010,16 @@ type GlobalStats struct {
 
 	// Tenants One row per active tenant (tenants being deleted are excluded); counters defined as in `TenantStats`.
 	Tenants []struct {
-		BytesUploaded ByteSize `json:"bytesUploaded"`
-		Name          string   `json:"name"`
+		// BytesDownloaded Since 2.3. Plaintext bytes served to recipients during the period, as `TenantStats.bytesDownloaded`. Optional for compatibility with 2.2; always sent by a 2.3 server.
+		BytesDownloaded *ByteSize `json:"bytesDownloaded,omitempty"`
+		BytesUploaded   ByteSize  `json:"bytesUploaded"`
+
+		// DownloadCount Since 2.3. Download starts during the period, as `TenantStats.downloadCount`. Optional for compatibility with 2.2; always sent by a 2.3 server.
+		DownloadCount *int   `json:"downloadCount,omitempty"`
+		Name          string `json:"name"`
+
+		// Previous Since 2.3. The counters of the period of the same length just before the requested one, as `TenantStats.previous`: for the `7d` and `30d` periods, absent for `12m`.
+		Previous *PeriodTotals `json:"previous,omitempty"`
 
 		// SecretsCreated Since 2.1. One-time secrets created during the period, as `TenantStats.secretsCreated`.
 		SecretsCreated    *int     `json:"secretsCreated,omitempty"`
@@ -3945,6 +4028,9 @@ type GlobalStats struct {
 		StorageUsedRatio  float32  `json:"storageUsedRatio"`
 		TenantId          string   `json:"tenantId"`
 		TransferCount     int      `json:"transferCount"`
+
+		// VirusDetections Since 2.3. Files found infected during the period, as `TenantStats.virusDetections`. Optional for compatibility with 2.2; always sent by a 2.3 server.
+		VirusDetections *int `json:"virusDetections,omitempty"`
 	} `json:"tenants"`
 }
 
@@ -4182,17 +4268,17 @@ type Maintenance struct {
 	// Since Start of the maintenance (process start when forced by the environment); absent when off.
 	Since *time.Time `json:"since,omitempty"`
 
-	// Source `environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off.
+	// Source Who enabled maintenance mode: `environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off. Since 2.3 a component schema, shared by `Maintenance` and `SystemStatus` (same values as before).
 	Source MaintenanceSource `json:"source"`
 }
-
-// MaintenanceSource `environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off.
-type MaintenanceSource string
 
 // MaintenanceMessages Maintenance message per supported language, as plain text of 1 to 500 characters without
 // control characters other than line feed, without Unicode line or paragraph separators and
 // without bidirectional control characters.
 type MaintenanceMessages map[string]string
+
+// MaintenanceSource Who enabled maintenance mode: `environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off. Since 2.3 a component schema, shared by `Maintenance` and `SystemStatus` (same values as before).
+type MaintenanceSource string
 
 // MaintenanceUpdate defines model for MaintenanceUpdate.
 type MaintenanceUpdate = json.RawMessage
@@ -4430,6 +4516,32 @@ type PasswordChange struct {
 // PasswordConfirmation defines model for PasswordConfirmation.
 type PasswordConfirmation struct {
 	CurrentPassword string `json:"currentPassword"`
+}
+
+// PeriodTotals Since 2.3. The counters of `TenantStats` over the period of the same length that ends
+// just before the requested one, for a trend: for `7d`, the 7 UTC days before its first
+// day; for `30d`, the 30 UTC days before. Each counter is defined exactly as the counter of
+// the same name in `TenantStats`. The requested period includes today, still in progress,
+// whereas the previous one is complete. Never given for `12m`: the daily counters are kept
+// 13 months, so a previous 12-month period cannot be computed.
+type PeriodTotals struct {
+	// BytesDownloaded Plaintext bytes served to recipients during the previous period.
+	BytesDownloaded ByteSize `json:"bytesDownloaded"`
+
+	// BytesUploaded Total size of the transfers counted in `transferCount`.
+	BytesUploaded ByteSize `json:"bytesUploaded"`
+
+	// DownloadCount Download starts of a file or of the archive during the previous period.
+	DownloadCount int `json:"downloadCount"`
+
+	// SecretsCreated One-time secrets created during the previous period, express secrets included.
+	SecretsCreated int `json:"secretsCreated"`
+
+	// TransferCount Transfers finalized during the previous period.
+	TransferCount int `json:"transferCount"`
+
+	// VirusDetections Files found infected by the antivirus during the previous period.
+	VirusDetections int `json:"virusDetections"`
 }
 
 // Problem RFC 9457 Problem Details with TransTeira extension members.
@@ -5514,6 +5626,65 @@ type SystemSettings struct {
 // (`invalid-email` otherwise). An unknown member is refused.
 type SystemSettingsUpdate = json.RawMessage
 
+// SystemStatus Since 2.3. Answer of `getSystemStatus`: the state of the instance components for the
+// "System status" box of the administration home. Statuses only: the cause of a failed
+// check is written to the application log, never returned.
+type SystemStatus struct {
+	Antivirus struct {
+		// Engine Since 1.1. Antivirus engine selected by `TT_ANTIVIRUS_ENGINE` (environment only):
+		// `clamd` (default, local or remote clamd), `icap` (RFC 3507 server), `http` (generic HTTP
+		// scanning API), `none` (antivirus disabled for the whole instance: files are delivered
+		// `not_scanned_disabled`).
+		Engine AntivirusEngine `json:"engine"`
+
+		// Status `disabled` with the engine `none` (antivirus disabled for the whole instance), which `/healthz` reports as `ok`; otherwise the antivirus check of `/healthz`: `unavailable` while the engine does not answer its probe or no EICAR self-test has passed since the start.
+		Status SystemStatusAntivirusStatus `json:"status"`
+	} `json:"antivirus"`
+
+	// CheckedAt When the component checks the statuses come from ran; they are shared with `/healthz` and may be up to 3 seconds old.
+	CheckedAt time.Time `json:"checkedAt"`
+	Database  struct {
+		// Engine Database engine selected at installation (`TT_DB_DRIVER`).
+		Engine SystemStatusDatabaseEngine `json:"engine"`
+		Status ComponentHealth            `json:"status"`
+	} `json:"database"`
+	Maintenance struct {
+		// Enabled Maintenance mode is in effect, as `Maintenance.enabled`.
+		Enabled bool `json:"enabled"`
+
+		// Source Who enabled maintenance mode: `environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off. Since 2.3 a component schema, shared by `Maintenance` and `SystemStatus` (same values as before).
+		Source MaintenanceSource `json:"source"`
+	} `json:"maintenance"`
+
+	// Status The application, with the same meaning as `Health.status` of `/healthz`: `degraded` when the database, the antivirus or the storage is `unavailable`. An antivirus `disabled` is not a failure.
+	Status  SystemStatusStatus `json:"status"`
+	Storage struct {
+		Status ComponentHealth `json:"status"`
+	} `json:"storage"`
+	Version struct {
+		// LatestVersion Latest stable release found, as `UpdateCheck.latestVersion`; `null` before the first successful check.
+		LatestVersion *string `json:"latestVersion"`
+
+		// UpdateAvailable `latestVersion` is newer than the running version, as `UpdateCheck.updateAvailable`.
+		UpdateAvailable bool `json:"updateAvailable"`
+
+		// UpdateCheckEnabled The check for a newer release is enabled (`TT_UPDATE_CHECK`), as `UpdateCheck.enabled`.
+		UpdateCheckEnabled bool `json:"updateCheckEnabled"`
+
+		// Version SemVer of the running instance, as `SystemVersion.version`.
+		Version string `json:"version"`
+	} `json:"version"`
+}
+
+// SystemStatusAntivirusStatus `disabled` with the engine `none` (antivirus disabled for the whole instance), which `/healthz` reports as `ok`; otherwise the antivirus check of `/healthz`: `unavailable` while the engine does not answer its probe or no EICAR self-test has passed since the start.
+type SystemStatusAntivirusStatus string
+
+// SystemStatusDatabaseEngine Database engine selected at installation (`TT_DB_DRIVER`).
+type SystemStatusDatabaseEngine string
+
+// SystemStatusStatus The application, with the same meaning as `Health.status` of `/healthz`: `degraded` when the database, the antivirus or the storage is `unavailable`. An antivirus `disabled` is not a failure.
+type SystemStatusStatus string
+
 // SystemVersion Since 1.2. Running version and outcome of the last check for a newer release.
 type SystemVersion struct {
 	// Commit Commit the binary was built from.
@@ -5558,6 +5729,9 @@ type Tenant struct {
 	// MaxTransferCeiling Ceiling of `maxTransferBytes`, set by the super admin: a delegated admin may set `maxTransferBytes` at most to it.
 	MaxTransferCeiling int64  `json:"maxTransferCeiling"`
 	Name               string `json:"name"`
+
+	// PrimaryColor Since 2.3. Read only: the primary colour of the tenant branding (`Branding.primaryColor`, the default colour until it is customised), for a decorative swatch in the administration lists. Changed through `updateBranding` only; already public through `getPublicTenant`.
+	PrimaryColor *HexColor `json:"primaryColor,omitempty"`
 
 	// SetupState Since 1.2. Read only: `setup` until the setup is completed (`completeTenantSetup`), `active` afterwards; tenants created before 1.2 are `active`.
 	SetupState *TenantSetupState `json:"setupState,omitempty"`
@@ -5774,6 +5948,9 @@ type TenantCreated struct {
 	MaxTransferCeiling int64  `json:"maxTransferCeiling"`
 	Name               string `json:"name"`
 
+	// PrimaryColor Since 2.3. Read only: the primary colour of the tenant branding (`Branding.primaryColor`, the default colour until it is customised), for a decorative swatch in the administration lists. Changed through `updateBranding` only; already public through `getPublicTenant`.
+	PrimaryColor *HexColor `json:"primaryColor,omitempty"`
+
 	// SetupState Since 1.2. Read only: `setup` until the setup is completed (`completeTenantSetup`), `active` afterwards; tenants created before 1.2 are `active`.
 	SetupState *TenantSetupState `json:"setupState,omitempty"`
 
@@ -5945,6 +6122,9 @@ type TenantStats struct {
 	DownloadCount int               `json:"downloadCount"`
 	Period        TenantStatsPeriod `json:"period"`
 
+	// Previous Since 2.3. The counters of the period of the same length just before the requested one, for the `7d` and `30d` periods; absent for `12m`.
+	Previous *PeriodTotals `json:"previous,omitempty"`
+
 	// SecretsCreated Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows. Since 2.3 express secrets are included.
 	SecretsCreated *int `json:"secretsCreated,omitempty"`
 
@@ -6099,6 +6279,48 @@ type TransferPassword struct {
 type TransferReplyStart struct {
 	// Language Supported UI language (ISO 639-1). New languages may be added.
 	Language *Language `json:"language,omitempty"`
+}
+
+// TransferSearch Since 2.3. Body of `searchTransfers`. An unknown member is refused (`400 validation-failed`).
+type TransferSearch struct {
+	// Limit Largest number of transfers answered, all tenants together.
+	Limit *int `json:"limit,omitempty"`
+
+	// Q A transfer identifier (`trf_` and a ULID, any case) or a complete mail address (sender or recipient), trimmed of its surrounding Unicode spaces. No prefix nor partial matching. Empty after trimming, longer than 254 characters or in neither form: `400 validation-failed` on `/q` (`invalid-format`, or `invalid-email` for a value holding `@`). An auditor holding `@` gets `403 read-only-role` first.
+	Q string `json:"q"`
+}
+
+// TransferSearchHit Since 2.3. A transfer found by `searchTransfers`, with its tenant.
+type TransferSearchHit struct {
+	TenantId   string        `json:"tenantId"`
+	TenantName string        `json:"tenantName"`
+	Transfer   AdminTransfer `json:"transfer"`
+}
+
+// TransferSearchResult Since 2.3. Answer of `searchTransfers`: the matching transfers within the scope of the admin, newest first, without cursor.
+type TransferSearchResult struct {
+	// Items At most `limit` matches, sorted newest first (`createdAt`, then `id`, both descending), all tenants together. Empty when nothing matches, including an identifier of a tenant outside the scope.
+	Items []TransferSearchHit `json:"items"`
+
+	// Kind How `q` was read: a transfer identifier or a mail address.
+	Kind TransferSearchResultKind `json:"kind"`
+
+	// Tenants Every tenant with at least one match, sorted by name, then identifier.
+	Tenants []TransferSearchTenant `json:"tenants"`
+
+	// Truncated Matches were left out: cut by `limit`, or beyond the `limit` newest matches of a tenant (see `tenants[].more`).
+	Truncated bool `json:"truncated"`
+}
+
+// TransferSearchResultKind How `q` was read: a transfer identifier or a mail address.
+type TransferSearchResultKind string
+
+// TransferSearchTenant Since 2.3. A tenant in which `searchTransfers` found matches.
+type TransferSearchTenant struct {
+	// More Some matches of this tenant are not in `items`: its transfer list filtered by the address (`listTenantTransfers` with `email`) shows them all.
+	More       bool   `json:"more"`
+	TenantId   string `json:"tenantId"`
+	TenantName string `json:"tenantName"`
 }
 
 // TransferStatus `uploading` → `scanning` → `available` → `expired` | `deleted`.
@@ -7079,6 +7301,9 @@ type CreateTenantWebhookJSONRequestBody = WebhookCreate
 // UpdateTenantWebhookApplicationMergePatchPlusJSONRequestBody defines body for UpdateTenantWebhook for application/merge-patch+json ContentType.
 type UpdateTenantWebhookApplicationMergePatchPlusJSONRequestBody = WebhookUpdate
 
+// SearchTransfersJSONRequestBody defines body for SearchTransfers for application/json ContentType.
+type SearchTransfersJSONRequestBody = TransferSearch
+
 // StartDepositSessionJSONRequestBody defines body for StartDepositSession for application/json ContentType.
 type StartDepositSessionJSONRequestBody = DepositSessionStart
 
@@ -7362,6 +7587,9 @@ type ServerInterface interface {
 	// GetGlobalStats Global dashboard (super admin)
 	// (GET /admin/system/stats)
 	GetGlobalStats(w http.ResponseWriter, r *http.Request, params GetGlobalStatsParams)
+	// GetSystemStatus State of the instance components (super admin)
+	// (GET /admin/system/status)
+	GetSystemStatus(w http.ResponseWriter, r *http.Request)
 	// GetSystemVersion Running version and latest release (super admin)
 	// (GET /admin/system/version)
 	GetSystemVersion(w http.ResponseWriter, r *http.Request)
@@ -7623,6 +7851,9 @@ type ServerInterface interface {
 	// TestTenantWebhook Send a test event to a webhook
 	// (POST /admin/tenants/{tenantId}/webhooks/{webhookId}/test)
 	TestTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId, webhookId WebhookId)
+	// SearchTransfers Find transfers across the tenants of the admin
+	// (POST /admin/transfers/search)
+	SearchTransfers(w http.ResponseWriter, r *http.Request)
 	// StartDepositSession Identify a depositor by email address
 	// (POST /deposit-sessions)
 	StartDepositSession(w http.ResponseWriter, r *http.Request, params StartDepositSessionParams)
@@ -8730,6 +8961,20 @@ func (siw *ServerInterfaceWrapper) GetGlobalStats(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetGlobalStats(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSystemStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetSystemStatus(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSystemStatus(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -11764,6 +12009,20 @@ func (siw *ServerInterfaceWrapper) TestTenantWebhook(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// SearchTransfers operation middleware
+func (siw *ServerInterfaceWrapper) SearchTransfers(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchTransfers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // StartDepositSession operation middleware
 func (siw *ServerInterfaceWrapper) StartDepositSession(w http.ResponseWriter, r *http.Request) {
 
@@ -13701,6 +13960,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/webhooks/{webhookId}", wrapper.GetTenantWebhook)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/admin/tenants/{tenantId}/webhooks/{webhookId}", wrapper.UpdateTenantWebhook)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/webhooks/{webhookId}/test", wrapper.TestTenantWebhook)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/transfers/search", wrapper.SearchTransfers)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/transfers", wrapper.ListTenantTransfers)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/tenants/{tenantId}/transfers/{transferId}", wrapper.DeleteTenantTransfer)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/transfers/{transferId}", wrapper.GetTenantTransfer)
@@ -13753,6 +14013,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/background-presets/{presetId}", wrapper.GetBackgroundPreset)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/activation", wrapper.ActivateAdmin)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/stats", wrapper.GetGlobalStats)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/status", wrapper.GetSystemStatus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/version", wrapper.GetSystemVersion)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/system/version/check", wrapper.CheckSystemVersion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/settings", wrapper.GetSystemSettings)
@@ -17420,6 +17681,75 @@ type GetGlobalStats500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetGlobalStats500ApplicationProblemPlusJSONResponse) VisitGetGlobalStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemStatusRequestObject struct {
+}
+
+type GetSystemStatusResponseObject interface {
+	VisitGetSystemStatusResponse(w http.ResponseWriter) error
+}
+
+type GetSystemStatus200JSONResponse SystemStatus
+
+func (response GetSystemStatus200JSONResponse) VisitGetSystemStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemStatus401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetSystemStatus401ApplicationProblemPlusJSONResponse) VisitGetSystemStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemStatus403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response GetSystemStatus403ApplicationProblemPlusJSONResponse) VisitGetSystemStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemStatus500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetSystemStatus500ApplicationProblemPlusJSONResponse) VisitGetSystemStatusResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -25817,6 +26147,116 @@ func (response TestTenantWebhook500ApplicationProblemPlusJSONResponse) VisitTest
 	return err
 }
 
+type SearchTransfersRequestObject struct {
+	Body *SearchTransfersJSONRequestBody
+}
+
+type SearchTransfersResponseObject interface {
+	VisitSearchTransfersResponse(w http.ResponseWriter) error
+}
+
+type SearchTransfers200JSONResponse TransferSearchResult
+
+func (response SearchTransfers200JSONResponse) VisitSearchTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchTransfers400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SearchTransfers400ApplicationProblemPlusJSONResponse) VisitSearchTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchTransfers401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response SearchTransfers401ApplicationProblemPlusJSONResponse) VisitSearchTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchTransfers403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response SearchTransfers403ApplicationProblemPlusJSONResponse) VisitSearchTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchTransfers429ResponseHeaders struct {
+	RetryAfter *int
+}
+
+type SearchTransfers429ApplicationProblemPlusJSONResponse struct {
+	Body    Problem
+	Headers SearchTransfers429ResponseHeaders
+}
+
+func (response SearchTransfers429ApplicationProblemPlusJSONResponse) VisitSearchTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchTransfers500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response SearchTransfers500ApplicationProblemPlusJSONResponse) VisitSearchTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type StartDepositSessionRequestObject struct {
 	Params StartDepositSessionParams
 	Body   *StartDepositSessionJSONRequestBody
@@ -33318,6 +33758,9 @@ type StrictServerInterface interface {
 	// GetGlobalStats Global dashboard (super admin)
 	// (GET /admin/system/stats)
 	GetGlobalStats(ctx context.Context, request GetGlobalStatsRequestObject) (GetGlobalStatsResponseObject, error)
+	// GetSystemStatus State of the instance components (super admin)
+	// (GET /admin/system/status)
+	GetSystemStatus(ctx context.Context, request GetSystemStatusRequestObject) (GetSystemStatusResponseObject, error)
 	// GetSystemVersion Running version and latest release (super admin)
 	// (GET /admin/system/version)
 	GetSystemVersion(ctx context.Context, request GetSystemVersionRequestObject) (GetSystemVersionResponseObject, error)
@@ -33579,6 +34022,9 @@ type StrictServerInterface interface {
 	// TestTenantWebhook Send a test event to a webhook
 	// (POST /admin/tenants/{tenantId}/webhooks/{webhookId}/test)
 	TestTenantWebhook(ctx context.Context, request TestTenantWebhookRequestObject) (TestTenantWebhookResponseObject, error)
+	// SearchTransfers Find transfers across the tenants of the admin
+	// (POST /admin/transfers/search)
+	SearchTransfers(ctx context.Context, request SearchTransfersRequestObject) (SearchTransfersResponseObject, error)
 	// StartDepositSession Identify a depositor by email address
 	// (POST /deposit-sessions)
 	StartDepositSession(ctx context.Context, request StartDepositSessionRequestObject) (StartDepositSessionResponseObject, error)
@@ -34838,6 +35284,30 @@ func (sh *strictHandler) GetGlobalStats(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetGlobalStatsResponseObject); ok {
 		if err := validResponse.VisitGetGlobalStatsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSystemStatus operation middleware
+func (sh *strictHandler) GetSystemStatus(w http.ResponseWriter, r *http.Request) {
+	var request GetSystemStatusRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSystemStatus(ctx, request.(GetSystemStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSystemStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSystemStatusResponseObject); ok {
+		if err := validResponse.VisitGetSystemStatusResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -37372,6 +37842,37 @@ func (sh *strictHandler) TestTenantWebhook(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TestTenantWebhookResponseObject); ok {
 		if err := validResponse.VisitTestTenantWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SearchTransfers operation middleware
+func (sh *strictHandler) SearchTransfers(w http.ResponseWriter, r *http.Request) {
+	var request SearchTransfersRequestObject
+
+	var body SearchTransfersJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SearchTransfers(ctx, request.(SearchTransfersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SearchTransfers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SearchTransfersResponseObject); ok {
+		if err := validResponse.VisitSearchTransfersResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

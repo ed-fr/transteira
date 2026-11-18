@@ -3228,6 +3228,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/transfers/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find transfers across the tenants of the admin
+         * @description Since 2.3. Finds transfers in every tenant within the scope of the admin, for the
+         *     search field of the administration home: the super admin searches every active tenant,
+         *     a delegated admin and an auditor the active tenants they are attached to; a tenant
+         *     being deleted is skipped. Each tenant is read through the same tenant-scoped reads as
+         *     `listTenantTransfers` and `getTenantTransfer`, never by one query across tenants.
+         *
+         *     `q` is trimmed of its surrounding Unicode spaces, then read as one of two forms (no
+         *     prefix nor partial matching):
+         *     - a **transfer identifier** (`trf_` and 26 ULID characters, case-insensitive,
+         *       normalised to `trf_` and the upper-case ULID): `kind` is `transfer_id`, and the
+         *       transfer is answered when it belongs to one of these tenants. An identifier of a
+         *       tenant outside the scope, or an unknown one, answers exactly like no match: `200`
+         *       with empty `items` and `tenants` (no existence oracle);
+         *     - otherwise, a value holding `@` is a **complete mail address**: `kind` is `email`, and
+         *       the transfers whose sender or one of whose recipients is that address are answered
+         *       (exact match, the address normalised like the `email` filter of
+         *       `listTenantTransfers`). An auditor gets `403 read-only-role` before the address is
+         *       even checked, as for the `email` filter of the transfer list.
+         *
+         *     `q` empty after trimming or longer than 254 characters, or in neither form, is
+         *     `400 validation-failed` on `/q` (`invalid-format`; `invalid-email` for a value holding
+         *     `@` that is not a bare address). `limit` (1 to 50, 20 by default) bounds the number of
+         *     transfers answered, all tenants together (`400 validation-failed` on `/limit`, code
+         *     `invalid-format`, outside that range). An unknown member is refused like in every admin
+         *     body (`400 validation-failed`, `invalid-format` on its pointer).
+         *
+         *     Paging without cursor: each tenant contributes at most its `limit` newest matches;
+         *     they are merged, sorted newest first (`createdAt`, then `id`, both descending) and cut
+         *     to `limit`. `truncated` is true when matches were left out, cut by `limit` or beyond
+         *     the `limit` newest matches of a tenant. `tenants` lists every tenant with at least one
+         *     match (sorted by name, then identifier), with `more` true when some of its matches are
+         *     not in `items`: its transfer list filtered by the address (`listTenantTransfers` with
+         *     `email`) shows them all. A tenant that is missing or no longer active when it is read
+         *     (deleted, or being deleted since the list of tenants was read) is skipped like a tenant
+         *     without a match; for an identifier, that not-found answer is also the normal no-match
+         *     answer of a tenant. Any other failure in a tenant fails the whole search (`500`), never
+         *     a partial answer.
+         *
+         *     A read-only operation despite the `POST`, which keeps the searched address out of
+         *     every URL, proxy access log and browser history (like `searchDataSubject` and
+         *     `lookupTenantSecret`); its answers are never cached (`Cache-Control: no-store`, like
+         *     every admin answer). At most 30 searches per rolling minute per administrator
+         *     (`429 rate-limited` with `Retry-After`, not written to the security log: the caller is
+         *     an authenticated administrator). Not audited, like the `email` filter of the transfer
+         *     list.
+         */
+        post: operations["searchTransfers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants/{tenantId}/transfers": {
         parameters: {
             query?: never;
@@ -3595,6 +3659,10 @@ export interface paths {
          *     that hold no personal data (see `TenantStats` for the definition of each counter); the
          *     storage figures are the current values. Days are UTC days. Readable by any admin attached
          *     to the tenant.
+         *
+         *     Since 2.3, for the `7d` and `30d` periods, `previous` gives the same counters over the
+         *     period of the same length just before the requested one (see `PeriodTotals`), for a
+         *     trend; it is absent for `12m`.
          */
         get: operations["getTenantStats"];
         put?: never;
@@ -4602,8 +4670,45 @@ export interface paths {
         /**
          * Global dashboard (super admin)
          * @description Returns the disk usage of the filesystem holding the data directory and the statistics of every active tenant (one row per tenant, tenants being deleted excluded), computed like `getTenantStats`. Reserved to the super admin: `403 forbidden` for any other admin.
+         *
+         *     Since 2.3, each row also carries `virusDetections`, `downloadCount` and `bytesDownloaded`, and, for the `7d` and `30d` periods, `previous`: the same counters over the period of the same length just before (see `PeriodTotals`), so that the administration home can sum the rows into its indicator tiles and show a trend. `previous` is absent for `12m`.
          */
         get: operations["getGlobalStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/system/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * State of the instance components (super admin)
+         * @description Since 2.3. Serves the "System status" box of the administration home: the state of the
+         *     application, the database, the antivirus and the storage, the maintenance mode and the
+         *     running version. The component states come from the same checks as `/healthz`, whose
+         *     outcome is shared (run at most once every 3 seconds, concurrent callers waiting for the
+         *     same run): this operation never adds a probe of its own. It adds what `/healthz`
+         *     deliberately hides from anonymous callers, the database and antivirus engines, and
+         *     tells an antivirus disabled for the whole instance (`TT_ANTIVIRUS_ENGINE=none`) from a
+         *     working one. The version part is the last outcome of the update check of
+         *     `getSystemVersion` (it never starts a check).
+         *
+         *     Always `200` once the caller is allowed, whatever the state of the components: the
+         *     client reads the statuses. The cause of a failed check is written to the application
+         *     log, never returned. This operation serves the administration interface only:
+         *     monitoring tools keep using `/healthz` and `/status`. Reserved to the super admin:
+         *     `403 forbidden` for a delegated admin, `403 read-only-role` for an auditor (like every
+         *     instance operation).
+         */
+        get: operations["getSystemStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5856,6 +5961,8 @@ export interface components {
             linkOnlyAllowed?: boolean;
             /** @description Since 2.0. End-to-end encryption policy of the tenant (`forbidden` by default). Changed by the super admin only: end-to-end encrypted files are never scanned by the antivirus. */
             e2ePolicy?: components["schemas"]["E2ePolicy"];
+            /** @description Since 2.3. Read only: the primary colour of the tenant branding (`Branding.primaryColor`, the default colour until it is customised), for a decorative swatch in the administration lists. Changed through `updateBranding` only; already public through `getPublicTenant`. */
+            readonly primaryColor?: components["schemas"]["HexColor"];
         };
         TenantList: {
             items: components["schemas"]["Tenant"][];
@@ -6235,6 +6342,46 @@ export interface components {
             items: components["schemas"]["AdminTransfer"][];
             nextCursor?: components["schemas"]["PageCursor"];
         };
+        /** @description Since 2.3. Body of `searchTransfers`. An unknown member is refused (`400 validation-failed`). */
+        TransferSearch: {
+            /**
+             * @description A transfer identifier (`trf_` and a ULID, any case) or a complete mail address (sender or recipient), trimmed of its surrounding Unicode spaces. No prefix nor partial matching. Empty after trimming, longer than 254 characters or in neither form: `400 validation-failed` on `/q` (`invalid-format`, or `invalid-email` for a value holding `@`). An auditor holding `@` gets `403 read-only-role` first.
+             * @example carol@customer.example.net
+             */
+            q: string;
+            /**
+             * @description Largest number of transfers answered, all tenants together.
+             * @default 20
+             */
+            limit?: number;
+        };
+        /** @description Since 2.3. Answer of `searchTransfers`: the matching transfers within the scope of the admin, newest first, without cursor. */
+        TransferSearchResult: {
+            /**
+             * @description How `q` was read: a transfer identifier or a mail address.
+             * @enum {string}
+             */
+            kind: "transfer_id" | "email";
+            /** @description At most `limit` matches, sorted newest first (`createdAt`, then `id`, both descending), all tenants together. Empty when nothing matches, including an identifier of a tenant outside the scope. */
+            items: components["schemas"]["TransferSearchHit"][];
+            /** @description Matches were left out: cut by `limit`, or beyond the `limit` newest matches of a tenant (see `tenants[].more`). */
+            truncated: boolean;
+            /** @description Every tenant with at least one match, sorted by name, then identifier. */
+            tenants: components["schemas"]["TransferSearchTenant"][];
+        };
+        /** @description Since 2.3. A transfer found by `searchTransfers`, with its tenant. */
+        TransferSearchHit: {
+            tenantId: string;
+            tenantName: string;
+            transfer: components["schemas"]["AdminTransfer"];
+        };
+        /** @description Since 2.3. A tenant in which `searchTransfers` found matches. */
+        TransferSearchTenant: {
+            tenantId: string;
+            tenantName: string;
+            /** @description Some matches of this tenant are not in `items`: its transfer list filtered by the address (`listTenantTransfers` with `email`) shows them all. */
+            more: boolean;
+        };
         AdminReason: {
             /** @description Free text recorded in the audit log after its e-mail addresses are replaced by `[address]`, then cut to 500 characters (the replacement may lengthen it). */
             reason?: string;
@@ -6456,6 +6603,8 @@ export interface components {
             storageUsedRatio: number;
             /** @description Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows. Since 2.3 express secrets are included. */
             secretsCreated?: number;
+            /** @description Since 2.3. The counters of the period of the same length just before the requested one, for the `7d` and `30d` periods; absent for `12m`. */
+            previous?: components["schemas"]["PeriodTotals"];
             /**
              * @description Breakdown of `transferCount` and `bytesUploaded` over the period, oldest first, with a
              *     zero-filled point for every period without activity: one point per UTC day for `7d`
@@ -6530,12 +6679,42 @@ export interface components {
                 name: string;
                 transferCount: number;
                 bytesUploaded: components["schemas"]["ByteSize"];
+                /** @description Since 2.3. Download starts during the period, as `TenantStats.downloadCount`. Optional for compatibility with 2.2; always sent by a 2.3 server. */
+                downloadCount?: number;
+                /** @description Since 2.3. Plaintext bytes served to recipients during the period, as `TenantStats.bytesDownloaded`. Optional for compatibility with 2.2; always sent by a 2.3 server. */
+                bytesDownloaded?: components["schemas"]["ByteSize"];
+                /** @description Since 2.3. Files found infected during the period, as `TenantStats.virusDetections`. Optional for compatibility with 2.2; always sent by a 2.3 server. */
+                virusDetections?: number;
                 /** @description Since 2.1. One-time secrets created during the period, as `TenantStats.secretsCreated`. */
                 secretsCreated?: number;
                 storageUsedBytes: components["schemas"]["ByteSize"];
                 storageQuotaBytes: components["schemas"]["ByteSize"];
                 storageUsedRatio: number;
+                /** @description Since 2.3. The counters of the period of the same length just before the requested one, as `TenantStats.previous`: for the `7d` and `30d` periods, absent for `12m`. */
+                previous?: components["schemas"]["PeriodTotals"];
             }[];
+        };
+        /**
+         * @description Since 2.3. The counters of `TenantStats` over the period of the same length that ends
+         *     just before the requested one, for a trend: for `7d`, the 7 UTC days before its first
+         *     day; for `30d`, the 30 UTC days before. Each counter is defined exactly as the counter of
+         *     the same name in `TenantStats`. The requested period includes today, still in progress,
+         *     whereas the previous one is complete. Never given for `12m`: the daily counters are kept
+         *     13 months, so a previous 12-month period cannot be computed.
+         */
+        PeriodTotals: {
+            /** @description Transfers finalized during the previous period. */
+            transferCount: number;
+            /** @description Total size of the transfers counted in `transferCount`. */
+            bytesUploaded: components["schemas"]["ByteSize"];
+            /** @description Download starts of a file or of the archive during the previous period. */
+            downloadCount: number;
+            /** @description Plaintext bytes served to recipients during the previous period. */
+            bytesDownloaded: components["schemas"]["ByteSize"];
+            /** @description Files found infected by the antivirus during the previous period. */
+            virusDetections: number;
+            /** @description One-time secrets created during the previous period, express secrets included. */
+            secretsCreated: number;
         };
         SystemSettings: {
             /**
@@ -6566,11 +6745,7 @@ export interface components {
         Maintenance: {
             /** @description Maintenance mode is in effect. */
             enabled: boolean;
-            /**
-             * @description `environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off.
-             * @enum {string}
-             */
-            source: "none" | "environment" | "admin";
+            source: components["schemas"]["MaintenanceSource"];
             /** @description Choice stored by the super admin, shown even while the environment forces the mode. */
             adminEnabled: boolean;
             /**
@@ -6580,6 +6755,11 @@ export interface components {
             since?: string;
             message?: components["schemas"]["MaintenanceMessages"];
         };
+        /**
+         * @description Who enabled maintenance mode: `environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off. Since 2.3 a component schema, shared by `Maintenance` and `SystemStatus` (same values as before).
+         * @enum {string}
+         */
+        MaintenanceSource: "none" | "environment" | "admin";
         /**
          * @description Maintenance message per supported language, as plain text of 1 to 500 characters without
          *     control characters other than line feed, without Unicode line or paragraph separators and
@@ -6694,6 +6874,57 @@ export interface components {
              * @enum {string}
              */
             lastError: "none" | "network" | "http" | "parse";
+        };
+        /**
+         * @description Since 2.3. Answer of `getSystemStatus`: the state of the instance components for the
+         *     "System status" box of the administration home. Statuses only: the cause of a failed
+         *     check is written to the application log, never returned.
+         */
+        SystemStatus: {
+            /**
+             * @description The application, with the same meaning as `Health.status` of `/healthz`: `degraded` when the database, the antivirus or the storage is `unavailable`. An antivirus `disabled` is not a failure.
+             * @enum {string}
+             */
+            status: "ok" | "degraded";
+            /**
+             * Format: date-time
+             * @description When the component checks the statuses come from ran; they are shared with `/healthz` and may be up to 3 seconds old.
+             */
+            checkedAt: string;
+            database: {
+                /**
+                 * @description Database engine selected at installation (`TT_DB_DRIVER`).
+                 * @enum {string}
+                 */
+                engine: "sqlite" | "postgres";
+                status: components["schemas"]["ComponentHealth"];
+            };
+            antivirus: {
+                engine: components["schemas"]["AntivirusEngine"];
+                /**
+                 * @description `disabled` with the engine `none` (antivirus disabled for the whole instance), which `/healthz` reports as `ok`; otherwise the antivirus check of `/healthz`: `unavailable` while the engine does not answer its probe or no EICAR self-test has passed since the start.
+                 * @enum {string}
+                 */
+                status: "ok" | "unavailable" | "disabled";
+            };
+            storage: {
+                status: components["schemas"]["ComponentHealth"];
+            };
+            maintenance: {
+                /** @description Maintenance mode is in effect, as `Maintenance.enabled`. */
+                enabled: boolean;
+                source: components["schemas"]["MaintenanceSource"];
+            };
+            version: {
+                /** @description SemVer of the running instance, as `SystemVersion.version`. */
+                version: string;
+                /** @description The check for a newer release is enabled (`TT_UPDATE_CHECK`), as `UpdateCheck.enabled`. */
+                updateCheckEnabled: boolean;
+                /** @description Latest stable release found, as `UpdateCheck.latestVersion`; `null` before the first successful check. */
+                latestVersion: string | null;
+                /** @description `latestVersion` is newer than the running version, as `UpdateCheck.updateAvailable`. */
+                updateAvailable: boolean;
+            };
         };
         /** @description Since 1.2. A provisioning token (never its secret). */
         ProvisioningToken: {
@@ -12768,7 +12999,8 @@ export interface operations {
                      *           "storageQuotaBytes": 1099511627776,
                      *           "storageUsedBytes": 274877906944,
                      *           "createdAt": "2026-09-01T08:00:00Z",
-                     *           "updatedAt": "2026-10-01T08:00:00Z"
+                     *           "updatedAt": "2026-10-01T08:00:00Z",
+                     *           "primaryColor": "#1F4E79"
                      *         }
                      *       ]
                      *     }
@@ -12845,7 +13077,8 @@ export interface operations {
                      *       "storageQuotaBytes": 1099511627776,
                      *       "storageUsedBytes": 274877906944,
                      *       "createdAt": "2026-09-01T08:00:00Z",
-                     *       "updatedAt": "2026-10-01T08:00:00Z"
+                     *       "updatedAt": "2026-10-01T08:00:00Z",
+                     *       "primaryColor": "#1F4E79"
                      *     }
                      */
                     "application/json": components["schemas"]["Tenant"];
@@ -14914,6 +15147,53 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    searchTransfers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferSearch"];
+            };
+        };
+        responses: {
+            /** @description Matching transfers within the scope of the admin (metadata only), newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransferSearchResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            /** @description `rate-limited`: more than 30 searches in the rolling last minute by this administrator; `Retry-After` (and `retryAfterSeconds`) gives the delay. Not written to the security log: the caller is an authenticated administrator. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#rate-limited",
+                     *       "title": "Too many requests",
+                     *       "status": 429,
+                     *       "code": "rate-limited",
+                     *       "retryAfterSeconds": 20
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
     listTenantTransfers: {
         parameters: {
             query?: {
@@ -15756,6 +16036,14 @@ export interface operations {
                      *       "storageQuotaBytes": 1099511627776,
                      *       "storageUsedRatio": 0.25,
                      *       "secretsCreated": 14,
+                     *       "previous": {
+                     *         "transferCount": 54,
+                     *         "bytesUploaded": 193273528320,
+                     *         "downloadCount": 171,
+                     *         "bytesDownloaded": 468151435264,
+                     *         "virusDetections": 0,
+                     *         "secretsCreated": 11
+                     *       },
                      *       "series": [
                      *         {
                      *           "date": "2026-10-13",
@@ -17736,10 +18024,42 @@ export interface operations {
                      *           "name": "Entity A",
                      *           "transferCount": 412,
                      *           "bytesUploaded": 1932735283200,
+                     *           "downloadCount": 1187,
+                     *           "bytesDownloaded": 4123168604160,
+                     *           "virusDetections": 2,
                      *           "secretsCreated": 58,
                      *           "storageUsedBytes": 274877906944,
                      *           "storageQuotaBytes": 1099511627776,
-                     *           "storageUsedRatio": 0.25
+                     *           "storageUsedRatio": 0.25,
+                     *           "previous": {
+                     *             "transferCount": 389,
+                     *             "bytesUploaded": 1717986918400,
+                     *             "downloadCount": 1040,
+                     *             "bytesDownloaded": 3848290697216,
+                     *             "virusDetections": 0,
+                     *             "secretsCreated": 47
+                     *           }
+                     *         },
+                     *         {
+                     *           "tenantId": "ten_01JAB00000000000000ENT1TYB",
+                     *           "name": "Entity B",
+                     *           "transferCount": 97,
+                     *           "bytesUploaded": 322122547200,
+                     *           "downloadCount": 230,
+                     *           "bytesDownloaded": 601295421440,
+                     *           "virusDetections": 0,
+                     *           "secretsCreated": 12,
+                     *           "storageUsedBytes": 107374182400,
+                     *           "storageQuotaBytes": 549755813888,
+                     *           "storageUsedRatio": 0.1953125,
+                     *           "previous": {
+                     *             "transferCount": 104,
+                     *             "bytesUploaded": 354334801920,
+                     *             "downloadCount": 251,
+                     *             "bytesDownloaded": 644245094400,
+                     *             "virusDetections": 1,
+                     *             "secretsCreated": 9
+                     *           }
                      *         }
                      *       ]
                      *     }
@@ -17748,6 +18068,29 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getSystemStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description State of the components, the maintenance mode and the version. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemStatus"];
+                };
+            };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
@@ -18984,17 +19327,21 @@ export const dnsRecordCheckStatusValues: ReadonlyArray<FlattenedDeepRequired<com
 export const mailDnsCheckDkimStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["MailDnsCheck"]["dkim"]["status"]> = ["ok", "warning", "missing", "error"];
 export const emailTemplateKeyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["EmailTemplateKey"]> = ["verification-code", "transfer-notification", "transfer-confirmation", "first-download", "file-problems", "file-not-scanned", "invitation", "quota-warning", "quota-reached", "antivirus-unavailable", "expiry-reminder", "abuse-alert", "abuse-report", "my-transfers-link", "recipient-verification-code", "secret-notification", "secret-receipt"];
 export const transferOriginValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferOrigin"]> = ["internal", "external", "api", "internal_remote", "reply", "drop_link"];
+export const transferSearchResultKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferSearchResult"]["kind"]> = ["transfer_id", "email"];
 export const blocklistKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BlocklistKind"]> = ["email", "domain", "sha256"];
 export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.instance_disabled", "antivirus.scans_released", "antivirus.self_test", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in", "admin.invited", "tenant.setup_completed", "tenant.provisioned", "tenant.provision_refused", "provisioning_token.created", "provisioning_token.revoked", "admin.identity_linked", "admin.identity_unlinked", "tenant.sso_updated", "tenant.sso_deleted", "tenant.exported", "tenant.imported", "drop_link.created", "drop_link.updated", "drop_link.rotated", "drop_link.revoked", "transfer.proof_downloaded", "proof_key.created", "proof_key.retired", "transfer.link_reissued", "secret.created", "secret.sent", "secret.revealed", "secret.file_downloaded", "secret.expired", "secret.deleted", "secret.locked", "secret.settings_updated", "secret.looked_up", "secret.express_purged"];
 export const auditEventActorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditEvent"]["actor"]["kind"]> = ["depositor", "recipient", "admin", "api_token", "system", "provisioning_token", "anonymous"];
 export const tenantStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantStats"]["period"]> = ["7d", "30d", "12m"];
 export const globalStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["GlobalStats"]["period"]> = ["7d", "30d", "12m"];
-export const maintenanceSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Maintenance"]["source"]> = ["none", "environment", "admin"];
+export const maintenanceSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["MaintenanceSource"]> = ["none", "environment", "admin"];
 export const keyRotationStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["KeyRotation"]["status"]> = ["running", "completed", "failed"];
 export const antivirusEngineValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AntivirusEngine"]> = ["clamd", "icap", "http", "none"];
 export const antivirusSelfTestOutcomeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AntivirusSelfTest"]["outcome"]> = ["detected", "not_detected", "unavailable", "error"];
 export const antivirusSelfTestTriggerValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AntivirusSelfTest"]["trigger"]> = ["startup", "admin"];
 export const updateCheckLastErrorValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["UpdateCheck"]["lastError"]> = ["none", "network", "http", "parse"];
+export const systemStatusStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SystemStatus"]["status"]> = ["ok", "degraded"];
+export const systemStatusDatabaseEngineValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SystemStatus"]["database"]["engine"]> = ["sqlite", "postgres"];
+export const systemStatusAntivirusStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SystemStatus"]["antivirus"]["status"]> = ["ok", "unavailable", "disabled"];
 export const instanceStatusStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstanceStatus"]["status"]> = ["ok", "degraded"];
 export const tenantFeaturesAntivirusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantFeatures"]["antivirus"]> = ["enabled", "disabled"];
 export const ssoTestResultStageValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SsoTestResult"]["stage"]> = ["settings", "connect", "tls", "discovery", "issuer", "endpoints", "done", "unknown"];

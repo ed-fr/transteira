@@ -89,6 +89,10 @@ var auditorExpect = map[string]auditorClass{
 	// read despite its POST); the purge of the express secrets is a write.
 	"lookupTenantSecret":  tenantRead,
 	"purgeExpressSecrets": refused,
+	// Since 2.3 the search across the tenants of the admin (a read despite
+	// its POST). Refused until the server implements it (step 3b opens it:
+	// identifier answered, address refused).
+	"searchTransfers": refused,
 
 	// Accounts (super admin only).
 	"createAdmin":           refused,
@@ -112,6 +116,7 @@ var auditorExpect = map[string]auditorClass{
 	"getMasterKeyRotation":     refused,
 	"getMasterKeyStatus":       refused,
 	"getSystemSettings":        refused,
+	"getSystemStatus":          refused,
 	"getSystemVersion":         refused,
 	"getSystemWebhook":         refused,
 	"importTenant":             refused,

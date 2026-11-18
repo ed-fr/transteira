@@ -374,6 +374,19 @@ info:
       `secret.created` with `details.express: true` and `details.creatorKind` `anonymous` or
       `api_token`, new audit actor kind `anonymous`, new actions `secret.looked_up` and
       `secret.express_purged`; never any content, key, proof, verifier nor token.
+    - **Administration (redesign)** (specification section 13.2): `searchTransfers` (`POST
+      /admin/transfers/search`) finds transfers by identifier or by complete mail address across
+      every tenant within the scope of the admin (an auditor by identifier only, `403
+      read-only-role` for an address), at most 50 per call without cursor, 30 searches per
+      minute per administrator, not audited; an identifier outside the scope answers like no
+      match. `getSystemStatus` (`GET /admin/system/status`, super admin) gives the component
+      states of `/healthz` with the database and antivirus engines, the maintenance mode and
+      the version, for the "System status" box of the home page. `TenantStats.previous` and
+      `GlobalStats.tenants[].previous` (`PeriodTotals`) give the counters of the previous
+      period of the same length (`7d` and `30d` only) for trends; the rows of
+      `GlobalStats.tenants` gain `virusDetections`, `downloadCount` and `bytesDownloaded`.
+      `Tenant.primaryColor` (read only) gives the primary colour of the branding, already
+      public, for a swatch. **Compatibility:** only paths and optional members are added.
 
   license:
     name: AGPL-3.0-only
@@ -412,7 +425,7 @@ tags:
   - name: Admin tenants
     description: Tenant creation (super admin) and configuration (super admin and delegated admins).
   - name: Admin operations
-    description: Transfers, invitations, blocklist, API tokens, abuse reports, audit, statistics and GDPR requests of a tenant.
+    description: Transfers, invitations, blocklist, API tokens, abuse reports, audit, statistics and GDPR requests of a tenant; since 2.3, the transfer search across the tenants of the admin.
   - name: Admin system
     description: Instance-wide operations reserved to the super admin.
   - name: Secrets
@@ -4855,6 +4868,7 @@ paths:
                     storageUsedBytes: 274877906944
                     createdAt: '2026-09-01T08:00:00Z'
                     updatedAt: '2026-10-01T08:00:00Z'
+                    primaryColor: '#1F4E79'
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -5007,6 +5021,7 @@ paths:
                 storageUsedBytes: 274877906944
                 createdAt: '2026-09-01T08:00:00Z'
                 updatedAt: '2026-10-01T08:00:00Z'
+                primaryColor: '#1F4E79'
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -6426,6 +6441,186 @@ paths:
   # ---------------------------------------------------------------------------
   # Admin - operations of a tenant
   # ---------------------------------------------------------------------------
+  /admin/transfers/search:
+    post:
+      tags: [Admin operations]
+      operationId: searchTransfers
+      summary: Find transfers across the tenants of the admin
+      description: |
+        Since 2.3. Finds transfers in every tenant within the scope of the admin, for the
+        search field of the administration home: the super admin searches every active tenant,
+        a delegated admin and an auditor the active tenants they are attached to; a tenant
+        being deleted is skipped. Each tenant is read through the same tenant-scoped reads as
+        `listTenantTransfers` and `getTenantTransfer`, never by one query across tenants.
+
+        `q` is trimmed of its surrounding Unicode spaces, then read as one of two forms (no
+        prefix nor partial matching):
+        - a **transfer identifier** (`trf_` and 26 ULID characters, case-insensitive,
+          normalised to `trf_` and the upper-case ULID): `kind` is `transfer_id`, and the
+          transfer is answered when it belongs to one of these tenants. An identifier of a
+          tenant outside the scope, or an unknown one, answers exactly like no match: `200`
+          with empty `items` and `tenants` (no existence oracle);
+        - otherwise, a value holding `@` is a **complete mail address**: `kind` is `email`, and
+          the transfers whose sender or one of whose recipients is that address are answered
+          (exact match, the address normalised like the `email` filter of
+          `listTenantTransfers`). An auditor gets `403 read-only-role` before the address is
+          even checked, as for the `email` filter of the transfer list.
+
+        `q` empty after trimming or longer than 254 characters, or in neither form, is
+        `400 validation-failed` on `/q` (`invalid-format`; `invalid-email` for a value holding
+        `@` that is not a bare address). `limit` (1 to 50, 20 by default) bounds the number of
+        transfers answered, all tenants together (`400 validation-failed` on `/limit`, code
+        `invalid-format`, outside that range). An unknown member is refused like in every admin
+        body (`400 validation-failed`, `invalid-format` on its pointer).
+
+        Paging without cursor: each tenant contributes at most its `limit` newest matches;
+        they are merged, sorted newest first (`createdAt`, then `id`, both descending) and cut
+        to `limit`. `truncated` is true when matches were left out, cut by `limit` or beyond
+        the `limit` newest matches of a tenant. `tenants` lists every tenant with at least one
+        match (sorted by name, then identifier), with `more` true when some of its matches are
+        not in `items`: its transfer list filtered by the address (`listTenantTransfers` with
+        `email`) shows them all. A tenant that is missing or no longer active when it is read
+        (deleted, or being deleted since the list of tenants was read) is skipped like a tenant
+        without a match; for an identifier, that not-found answer is also the normal no-match
+        answer of a tenant. Any other failure in a tenant fails the whole search (`500`), never
+        a partial answer.
+
+        A read-only operation despite the `POST`, which keeps the searched address out of
+        every URL, proxy access log and browser history (like `searchDataSubject` and
+        `lookupTenantSecret`); its answers are never cached (`Cache-Control: no-store`, like
+        every admin answer). At most 30 searches per rolling minute per administrator
+        (`429 rate-limited` with `Retry-After`, not written to the security log: the caller is
+        an authenticated administrator). Not audited, like the `email` filter of the transfer
+        list.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferSearch' }
+            examples:
+              byAddress:
+                summary: Transfers of a mail address, at most 3
+                value: { q: carol@customer.example.net, limit: 3 }
+              byIdentifier:
+                summary: A transfer identifier, any case
+                value: { q: trf_01jcq3v8k2m4n6p8r0s2t4w6y8 }
+      responses:
+        '200':
+          description: Matching transfers within the scope of the admin (metadata only), newest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferSearchResult' }
+              examples:
+                byAddress:
+                  summary: An address found in two tenants, cut to 3 transfers
+                  value:
+                    kind: email
+                    items:
+                      - tenantId: ten_01JAB00000000000000ENT1TYB
+                        tenantName: Entity B
+                        transfer:
+                          id: trf_01JCQ3V8K2M4N6P8R0S2T4W6Y8
+                          status: available
+                          origin: internal
+                          senderEmail: bob@entity-b.example.com
+                          recipients: [carol@customer.example.net]
+                          fileCount: 3
+                          totalBytes: 734003200
+                          passwordProtected: false
+                          deleteAfterFirstDownload: false
+                          createdAt: '2026-11-17T10:12:00Z'
+                          expiresAt: '2026-11-24T10:15:00Z'
+                          firstDownloadedAt: null
+                          downloadCount: 0
+                      - tenantId: ten_01JAB00000000000000ENT1TYA
+                        tenantName: Entity A
+                        transfer:
+                          id: trf_01JCH7B5D9F1G3H5J7K9M1N3P5
+                          status: available
+                          origin: internal
+                          senderEmail: alice@entity-a.example.com
+                          recipients: [carol@customer.example.net, dave@customer.example.net]
+                          fileCount: 1
+                          totalBytes: 15728640
+                          passwordProtected: true
+                          deleteAfterFirstDownload: false
+                          createdAt: '2026-11-12T08:30:00Z'
+                          expiresAt: '2026-12-12T08:31:00Z'
+                          firstDownloadedAt: '2026-11-12T09:02:00Z'
+                          downloadCount: 2
+                      - tenantId: ten_01JAB00000000000000ENT1TYA
+                        tenantName: Entity A
+                        transfer:
+                          id: trf_01JBZ2X4V6T8R0Q2P4N6M8K0J2
+                          status: expired
+                          origin: reply
+                          senderEmail: carol@customer.example.net
+                          recipients: [alice@entity-a.example.com]
+                          fileCount: 2
+                          totalBytes: 52428800
+                          passwordProtected: false
+                          deleteAfterFirstDownload: false
+                          createdAt: '2026-11-03T14:00:00Z'
+                          expiresAt: '2026-11-10T14:01:00Z'
+                          firstDownloadedAt: '2026-11-03T15:20:00Z'
+                          downloadCount: 1
+                          replyToTransferId: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                    truncated: true
+                    tenants:
+                      - { tenantId: ten_01JAB00000000000000ENT1TYA, tenantName: Entity A, more: false }
+                      - { tenantId: ten_01JAB00000000000000ENT1TYB, tenantName: Entity B, more: true }
+                byIdentifier:
+                  summary: A transfer identifier of a tenant within the scope
+                  value:
+                    kind: transfer_id
+                    items:
+                      - tenantId: ten_01JAB00000000000000ENT1TYB
+                        tenantName: Entity B
+                        transfer:
+                          id: trf_01JCQ3V8K2M4N6P8R0S2T4W6Y8
+                          status: available
+                          origin: internal
+                          senderEmail: bob@entity-b.example.com
+                          recipients: [carol@customer.example.net]
+                          fileCount: 3
+                          totalBytes: 734003200
+                          passwordProtected: false
+                          deleteAfterFirstDownload: false
+                          createdAt: '2026-11-17T10:12:00Z'
+                          expiresAt: '2026-11-24T10:15:00Z'
+                          firstDownloadedAt: null
+                          downloadCount: 0
+                    truncated: false
+                    tenants:
+                      - { tenantId: ten_01JAB00000000000000ENT1TYB, tenantName: Entity B, more: false }
+                noMatch:
+                  summary: No match, or an identifier outside the scope (same answer)
+                  value:
+                    kind: transfer_id
+                    items: []
+                    truncated: false
+                    tenants: []
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429':
+          description: "`rate-limited`: more than 30 searches in the rolling last minute by this administrator; `Retry-After` (and `retryAfterSeconds`) gives the delay. Not written to the security log: the caller is an authenticated administrator."
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#rate-limited
+                title: Too many requests
+                status: 429
+                code: rate-limited
+                retryAfterSeconds: 20
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /admin/tenants/{tenantId}/transfers:
     parameters:
       - $ref: '#/components/parameters/TenantId'
@@ -7009,6 +7204,10 @@ paths:
         that hold no personal data (see `TenantStats` for the definition of each counter); the
         storage figures are the current values. Days are UTC days. Readable by any admin attached
         to the tenant.
+
+        Since 2.3, for the `7d` and `30d` periods, `previous` gives the same counters over the
+        period of the same length just before the requested one (see `PeriodTotals`), for a
+        trend; it is absent for `12m`.
       security:
         - adminSession: []
       parameters:
@@ -7034,6 +7233,13 @@ paths:
                 storageQuotaBytes: 1099511627776
                 storageUsedRatio: 0.25
                 secretsCreated: 14
+                previous:
+                  transferCount: 54
+                  bytesUploaded: 193273528320
+                  downloadCount: 171
+                  bytesDownloaded: 468151435264
+                  virusDetections: 0
+                  secretsCreated: 11
                 series:
                   - { date: '2026-10-13', transfers: 12, bytesUploaded: 42949672960 }
                   - { date: '2026-10-14', transfers: 15, bytesUploaded: 53687091200 }
@@ -8680,7 +8886,10 @@ paths:
       tags: [Admin system]
       operationId: getGlobalStats
       summary: Global dashboard (super admin)
-      description: "Returns the disk usage of the filesystem holding the data directory and the statistics of every active tenant (one row per tenant, tenants being deleted excluded), computed like `getTenantStats`. Reserved to the super admin: `403 forbidden` for any other admin."
+      description: |
+        Returns the disk usage of the filesystem holding the data directory and the statistics of every active tenant (one row per tenant, tenants being deleted excluded), computed like `getTenantStats`. Reserved to the super admin: `403 forbidden` for any other admin.
+
+        Since 2.3, each row also carries `virusDetections`, `downloadCount` and `bytesDownloaded`, and, for the `7d` and `30d` periods, `previous`: the same counters over the period of the same length just before (see `PeriodTotals`), so that the administration home can sum the rows into its indicator tiles and show a trend. `previous` is absent for `12m`.
       security:
         - adminSession: []
       parameters:
@@ -8703,11 +8912,104 @@ paths:
                     name: Entity A
                     transferCount: 412
                     bytesUploaded: 1932735283200
+                    downloadCount: 1187
+                    bytesDownloaded: 4123168604160
+                    virusDetections: 2
                     secretsCreated: 58
                     storageUsedBytes: 274877906944
                     storageQuotaBytes: 1099511627776
                     storageUsedRatio: 0.25
+                    previous:
+                      transferCount: 389
+                      bytesUploaded: 1717986918400
+                      downloadCount: 1040
+                      bytesDownloaded: 3848290697216
+                      virusDetections: 0
+                      secretsCreated: 47
+                  - tenantId: ten_01JAB00000000000000ENT1TYB
+                    name: Entity B
+                    transferCount: 97
+                    bytesUploaded: 322122547200
+                    downloadCount: 230
+                    bytesDownloaded: 601295421440
+                    virusDetections: 0
+                    secretsCreated: 12
+                    storageUsedBytes: 107374182400
+                    storageQuotaBytes: 549755813888
+                    storageUsedRatio: 0.1953125
+                    previous:
+                      transferCount: 104
+                      bytesUploaded: 354334801920
+                      downloadCount: 251
+                      bytesDownloaded: 644245094400
+                      virusDetections: 1
+                      secretsCreated: 9
         '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/system/status:
+    get:
+      tags: [Admin system]
+      operationId: getSystemStatus
+      summary: State of the instance components (super admin)
+      description: |
+        Since 2.3. Serves the "System status" box of the administration home: the state of the
+        application, the database, the antivirus and the storage, the maintenance mode and the
+        running version. The component states come from the same checks as `/healthz`, whose
+        outcome is shared (run at most once every 3 seconds, concurrent callers waiting for the
+        same run): this operation never adds a probe of its own. It adds what `/healthz`
+        deliberately hides from anonymous callers, the database and antivirus engines, and
+        tells an antivirus disabled for the whole instance (`TT_ANTIVIRUS_ENGINE=none`) from a
+        working one. The version part is the last outcome of the update check of
+        `getSystemVersion` (it never starts a check).
+
+        Always `200` once the caller is allowed, whatever the state of the components: the
+        client reads the statuses. The cause of a failed check is written to the application
+        log, never returned. This operation serves the administration interface only:
+        monitoring tools keep using `/healthz` and `/status`. Reserved to the super admin:
+        `403 forbidden` for a delegated admin, `403 read-only-role` for an auditor (like every
+        instance operation).
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: State of the components, the maintenance mode and the version.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SystemStatus' }
+              examples:
+                healthy:
+                  summary: Every component available
+                  value:
+                    status: ok
+                    checkedAt: '2026-11-18T09:00:02Z'
+                    database: { engine: sqlite, status: ok }
+                    antivirus: { engine: clamd, status: ok }
+                    storage: { status: ok }
+                    maintenance: { enabled: false, source: none }
+                    version: { version: 2.3.0, updateCheckEnabled: true, latestVersion: 2.3.0, updateAvailable: false }
+                antivirusUnavailable:
+                  summary: Antivirus engine not answering, maintenance enabled by the super admin
+                  value:
+                    status: degraded
+                    checkedAt: '2026-11-18T09:05:41Z'
+                    database: { engine: postgres, status: ok }
+                    antivirus: { engine: icap, status: unavailable }
+                    storage: { status: ok }
+                    maintenance: { enabled: true, source: admin }
+                    version: { version: 2.3.0, updateCheckEnabled: true, latestVersion: 2.3.1, updateAvailable: true }
+                antivirusDisabled:
+                  summary: Antivirus disabled for the instance, update check off
+                  value:
+                    status: ok
+                    checkedAt: '2026-11-18T09:10:00Z'
+                    database: { engine: sqlite, status: ok }
+                    antivirus: { engine: none, status: disabled }
+                    storage: { status: ok }
+                    maintenance: { enabled: false, source: none }
+                    version: { version: 2.3.0, updateCheckEnabled: false, latestVersion: null, updateAvailable: false }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -11674,6 +11976,10 @@ components:
           description: "Since 1.2. Read only: `setup` until the setup is completed (`completeTenantSetup`), `active` afterwards; tenants created before 1.2 are `active`."
         linkOnlyAllowed: { type: boolean, default: false, description: "Since 2.0. Senders may create link-only transfers (`linkOnly`); a confidentiality level may forbid them. Changed by the super admin only." }
         e2ePolicy: { allOf: [{ $ref: '#/components/schemas/E2ePolicy' }], description: "Since 2.0. End-to-end encryption policy of the tenant (`forbidden` by default). Changed by the super admin only: end-to-end encrypted files are never scanned by the antivirus." }
+        primaryColor:
+          allOf: [{ $ref: '#/components/schemas/HexColor' }]
+          readOnly: true
+          description: "Since 2.3. Read only: the primary colour of the tenant branding (`Branding.primaryColor`, the default colour until it is customised), for a decorative swatch in the administration lists. Changed through `updateBranding` only; already public through `getPublicTenant`."
     TenantList:
       type: object
       required: [items]
@@ -12113,6 +12419,64 @@ components:
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/AdminTransfer' } }
         nextCursor: { $ref: '#/components/schemas/PageCursor' }
+    TransferSearch:
+      type: object
+      description: "Since 2.3. Body of `searchTransfers`. An unknown member is refused (`400 validation-failed`)."
+      required: [q]
+      properties:
+        q:
+          type: string
+          minLength: 1
+          maxLength: 254
+          description: "A transfer identifier (`trf_` and a ULID, any case) or a complete mail address (sender or recipient), trimmed of its surrounding Unicode spaces. No prefix nor partial matching. Empty after trimming, longer than 254 characters or in neither form: `400 validation-failed` on `/q` (`invalid-format`, or `invalid-email` for a value holding `@`). An auditor holding `@` gets `403 read-only-role` first."
+          example: carol@customer.example.net
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+          description: "Largest number of transfers answered, all tenants together."
+      additionalProperties: false
+    TransferSearchResult:
+      type: object
+      description: "Since 2.3. Answer of `searchTransfers`: the matching transfers within the scope of the admin, newest first, without cursor."
+      required: [kind, items, truncated, tenants]
+      properties:
+        kind:
+          type: string
+          x-extensible-enum: true
+          enum: [transfer_id, email]
+          description: "How `q` was read: a transfer identifier or a mail address."
+        items:
+          type: array
+          maxItems: 50
+          description: "At most `limit` matches, sorted newest first (`createdAt`, then `id`, both descending), all tenants together. Empty when nothing matches, including an identifier of a tenant outside the scope."
+          items: { $ref: '#/components/schemas/TransferSearchHit' }
+        truncated:
+          type: boolean
+          description: "Matches were left out: cut by `limit`, or beyond the `limit` newest matches of a tenant (see `tenants[].more`)."
+        tenants:
+          type: array
+          description: "Every tenant with at least one match, sorted by name, then identifier."
+          items: { $ref: '#/components/schemas/TransferSearchTenant' }
+    TransferSearchHit:
+      type: object
+      description: "Since 2.3. A transfer found by `searchTransfers`, with its tenant."
+      required: [tenantId, tenantName, transfer]
+      properties:
+        tenantId: { type: string }
+        tenantName: { type: string }
+        transfer: { $ref: '#/components/schemas/AdminTransfer' }
+    TransferSearchTenant:
+      type: object
+      description: "Since 2.3. A tenant in which `searchTransfers` found matches."
+      required: [tenantId, tenantName, more]
+      properties:
+        tenantId: { type: string }
+        tenantName: { type: string }
+        more:
+          type: boolean
+          description: "Some matches of this tenant are not in `items`: its transfer list filtered by the address (`listTenantTransfers` with `email`) shows them all."
     AdminReason:
       type: object
       properties:
@@ -12481,6 +12845,9 @@ components:
           description: "Storage quota of the tenant."
         storageUsedRatio: { type: number, minimum: 0, description: "`storageUsedBytes` / `storageQuotaBytes` (may exceed 1)." }
         secretsCreated: { type: integer, minimum: 0, description: "Since 2.1. One-time secrets created during the period (count only, never content), whatever became of them afterwards (read, expired, deleted). Counted in the daily statistics, so it survives the purge of the secret rows. Since 2.3 express secrets are included." }
+        previous:
+          allOf: [{ $ref: '#/components/schemas/PeriodTotals' }]
+          description: "Since 2.3. The counters of the period of the same length just before the requested one, for the `7d` and `30d` periods; absent for `12m`."
         series:
           type: array
           description: |
@@ -12566,10 +12933,39 @@ components:
               name: { type: string }
               transferCount: { type: integer }
               bytesUploaded: { $ref: '#/components/schemas/ByteSize' }
+              downloadCount: { type: integer, minimum: 0, description: "Since 2.3. Download starts during the period, as `TenantStats.downloadCount`. Optional for compatibility with 2.2; always sent by a 2.3 server." }
+              bytesDownloaded:
+                allOf: [{ $ref: '#/components/schemas/ByteSize' }]
+                description: "Since 2.3. Plaintext bytes served to recipients during the period, as `TenantStats.bytesDownloaded`. Optional for compatibility with 2.2; always sent by a 2.3 server."
+              virusDetections: { type: integer, minimum: 0, description: "Since 2.3. Files found infected during the period, as `TenantStats.virusDetections`. Optional for compatibility with 2.2; always sent by a 2.3 server." }
               secretsCreated: { type: integer, minimum: 0, description: "Since 2.1. One-time secrets created during the period, as `TenantStats.secretsCreated`." }
               storageUsedBytes: { $ref: '#/components/schemas/ByteSize' }
               storageQuotaBytes: { $ref: '#/components/schemas/ByteSize' }
               storageUsedRatio: { type: number }
+              previous:
+                allOf: [{ $ref: '#/components/schemas/PeriodTotals' }]
+                description: "Since 2.3. The counters of the period of the same length just before the requested one, as `TenantStats.previous`: for the `7d` and `30d` periods, absent for `12m`."
+    PeriodTotals:
+      type: object
+      description: |
+        Since 2.3. The counters of `TenantStats` over the period of the same length that ends
+        just before the requested one, for a trend: for `7d`, the 7 UTC days before its first
+        day; for `30d`, the 30 UTC days before. Each counter is defined exactly as the counter of
+        the same name in `TenantStats`. The requested period includes today, still in progress,
+        whereas the previous one is complete. Never given for `12m`: the daily counters are kept
+        13 months, so a previous 12-month period cannot be computed.
+      required: [transferCount, bytesUploaded, downloadCount, bytesDownloaded, virusDetections, secretsCreated]
+      properties:
+        transferCount: { type: integer, minimum: 0, description: "Transfers finalized during the previous period." }
+        bytesUploaded:
+          allOf: [{ $ref: '#/components/schemas/ByteSize' }]
+          description: "Total size of the transfers counted in `transferCount`."
+        downloadCount: { type: integer, minimum: 0, description: "Download starts of a file or of the archive during the previous period." }
+        bytesDownloaded:
+          allOf: [{ $ref: '#/components/schemas/ByteSize' }]
+          description: "Plaintext bytes served to recipients during the previous period."
+        virusDetections: { type: integer, minimum: 0, description: "Files found infected by the antivirus during the previous period." }
+        secretsCreated: { type: integer, minimum: 0, description: "One-time secrets created during the previous period, express secrets included." }
     SystemSettings:
       type: object
       required: [diskAlertThreshold, alertEmail]
@@ -12613,10 +13009,7 @@ components:
       required: [enabled, source, adminEnabled]
       properties:
         enabled: { type: boolean, description: Maintenance mode is in effect. }
-        source:
-          type: string
-          enum: [none, environment, admin]
-          description: "`environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off."
+        source: { $ref: '#/components/schemas/MaintenanceSource' }
         adminEnabled:
           type: boolean
           description: "Choice stored by the super admin, shown even while the environment forces the mode."
@@ -12625,6 +13018,10 @@ components:
           format: date-time
           description: "Start of the maintenance (process start when forced by the environment); absent when off."
         message: { $ref: '#/components/schemas/MaintenanceMessages' }
+    MaintenanceSource:
+      type: string
+      description: "Who enabled maintenance mode: `environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off. Since 2.3 a component schema, shared by `Maintenance` and `SystemStatus` (same values as before)."
+      enum: [none, environment, admin]
     MaintenanceMessages:
       type: object
       description: |
@@ -12753,6 +13150,64 @@ components:
           x-extensible-enum: true
           description: "Outcome of the last attempt: `none` (success), `network` (GitHub unreachable, timeout, TLS), `http` (unexpected status), `parse` (unreadable answer or version)."
           enum: [none, network, http, parse]
+    SystemStatus:
+      type: object
+      description: |
+        Since 2.3. Answer of `getSystemStatus`: the state of the instance components for the
+        "System status" box of the administration home. Statuses only: the cause of a failed
+        check is written to the application log, never returned.
+      required: [status, checkedAt, database, antivirus, storage, maintenance, version]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+          description: "The application, with the same meaning as `Health.status` of `/healthz`: `degraded` when the database, the antivirus or the storage is `unavailable`. An antivirus `disabled` is not a failure."
+        checkedAt:
+          type: string
+          format: date-time
+          description: "When the component checks the statuses come from ran; they are shared with `/healthz` and may be up to 3 seconds old."
+        database:
+          type: object
+          required: [engine, status]
+          properties:
+            engine:
+              type: string
+              x-extensible-enum: true
+              enum: [sqlite, postgres]
+              description: "Database engine selected at installation (`TT_DB_DRIVER`)."
+            status: { $ref: '#/components/schemas/ComponentHealth' }
+        antivirus:
+          type: object
+          required: [engine, status]
+          properties:
+            engine: { $ref: '#/components/schemas/AntivirusEngine' }
+            status:
+              type: string
+              x-extensible-enum: true
+              enum: [ok, unavailable, disabled]
+              # Explicit Go constant names: a bare "disabled" would collide with
+              # TenantFeatures.antivirus and rename its generated constants.
+              x-enum-varnames: [SystemStatusAntivirusStatusOk, SystemStatusAntivirusStatusUnavailable, SystemStatusAntivirusStatusDisabled]
+              description: "`disabled` with the engine `none` (antivirus disabled for the whole instance), which `/healthz` reports as `ok`; otherwise the antivirus check of `/healthz`: `unavailable` while the engine does not answer its probe or no EICAR self-test has passed since the start."
+        storage:
+          type: object
+          required: [status]
+          properties:
+            status: { $ref: '#/components/schemas/ComponentHealth' }
+        maintenance:
+          type: object
+          required: [enabled, source]
+          properties:
+            enabled: { type: boolean, description: "Maintenance mode is in effect, as `Maintenance.enabled`." }
+            source: { $ref: '#/components/schemas/MaintenanceSource' }
+        version:
+          type: object
+          required: [version, updateCheckEnabled, latestVersion, updateAvailable]
+          properties:
+            version: { type: string, description: "SemVer of the running instance, as `SystemVersion.version`." }
+            updateCheckEnabled: { type: boolean, description: "The check for a newer release is enabled (`TT_UPDATE_CHECK`), as `UpdateCheck.enabled`." }
+            latestVersion: { type: [string, 'null'], description: "Latest stable release found, as `UpdateCheck.latestVersion`; `null` before the first successful check." }
+            updateAvailable: { type: boolean, description: "`latestVersion` is newer than the running version, as `UpdateCheck.updateAvailable`." }
     ProvisioningToken:
       type: object
       description: Since 1.2. A provisioning token (never its secret).

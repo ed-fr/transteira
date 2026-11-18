@@ -90,7 +90,13 @@ use to ban the client IP.
   `/emailDomains/<n>`. Since 2.1, `PUT /admin/tenants/{tenantId}/secret-settings` refuses a missing
   member among `enabled`, `durations`, `fileAllowed`, `fileMaxBytes` and `emailAllowed` with
   `required` on its pointer, and a `null` one with `not-nullable` (a missing boolean would
-  otherwise silently become `false`).
+  otherwise silently become `false`). Since 2.3, the transfer search of the administration
+  (`POST /admin/transfers/search`) refuses a `q` that is empty once trimmed of its surrounding
+  spaces, longer than 254 characters, or neither a transfer identifier (`trf_` and a ULID) nor
+  a value holding `@` (`/q`, `invalid-format`; no prefix nor partial matching), a `q` holding
+  `@` that is not a bare mail address (`/q`, `invalid-email`), a `limit` outside 1 to 50
+  (`/limit`, `invalid-format`) and an unknown member (`invalid-format` naming it). An auditor
+  sending a `q` holding `@` gets `403 read-only-role` before the address is checked.
 - **Typical endpoints:** any endpoint accepting a body or query parameters.
 - **What to do:** fix the listed fields and send the request again. Do not retry unchanged.
 
@@ -141,7 +147,8 @@ use to ban the client IP.
   or transfer ceiling of its entity, or setting its transfer limit above the ceiling set by the
   super admin, also gets `forbidden`, and nothing is changed. The global statistics and the
   instance-wide audit log are reserved to the super admin as well; a delegated admin reads the
-  statistics and the audit log of its own entities instead.
+  statistics and the audit log of its own entities instead. Since 2.3, so is the state of the
+  instance components shown on the administration home (`GET /admin/system/status`).
 - **Typical endpoints:** `/admin/system/*`, `/admin/admins`, `POST /admin/tenants`,
   `PATCH /admin/tenants/{tenantId}`, `DELETE /admin/tenants/{tenantId}`, `DELETE /admin/me/totp`.
 - **What to do:** do not retry; ask a super admin if the access is legitimately needed.
@@ -442,7 +449,7 @@ use to ban the client IP.
   20 at once, then one every 3 seconds), the SMTP tests of an entity (5 per administrator
   and entity within 10 minutes), and the notification resends of a transfer (5 per hour per
   transfer, whoever the administrator), and abuse reports (3 per day per recipient link,
-  5 per hour per client IP). Since 2.1, the secret links: 30 status or reveal requests per minute per client, and 10 failures (unknown token, wrong key proof) within 15 minutes lock that client for 15 minutes (scopes `secret_link_ip` and `secret_link`), and the number of simultaneous secret file streams is capped. Since 2.3, the express secrets: more than `expressPerHourPerIp` anonymous creations (10 by default) from one client (an IPv4 address or an IPv6 /64) on an entity in the sliding last hour (scope `express_ip`), or more than `expressPerHourPerToken` creations (100 by default) with one API token (scope `express_token`); the abuse reports on express secrets (3 per secret per day, 5 per client IP per hour shared with the transfer reports, scopes `abuse_report_link` and `abuse_report_ip`).
+  5 per hour per client IP). Since 2.1, the secret links: 30 status or reveal requests per minute per client, and 10 failures (unknown token, wrong key proof) within 15 minutes lock that client for 15 minutes (scopes `secret_link_ip` and `secret_link`), and the number of simultaneous secret file streams is capped. Since 2.3, the express secrets: more than `expressPerHourPerIp` anonymous creations (10 by default) from one client (an IPv4 address or an IPv6 /64) on an entity in the sliding last hour (scope `express_ip`), or more than `expressPerHourPerToken` creations (100 by default) with one API token (scope `express_token`); the abuse reports on express secrets (3 per secret per day, 5 per client IP per hour shared with the transfer reports, scopes `abuse_report_link` and `abuse_report_ip`). Also since 2.3, the transfer search of the administration: 30 searches per rolling minute per administrator (`POST /admin/transfers/search`); this refusal is **not** written to the security log, since the caller is an authenticated administrator whose IP must not be banned.
 - **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`, `POST /invitations`,
   `POST /transfers`, `GET /downloads/{linkToken}/files/{fileId}`,
   `GET /downloads/{linkToken}/archive`, `POST /admin/auth/login`, `POST /admin/auth/totp`,
@@ -450,8 +457,8 @@ use to ban the client IP.
   `PUT /admin/me/password`, `POST /admin/tenants/{tenantId}/smtp/test`,
   `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`,
   `POST /admin/system/master-key/rotations`, `GET /secret-links/{secretToken}`,
-  `POST /secret-links/{secretToken}/reveal` and, since 2.3, `POST /express-secrets` and
-  `POST /secret-links/{secretToken}/abuse-reports`.
+  `POST /secret-links/{secretToken}/reveal` and, since 2.3, `POST /express-secrets`,
+  `POST /secret-links/{secretToken}/abuse-reports` and `POST /admin/transfers/search`.
 - **What to do:** wait for `Retry-After` (`retryAfterSeconds`) seconds before retrying. Scripts
   must not retry in a tight loop.
 
@@ -672,7 +679,7 @@ use to ban the client IP.
 
 - **HTTP status:** 403 Forbidden
 - **Since:** 2.0.
-- **Meaning:** an admin with the read-only `auditor` role called an operation outside its read-only list: any write (`POST`, `PUT`, `PATCH`, `DELETE`), a configuration read of one of its tenants (SMTP, API tokens, webhooks, blocklist, network rules, templates, legal texts, data subjects, abuse reports, invitations, export…), or an instance or account operation. Reads of a tenant the auditor is not attached to stay `404 not-found`. Since 2.1 this includes the `sender` filter of the secret list (`listTenantSecrets`) and the one-time secrets settings (`GET` and `PUT /admin/tenants/{tenantId}/secret-settings`). An auditor may not search by e-mail address either: the `email` filter of the transfer list and an `actor` filter holding `@` on the audit log are refused.
+- **Meaning:** an admin with the read-only `auditor` role called an operation outside its read-only list: any write (`POST`, `PUT`, `PATCH`, `DELETE`), a configuration read of one of its tenants (SMTP, API tokens, webhooks, blocklist, network rules, templates, legal texts, data subjects, abuse reports, invitations, export…), or an instance or account operation. Reads of a tenant the auditor is not attached to stay `404 not-found`. Since 2.1 this includes the `sender` filter of the secret list (`listTenantSecrets`) and the one-time secrets settings (`GET` and `PUT /admin/tenants/{tenantId}/secret-settings`). An auditor may not search by e-mail address either: the `email` filter of the transfer list and an `actor` filter holding `@` on the audit log are refused, and since 2.3 so is the transfer search across the entities (`POST /admin/transfers/search`) with a `q` holding `@`, before the address is checked (a search by transfer identifier is allowed).
 - **Typical endpoints:** every write operation of `/admin/tenants/{tenantId}/...`, the configuration reads of a tenant, `/admin/admins` and `/admin/system/...`.
 - **What to do:** use an account with a delegated admin or super admin role.
 

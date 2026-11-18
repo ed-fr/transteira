@@ -13,6 +13,10 @@ routing, and they still answer in maintenance mode. Their contract is in `api/op
 (`getMetrics`, `getStatus`, schema `InstanceStatus`). They are configured by environment
 variables only; the administration has no screen for them.
 
+Since 2.3, the "System status" box of the administration home reads `getSystemStatus`
+(`GET /api/v1/admin/system/status`, super admin session): it serves the administration interface
+only, so monitoring tools keep using `/healthz` and `/status`.
+
 ## Configuration
 
 | Variable | Meaning |
