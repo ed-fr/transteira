@@ -11,6 +11,8 @@
   import { HelpIcon } from '../../../shared/components';
   import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
+  import ActionLink from '../../components/ActionLink.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import SecretOnceModal from '../../components/SecretOnceModal.svelte';
   import type { SubmitOutcome, SummaryError } from '../../components/form';
@@ -98,11 +100,14 @@
   });
 </script>
 
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminOps.dropLinks.createTitle')}</h1>
-  <HelpIcon topic="tenant-drop-links" title={t('adminOps.dropLinks.createTitle')} {nav} />
-</div>
-<p>{t('adminOps.dropLinks.intro')}</p>
+<PageHeader title={t('adminOps.dropLinks.createTitle')} description={t('adminOps.dropLinks.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-drop-links" title={t('adminOps.dropLinks.createTitle')} {nav} />
+  {/snippet}
+  {#snippet actions()}
+    <ActionLink to={listPath} {nav} variant="secondary">{t('opsDropLinks.form.back')}</ActionLink>
+  {/snippet}
+</PageHeader>
 
 <FormSection
   title={t('opsDropLinks.form.title')}
@@ -117,8 +122,6 @@
 >
   <DropLinkFormFields bind:form {ids} {errors} levels={options} />
 </FormSection>
-
-<p class="tt-mt-6"><a href={nav.href(listPath)} use:nav.link>{t('opsDropLinks.form.back')}</a></p>
 
 {#if secret !== ''}
   <SecretOnceModal

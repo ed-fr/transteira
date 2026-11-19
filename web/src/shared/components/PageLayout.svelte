@@ -42,6 +42,12 @@
     banner?: Snippet;
     /** Footer, rendered as is (use Footer.svelte, which renders the contentinfo landmark). */
     footer?: Snippet;
+    /**
+     * Renders the shared announcer regions (default true). false when the application mounts its
+     * own Announcer once for every frame (the administration shell, AdminShell.svelte), so that the
+     * regions stay in place when the frame changes.
+     */
+    announcer?: boolean;
     /** Page content, inside the card. */
     children: Snippet;
   }
@@ -58,6 +64,7 @@
     header,
     banner,
     footer,
+    announcer = true,
     children,
   }: Props = $props();
 
@@ -109,7 +116,7 @@
   </main>
   {#if footer}{@render footer()}{/if}
 </div>
-<Announcer />
+{#if announcer}<Announcer />{/if}
 
 <style>
   .tt-page__main {

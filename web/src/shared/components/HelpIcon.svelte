@@ -1,7 +1,8 @@
 <script lang="ts">
   // Contextual help icon placed next to the heading of a complex screen (CLAUDE.md section 4.2):
   // a "?" link to /help/<topic> (under the base path of the router), whose accessible name is
-  // "Help: <screen title>". Put the h1 and the icon in an element with the tt-title-row class.
+  // "Help: <screen title>". In the administration, pass it in the help snippet of PageHeader, which
+  // places it next to the h1.
   import { t } from '../i18n/i18n.svelte';
   import type { Router } from '../router/router.svelte';
   import { helpHref } from './helpers';

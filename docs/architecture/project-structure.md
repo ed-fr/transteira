@@ -199,13 +199,13 @@ transteira/
 │   │   │   │                        # session (connexion, TOTP, activation, déconnexion), états des formulaires
 │   │   │   ├── forms/               # Logique pure des formulaires : merge patch, SMTP, tailles, CIDR, domaines,
 │   │   │   │                        # DKIM, variables de modèle, TOTP, fragment d'activation, contraste
-│   │   │   ├── components/          # Mise en page, navigation de l'entité, tableau, confirmation, champs, TOTP,
+│   │   │   ├── components/          # Coque, navigation latérale, tableau, confirmation, champs, TOTP,
 │   │   │   │                        # codes de secours, lien d'activation, habillage, images, éditeur et aperçu des
 │   │   │   │                        # modèles (TemplatePreview, seconde exception {@html}), liste déroulante
 │   │   │   │                        # (SelectField), barre de filtres (FilterBar), chiffre clé (StatCard), jauge de
 │   │   │   │                        # quota (QuotaMeter, seuil d'avertissement réglable warningRatio), graphique en
 │   │   │   │                        # barres SVG (BarChart, géométrie par attributs), secret affiché une fois
-│   │   │   │                        # (SecretOnceModal), navigation système (SystemNav), affichage de l'audit
+│   │   │   │                        # (SecretOnceModal), coque (AdminShell) et barre latérale (Sidebar, SidebarTenantBlock, SidebarSystemBlock), en-tête de page (PageHeader), carte (Card), ActionLink, jauge (Gauge), pastille de couleur d'entité (TenantSwatch), formulaire de recherche (TransferSearchForm) ; styles/admin.css ; écran de recherche screens/Search.svelte, affichage de l'audit
 │   │   │   │                        # (AuditEventsTable, AuditActorCell, AuditActionCell, AuditObjectCell,
 │   │   │   │                        # AuditDetails) ; logique en .ts testée
 │   │   │   └── screens/             # Accueil (tableau de bord : home.ts), compte, aide, page introuvable

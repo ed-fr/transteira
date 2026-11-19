@@ -1,0 +1,47 @@
+{
+  "form": {
+    "landmark": "Transfer search",
+    "label": "Search",
+    "placeholder": "Search an address, a transfer…",
+    "placeholderAuditor": "Transfer ID (trf_…)",
+    "submit": "Search",
+    "searching": "Searching…",
+    "hint": "A transfer identifier (trf_…), or the complete address of a sender or of a recipient. The search covers every entity you manage.",
+    "hintAuditor": "A transfer identifier (trf_…). The search covers every entity you can consult; auditors cannot search by address."
+  },
+  "errors": {
+    "empty": "Enter an address or a transfer identifier.",
+    "emptyAuditor": "Enter a transfer identifier.",
+    "auditorAddress": "Auditors cannot search by address. Enter a transfer identifier (trf_…).",
+    "invalidFormat": "Enter a complete address, or a transfer identifier: trf_ followed by 26 letters and digits.",
+    "invalidFormatAuditor": "Enter a transfer identifier: trf_ followed by 26 letters and digits.",
+    "rateLimited": "Too many searches in a short time. Try again in {wait}.",
+    "rateLimitedNow": "Too many searches in a short time. You can try again now."
+  },
+  "results": {
+    "title": "Results",
+    "caption": "Transfers found",
+    "count": {
+      "one": "{count} transfer found.",
+      "other": "{count} transfers found."
+    },
+    "none": "No transfer found.",
+    "emptyEmail": "No transfer of your entities was sent from or to this address.",
+    "emptyId": "No transfer of your entities has this identifier.",
+    "truncated": "Only the most recent transfers are shown.",
+    "moreIntro": "To see every transfer of this address, open the transfer list of the entity:",
+    "more": "All transfers of this address in {entity}",
+    "recipients": {
+      "one": "{count} recipient",
+      "other": "{count} recipients"
+    },
+    "columns": {
+      "transfer": "Transfer",
+      "entity": "Entity",
+      "sender": "Sender",
+      "recipients": "Recipients",
+      "created": "Created",
+      "status": "Status"
+    }
+  }
+}

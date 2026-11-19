@@ -1,0 +1,47 @@
+{
+  "form": {
+    "landmark": "Recherche de transferts",
+    "label": "Rechercher",
+    "placeholder": "Rechercher une adresse, un transfert…",
+    "placeholderAuditor": "Identifiant de transfert (trf_…)",
+    "submit": "Rechercher",
+    "searching": "Recherche en cours…",
+    "hint": "Un identifiant de transfert (trf_…), ou l’adresse complète d’un expéditeur ou d’un destinataire. La recherche porte sur toutes les entités que vous gérez.",
+    "hintAuditor": "Un identifiant de transfert (trf_…). La recherche porte sur toutes les entités que vous pouvez consulter ; les auditeurs ne peuvent pas rechercher par adresse."
+  },
+  "errors": {
+    "empty": "Saisissez une adresse ou un identifiant de transfert.",
+    "emptyAuditor": "Saisissez un identifiant de transfert.",
+    "auditorAddress": "Les auditeurs ne peuvent pas rechercher par adresse. Saisissez un identifiant de transfert (trf_…).",
+    "invalidFormat": "Saisissez une adresse complète, ou un identifiant de transfert : trf_ suivi de 26 lettres et chiffres.",
+    "invalidFormatAuditor": "Saisissez un identifiant de transfert : trf_ suivi de 26 lettres et chiffres.",
+    "rateLimited": "Trop de recherches en peu de temps. Réessayez dans {wait}.",
+    "rateLimitedNow": "Trop de recherches en peu de temps. Vous pouvez réessayer maintenant."
+  },
+  "results": {
+    "title": "Résultats",
+    "caption": "Transferts trouvés",
+    "count": {
+      "one": "{count} transfert trouvé.",
+      "other": "{count} transferts trouvés."
+    },
+    "none": "Aucun transfert trouvé.",
+    "emptyEmail": "Aucun transfert de vos entités n’a été envoyé depuis ou vers cette adresse.",
+    "emptyId": "Aucun transfert de vos entités ne porte cet identifiant.",
+    "truncated": "Seuls les transferts les plus récents sont affichés.",
+    "moreIntro": "Pour voir tous les transferts de cette adresse, ouvrez la liste des transferts de l’entité :",
+    "more": "Tous les transferts de cette adresse dans {entity}",
+    "recipients": {
+      "one": "{count} destinataire",
+      "other": "{count} destinataires"
+    },
+    "columns": {
+      "transfer": "Transfert",
+      "entity": "Entité",
+      "sender": "Expéditeur",
+      "recipients": "Destinataires",
+      "created": "Création",
+      "status": "Statut"
+    }
+  }
+}

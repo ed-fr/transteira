@@ -6,14 +6,15 @@
   //   contrast in the light theme is a warning, never a blocking error: the colours can still be
   //   saved. A dark pair (*-on-dark) below AA only gives an informational note: the dark theme
   //   then keeps its accessible default link and focus colours.
-  // - The tenant sub-navigation (TenantNav) is rendered by App.svelte above this screen.
+  // - The tenant navigation is the tenant block of the sidebar (AdminShell), not this screen.
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Spinner } from '../../../shared/components';
+  import { Alert, HelpIcon, Spinner } from '../../../shared/components';
   import { i18n, formatNumber, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import BackgroundPresets from '../../components/BackgroundPresets.svelte';
   import BrandPreview from '../../components/BrandPreview.svelte';
   import ColorField from '../../components/ColorField.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import ImageUpload from '../../components/ImageUpload.svelte';
   import { colorChanged, colorError, rowsForPairs, serverFailures } from '../../components/branding';
@@ -146,8 +147,11 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('adminTenants.branding.title')}</h1>
-<p class="tt-branding__intro">{t('adminTenants.branding.intro')}</p>
+<PageHeader title={t('adminTenants.branding.title')} description={t('adminTenants.branding.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-branding" title={t('adminTenants.branding.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if status === 'loading'}
   <p><Spinner label={t('admin.common.loading')} showLabel /></p>
@@ -238,11 +242,6 @@
 {/if}
 
 <style>
-  .tt-branding__intro {
-    margin: 0 0 var(--tt-space-6);
-    color: var(--tt-muted);
-  }
-
   .tt-branding__contrast {
     margin-bottom: var(--tt-space-6);
   }

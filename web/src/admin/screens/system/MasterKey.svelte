@@ -18,7 +18,7 @@
   // - Screen readers hear the start, the 25/50/75/100 % milestones and the end, never every read.
   // - The typed code lives only in this component: cleared at each submit, when the dialog
   //   closes and when the screen goes away; never in the URL, storage, announcements or logs.
-  // The system sub-navigation is rendered by App.svelte.
+  // The system navigation is in the sidebar.
   import { onDestroy, onMount, tick } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import {
@@ -36,6 +36,8 @@
   import { adminApi } from '../../api';
   import { createFormState } from '../../auth/formState.svelte';
   import { renderMessage, type Message } from '../../auth/views';
+  import Card from '../../components/Card.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { createActivityTracker, documentActivity } from '../../activity';
   import { documentVisibility } from '../../maintenance.svelte';
@@ -352,11 +354,11 @@
   });
 </script>
 
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminSystem.masterKey.title')}</h1>
-  <HelpIcon topic="system-master-key" title={t('adminSystem.masterKey.title')} {nav} />
-</div>
-<p>{t('adminSystem.masterKey.intro')}</p>
+<PageHeader title={t('adminSystem.masterKey.title')} description={t('adminSystem.masterKey.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="system-master-key" title={t('adminSystem.masterKey.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if pageMessage !== undefined}
   <Alert severity="warning" ondismiss={() => (pageMessage = undefined)}>
@@ -382,8 +384,7 @@
       </Alert>
     {/if}
 
-    <section aria-labelledby="{uid}-keys">
-      <h2 id="{uid}-keys">{t('sysMasterKey.keys.title')}</h2>
+    <Card title={t('sysMasterKey.keys.title')} headingId="{uid}-keys">
       <dl class="tt-dl">
         <dt>{t('sysMasterKey.keys.active')}</dt>
         <dd><code>{status.activeKeyId}</code></dd>
@@ -400,11 +401,10 @@
         <p><StatusBadge variant="warning" label={t('sysMasterKey.keys.restartRequired')} /></p>
       {/if}
       <p class="tt-text-muted tt-text-sm">{t('sysMasterKey.keys.check')}</p>
-    </section>
+    </Card>
 
     {#if kind === 'noNewKey'}
-      <section aria-labelledby="{uid}-prepare">
-        <h2 id="{uid}-prepare">{t('sysMasterKey.prepare.title')}</h2>
+      <Card title={t('sysMasterKey.prepare.title')} headingId="{uid}-prepare">
         <p>{t('sysMasterKey.prepare.intro')}</p>
         <ol>
           <li>{t('sysMasterKey.prepare.step1')}</li>
@@ -412,12 +412,11 @@
           <li>{t('sysMasterKey.prepare.step3')}</li>
         </ol>
         <p>{t('sysMasterKey.prepare.doc')} <code>{MASTER_KEY_DOC}</code></p>
-      </section>
+      </Card>
     {/if}
 
     {#if kind === 'restartRequired'}
-      <section aria-labelledby="{uid}-done">
-        <h2 id="{uid}-done">{t('sysMasterKey.done.title')}</h2>
+      <Card title={t('sysMasterKey.done.title')} headingId="{uid}-done">
         <Alert severity="success" live={false}>
           <p>{t('sysMasterKey.done.intro')}</p>
         </Alert>
@@ -429,12 +428,12 @@
         <p>{t('sysMasterKey.done.effect')}</p>
         <p>{t('sysMasterKey.done.noStart')}</p>
         <p>{t('sysMasterKey.prepare.doc')} <code>{MASTER_KEY_DOC}</code></p>
-      </section>
+      </Card>
     {/if}
 
     {#if latest !== undefined && progress !== undefined}
-      <section aria-labelledby={progressHeadingId}>
-        <h2 id={progressHeadingId} tabindex="-1">{t('sysMasterKey.latest.title')}</h2>
+      <Card tag="section">
+        <h2 id={progressHeadingId} class="tt-text-lg" tabindex="-1">{t('sysMasterKey.latest.title')}</h2>
 
         {#if kind === 'interrupted'}
           <Alert severity="warning" title={t('sysMasterKey.interrupted.title')}>
@@ -505,12 +504,11 @@
             <dd>{progressText(progress, t, (n) => formatNumber(n))}</dd>
           {/if}
         </dl>
-      </section>
+      </Card>
     {/if}
 
     {#if kind !== undefined && canStart(kind)}
-      <section aria-labelledby="{uid}-start">
-        <h2 id="{uid}-start">{t(startLabelKey(kind))}</h2>
+      <Card title={t(startLabelKey(kind))} headingId="{uid}-start">
         <p>{t('sysMasterKey.start.intro')}</p>
         <Checkbox label={t('sysMasterKey.start.vault')} bind:checked={vaultCopy} />
         <Checkbox label={t('sysMasterKey.start.ids')} bind:checked={idsChecked} />
@@ -524,7 +522,7 @@
         >
           {t(startLabelKey(kind))}
         </Button>
-      </section>
+      </Card>
     {/if}
   </div>
 {/if}

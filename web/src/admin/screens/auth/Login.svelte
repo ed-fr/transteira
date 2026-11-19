@@ -279,6 +279,6 @@
   .tt-sso {
     margin-top: var(--tt-space-6);
     padding-top: var(--tt-space-4);
-    border-top: var(--tt-border-width) solid var(--tt-border);
+    border-top: var(--tt-border-width) solid var(--tt-separator);
   }
 </style>

@@ -13,7 +13,8 @@
     "signingOut": "Déconnexion…",
     "signedInAs": "Connecté en tant que {username}",
     "roleOf": "Rôle : {role}",
-    "tenantNav": "Configuration de l’entité {name}"
+    "tenantNav": "Configuration de l’entité {name}",
+    "menu": "Menu"
   },
   "role": {
     "super_admin": "Super administrateur",
@@ -23,6 +24,9 @@
   },
   "home": {
     "title": "Accueil"
+  },
+  "search": {
+    "title": "Recherche"
   },
   "common": {
     "save": "Enregistrer",

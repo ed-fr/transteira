@@ -10,7 +10,8 @@
 // - /login while authenticated: the return path (safeNext) or /.
 // - Super admin route for another role, or a tenant outside the admin's scope: not found, like
 //   the 404 of the server (threat model T-164 for the return path).
-// - Auditor (read-only role): only the home, the account, the entity list, the help and, per
+// - Auditor (read-only role): only the home, the account, the entity list, the transfer search
+//   (by identifier), the help and, per
 //   entity of its scope, the summary, transfers (list and detail), audit log, security log and
 //   statistics. Any other route redirects (auditorRedirect): the server refuses the matching API
 //   calls with 403 read-only-role, the guard only spares the auditor a screen made of errors.
@@ -115,8 +116,11 @@ function inScope(me: AdminMe, request: AccessRequest): boolean {
   return me.tenants.some((tenant) => tenant.id === tenantId);
 }
 
-/** Application paths (besides the tenant sections) an auditor may open. */
-const AUDITOR_PATHS: readonly string[] = ['/', '/account', '/tenants'];
+/**
+ * Application paths (besides the tenant sections) an auditor may open; the transfer search
+ * (/search) only by transfer identifier (the server refuses an address: 403 read-only-role).
+ */
+const AUDITOR_PATHS: readonly string[] = ['/', '/account', '/tenants', '/search'];
 
 /** Path segments of the tenant sections an auditor may open. */
 const AUDITOR_SEGMENTS: readonly string[] = AUDITOR_TENANT_SECTIONS.map(tenantSegment);

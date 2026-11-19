@@ -241,11 +241,30 @@
 
 <style>
   .tt-image {
-    margin-bottom: var(--tt-space-8);
+    min-width: 0;
+    margin-bottom: var(--tt-space-4);
+    padding: var(--tt-space-5);
+    border: var(--tt-border-width) solid var(--tt-separator);
+    border-radius: var(--tt-radius-lg);
+    background: var(--tt-surface);
   }
 
   .tt-image__heading {
     margin: 0 0 var(--tt-space-2);
+    font-size: var(--tt-font-size-lg);
+    font-weight: var(--tt-font-weight-heading);
+  }
+
+  @media (max-width: 40rem) {
+    .tt-image {
+      padding: var(--tt-space-4);
+    }
+  }
+
+  @media (forced-colors: active) {
+    .tt-image {
+      border-color: CanvasText;
+    }
   }
 
   .tt-image__hint {

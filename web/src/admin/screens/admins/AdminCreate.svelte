@@ -8,10 +8,11 @@
   // form keeps its values so that the copy delivery can be chosen and submitted again.
   import { onDestroy, onMount } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, Checkbox, RadioGroup, TextField } from '../../../shared/components';
+  import { Alert, Button, Checkbox, HelpIcon, RadioGroup, TextField } from '../../../shared/components';
   import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import ActivationLinkPanel from '../../components/ActivationLinkPanel.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
   import InvitationFields from '../../components/InvitationFields.svelte';
@@ -139,7 +140,14 @@
   });
 </script>
 
-<h1 tabindex="-1">{t('adminAccounts.form.createTitle')}</h1>
+<PageHeader
+  title={t('adminAccounts.form.createTitle')}
+  description={created === undefined ? t('adminAccounts.form.createIntro') : undefined}
+>
+  {#snippet help()}
+    <HelpIcon topic="admins" title={t('adminAccounts.form.createTitle')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if created !== undefined}
   <Alert severity="success">{t('adminAccounts.form.created', { username: created.account.username })}</Alert>
@@ -165,7 +173,6 @@
     />
   {/if}
 {:else}
-  <p>{t('adminAccounts.form.createIntro')}</p>
   {#if loadError !== ''}
     <Alert severity="error">
       <p>{loadError}</p>
@@ -175,6 +182,7 @@
     <FormSection
       title={t('adminAccounts.form.createLegend')}
       as="fieldset"
+      card
       {dirty}
       addGuard={(guard) => nav.addGuard(guard)}
       validate={() => summaryOf(validateCreate(form))}
@@ -244,5 +252,5 @@
       />
     </FormSection>
   {/if}
-  <p><a href={nav.href('/admins')} use:nav.link>{t('admin.common.back')}</a></p>
+  <p><a class="tt-link-target" href={nav.href('/admins')} use:nav.link>{t('admin.common.back')}</a></p>
 {/if}

@@ -3,6 +3,7 @@
 import { mount } from 'svelte';
 import '../styles/tokens.css';
 import '../styles/base.css';
+import '../styles/admin.css';
 import App from './App.svelte';
 import { captureActivationToken } from './auth/activationToken';
 import { ADMIN_BASE } from './routes';

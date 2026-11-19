@@ -5,10 +5,11 @@
   // its detail), IP and free details. Details are always rendered as text pairs, never as HTML.
   import { untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, TextField } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, TextField } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import AuditEventsTable from '../../components/AuditEventsTable.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
   import SelectField from '../../components/SelectField.svelte';
   import { canSearchByAddress } from '../../shell';
@@ -137,8 +138,11 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('adminOps.audit.title')}</h1>
-<p>{t('adminOps.audit.intro')}</p>
+<PageHeader title={t('adminOps.audit.title')} description={t('adminOps.audit.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-audit" title={t('adminOps.audit.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 <FilterBar
   label={t('opsAudit.filters.label')}

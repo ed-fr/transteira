@@ -24,6 +24,12 @@ describe('icon set', () => {
     }
   });
 
+  it('holds the icons of the administration navigation and headers', () => {
+    for (const name of ['home', 'grid', 'users', 'settings', 'user', 'menu', 'search', 'plus', 'logs']) {
+      expect(ICON_NAMES).toContain(name);
+    }
+  });
+
   it('lists the names in alphabetical order', () => {
     expect([...ICON_NAMES]).toEqual(Object.keys(ICONS).sort());
   });

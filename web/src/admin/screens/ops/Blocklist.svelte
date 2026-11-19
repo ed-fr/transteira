@@ -6,14 +6,15 @@
   //   already listed (409 already-exists) is reported on the value field;
   // - list filtered by kind (reflected in the URL query string): value, kind, comment, author,
   //   date, and a remove action after confirmation.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { tick, untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, TextArea, TextField, announce } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, TextArea, TextField, announce } from '../../../shared/components';
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import DataTable from '../../components/DataTable.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import SelectField from '../../components/SelectField.svelte';
@@ -194,7 +195,11 @@
 </script>
 
 {#snippet valueCell(row: BlocklistEntry)}
-  <span class="tt-break" class:tt-blocklist__digest={row.kind === 'sha256'}>{row.value}</span>
+  <span
+    class="tt-break"
+    class:tt-blocklist__digest={row.kind === 'sha256'}
+    class:tt-table__break-anywhere={row.kind === 'sha256'}>{row.value}</span
+  >
 {/snippet}
 
 {#snippet kindCell(row: BlocklistEntry)}
@@ -223,8 +228,15 @@
   </Button>
 {/snippet}
 
-<h1 tabindex="-1" bind:this={heading}>{t('adminOps.blocklist.title')}</h1>
-<p>{t('adminOps.blocklist.intro')}</p>
+<PageHeader
+  title={t('adminOps.blocklist.title')}
+  description={t('adminOps.blocklist.intro')}
+  bind:element={heading}
+>
+  {#snippet help()}
+    <HelpIcon topic="tenant-blocklist" title={t('adminOps.blocklist.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 <FormSection
   title={t('opsBlocklist.form.title')}

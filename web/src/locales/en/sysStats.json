@@ -20,17 +20,17 @@
     "name": "Entity",
     "transfers": "Transfers",
     "volume": "Volume uploaded",
-    "storage": "Storage"
+    "storage": "Storage",
+    "storageOf": "Storage of {name}",
+    "viruses": "Viruses blocked",
+    "downloads": "Downloads"
   },
-  "home": {
-    "diskTitle": "Disk",
-    "diskLoading": "Loading the disk usage…",
-    "diskError": "The disk usage could not be loaded.",
-    "overviewLink": "Open the system overview",
-    "maintenanceTitle": "Maintenance mode",
-    "maintenanceOn": "On",
-    "maintenanceOff": "Off",
-    "maintenanceUnknown": "The state could not be read. Open the maintenance screen to see it.",
-    "maintenanceLink": "Manage maintenance mode"
+  "tiles": {
+    "transfers": "Transfers",
+    "volume": "Volume uploaded",
+    "viruses": "Viruses blocked",
+    "downloads": "Downloads",
+    "disk": "Disk used",
+    "label": "Key figures"
   }
 }

@@ -60,8 +60,22 @@ and the project follows [Semantic Versioning](https://semver.org/).
   an entity and in each row of the global statistics (7 and 30 days), virus and download counters
   in the global rows, and the primary color of each entity in the entity answers.
 
+- Administration redesign, interface (specification section 13.2): cross-entity transfer search
+  in the header of the home page and on the `/search` screen (transfer identifier or complete
+  address; identifier only for an auditor; the query is never put in the address bar nor stored),
+  with a contextual help topic in the three administrator guides.
+
 ### Changed
 
+- Administration redesign, interface (specification section 13.2): a dark sidebar replaces the
+  top navigation (collapsible on small screens), with the entity block (Configuration and
+  Operations groups, Consultation for an auditor) and the system block nested under their
+  entries, and the signed-in user and Sign out at the bottom. Every screen gets a page header
+  (title, help, actions), cards, tables in cards with status pills and storage gauges, and 44 px
+  targets. The home page shows a greeting line, indicator tiles with a neutral trend compared
+  with the previous 30 days (disk tile for the super admin), an entities card limited to ten rows
+  with "See all", and a System status box; the system overview gains the same tiles and the
+  virus and download columns. User guides, integrated help and screenshots updated.
 - `AbuseReport` of the admin API: `transferId` and `senderEmail` are no longer required (a report
   on a secret has neither) and `secretId` is added.
 - Public pages redesign (specification section 13.2): glass header with "My transfers", the
@@ -71,7 +85,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   "Security options" block with switches). The download page shows "N files for you", information
   pills, one line per file with an antivirus badge and an abbreviated SHA-256 fingerprint with a
   Copy button, and "Reply with files" and "Report an abuse" at the bottom. The administration is
-  unchanged, except the branding preview. User guides, integrated help and screenshots updated.
+  unchanged at that step, except the branding preview. User guides, integrated help and screenshots updated.
 
 ## [2.2.0] - 2026-11-11
 

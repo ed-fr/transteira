@@ -10,9 +10,10 @@
   //   authentication state; a redirect replaces the history entry and bypasses the leave
   //   guards (an unsaved-changes guard cannot keep a lost access), a refused route shows the
   //   "not found" page (like the 404 of the server), a pending state a loading indicator.
-  // - Frame: AdminLayout (default theme, no tenant colours, maintenance banner), TenantNav above
-  //   the screens of a tenant, SystemNav above the system screens (super admin), the screen of
-  //   the current route, the footer (help link, language switch).
+  // - Frame: AdminShell (default theme, no tenant colours, maintenance banner): for a signed-in
+  //   admin, the sidebar with the main navigation, the tenant block on the screens of a tenant
+  //   and the system block on the system screens (super admin), the screen of the current route
+  //   and the footer (help link, language switch, theme, version); otherwise the PageLayout frame.
   // The flash message of the anonymous state (session expired, signed out) is read from the
   // session by the sign-in screen.
   import { onMount, untrack } from 'svelte';
@@ -24,14 +25,12 @@
   import { createRouter, type RouteMatch } from '../shared/router/router.svelte';
   import { adminSession } from './api';
   import { resolveAccess, type AccessDecision } from './auth/guard';
-  import AdminLayout from './components/AdminLayout.svelte';
-  import SystemNav from './components/SystemNav.svelte';
-  import TenantNav from './components/TenantNav.svelte';
+  import AdminShell from './components/AdminShell.svelte';
   import { ADMIN_BASE, adminRoute, isHelpRoute, notFoundRoute, routes } from './routes';
   import NotFound from './screens/NotFound.svelte';
   import type { AdminScreenComponent } from './screens/types';
   import { cameFromSetup, setupPath } from './screens/tenants/setup';
-  import { pickAdminLanguage, redirectTarget, tenantNameOf } from './shell';
+  import { pickAdminLanguage, redirectTarget } from './shell';
   import { footerVersionText } from './version';
   import { adminVersion } from './version.svelte';
 
@@ -118,8 +117,10 @@
   );
   const showNav = $derived(adminSession.state.kind === 'authenticated' && decision.kind !== 'pending');
   const tenantId = $derived(route.tenantNav === true ? match.params['id'] : undefined);
-  // The two sub-navigations are exclusive (the routes never declare both).
+  // The tenant and system blocks of the sidebar are exclusive (the routes never declare both);
+  // both only for a screen rendered (the sidebar model also checks the scope of the tenant).
   const systemNav = $derived(tenantId === undefined && route.systemNav === true);
+  const rendered = $derived(decision.kind === 'render');
   const helpTopic = $derived(isHelpRoute(route) ? null : route.helpTopic);
 
   // Guard: redirects replace the history entry (never towards the page already shown).
@@ -150,27 +151,25 @@
 </script>
 
 {#if locale.current !== ''}
-  <AdminLayout {me} {showNav} path={match.path} nav={router}>
+  <AdminShell
+    {me}
+    {showNav}
+    path={match.path}
+    tenantId={rendered ? tenantId : undefined}
+    inSystem={rendered && systemNav}
+    nav={router}
+  >
     {#if bootstrapError !== undefined}
       <h1 tabindex="-1">{t('common.error.title')}</h1>
       <p role="alert">{problemMessage(i18n, bootstrapError)}</p>
       <Button loading={retrying} onclick={() => void retry()}>{t('common.retry')}</Button>
     {:else if decision.kind === 'render'}
       {@const Screen = route.component}
-      {#if tenantId !== undefined}
-        <TenantNav
-          {tenantId}
-          tenantName={tenantNameOf(me, tenantId)}
-          role={me?.role}
-          path={match.path}
-          nav={router}
-        />
-      {:else if systemNav}
-        <SystemNav path={match.path} nav={router} />
-      {/if}
       {#if tenantId !== undefined && route.pattern !== '/tenants/:id/setup' && cameFromSetup(match.search)}
         <p class="tt-back-to-setup">
-          <a href={router.href(setupPath(tenantId))} use:router.link>{t('setup.wizard.back')}</a>
+          <a class="tt-link-target" href={router.href(setupPath(tenantId))} use:router.link
+            >{t('setup.wizard.back')}</a
+          >
         </p>
       {/if}
       {#key match.path}
@@ -197,5 +196,5 @@
         {/if}
       </Footer>
     {/snippet}
-  </AdminLayout>
+  </AdminShell>
 {/if}

@@ -172,7 +172,9 @@
   <Alert severity="error" live={false}>
     <p>{t('adminAuth.activation.invalidLink.text')}</p>
   </Alert>
-  <p><a href={nav.href('/login')} use:nav.link>{t('adminAuth.activation.goToLogin')}</a></p>
+  <p>
+    <a class="tt-link-target" href={nav.href('/login')} use:nav.link>{t('adminAuth.activation.goToLogin')}</a>
+  </p>
 {:else}
   <h1 tabindex="-1">{t('adminAuth.activation.title')}</h1>
   <p>{t('adminAuth.activation.intro')}</p>

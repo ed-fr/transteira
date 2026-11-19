@@ -262,7 +262,7 @@ sequenceDiagram
 | **Vérification de l'adresse mail** par code à usage unique, sans compte | **Nouveau transfert** : fichiers, destinataires, message, niveau de confidentialité |
 | ![Transfert envoyé : les destinataires ont été notifiés, et chaque fichier est listé avec son statut antivirus et son empreinte SHA-256](docs/user/screenshots/fr/deposit-sent.png) | ![Page de téléchargement d'un transfert : le nombre de fichiers pour vous, l'expéditeur, les pastilles d'information, le message, téléchargement de tous les fichiers en archive ZIP, et pour chaque fichier son badge Analysé, sa taille et son empreinte SHA-256 abrégée](docs/user/screenshots/fr/download.png) |
 | **Transfert envoyé**, avec statut antivirus et empreintes | **Page de téléchargement** : chaque fichier ou une archive ZIP |
-| ![Habillage d'une entité dans l'administration : couleurs principale et d'accent avec leur ratio de contraste vérifié par rapport aux niveaux d'accessibilité](docs/user/screenshots/fr/admin-tenant-branding.png) | ![Statistiques d'une entité dans l'administration : chiffres clés de la période et stockage utilisé par rapport au quota](docs/user/screenshots/fr/admin-stats.png) |
+| ![Habillage d'une entité dans l'administration, avec sa barre latérale : couleurs principale et d'accent avec leurs ratios de contraste sur fond clair et sur fond sombre vérifiés par rapport aux niveaux d'accessibilité](docs/user/screenshots/fr/admin-tenant-branding.png) | ![Statistiques d'une entité dans l'administration : la période, les tuiles de chiffres clés avec leur tendance par rapport à la période précédente, et le stockage utilisé par rapport au quota](docs/user/screenshots/fr/admin-stats.png) |
 | **Habillage par entité**, avec contrôles de contraste | **Statistiques** et quota de stockage |
 | ![Formulaire « Partager un secret » : un texte à sceller dans le navigateur, une durée, une phrase de passe facultative et la remise par lien ou par mail](docs/user/screenshots/fr/secret-create.png) | ![Page de lecture d'un secret à usage unique : le secret n'apparaît qu'après avoir appuyé sur le bouton, et il est détruit une fois lu](docs/user/screenshots/fr/secret-reveal.png) |
 | **Partager un secret** : scellé dans le navigateur, lu une seule fois | **Page de lecture** : rien n'est consommé avant le bouton |
@@ -359,10 +359,10 @@ pour Docker.
   destinataire, administrateur délégué, auditeur et super administrateur (les guides du déposant et
   du destinataire couvrent le partage et la lecture des secrets à usage unique). Les mêmes guides sont intégrés à
   l'application comme aide intégrée (`/help` sur chaque hôte d'entité, `/admin/help` sur l'hôte
-  d'administration), avec un lien d'aide dans le pied de page et des icônes d'aide contextuelle sur
-  les écrans complexes.
+  d'administration), avec un lien d'aide dans le pied de page et un bouton d'aide contextuelle à côté
+  du titre de chaque écran d'administration.
 
-  ![Page d'accueil de l'administration pour le super admin : mode maintenance, espace disque et entités avec leur utilisation du stockage](docs/user/screenshots/fr/admin-home-super.png)
+  ![Page d'accueil de l'administration pour le super admin : barre latérale, recherche, tuiles de chiffres clés avec leur tendance, entités avec leur utilisation du stockage et état du système](docs/user/screenshots/fr/admin-home-super.png)
 
 - [Spécification de l'API](api/openapi.yaml), consultable sur `https://<admin host>/api/docs` sur une
   instance en fonctionnement

@@ -14,14 +14,15 @@
   // - Cancelling the confirmation saves nothing: no success message, a polite announcement.
   // - After a save, the maintenance banner of the administration gets the state of the answer
   //   (adminMaintenance.set, which also drops older reads still in flight).
-  // The system sub-navigation is rendered by App.svelte.
   import { onMount } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, Checkbox, Spinner, TextArea, announce } from '../../../shared/components';
+  import { Alert, Button, Checkbox, HelpIcon, Spinner, TextArea, announce } from '../../../shared/components';
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
+  import Card from '../../components/Card.svelte';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import FormSection from '../../components/FormSection.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
   import { adminMaintenance } from '../../maintenance.svelte';
@@ -158,8 +159,11 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('adminSystem.maintenance.title')}</h1>
-<p>{t('adminSystem.maintenance.intro')}</p>
+<PageHeader title={t('adminSystem.maintenance.title')} description={t('adminSystem.maintenance.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="system-maintenance" title={t('adminSystem.maintenance.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if loading}
   <p><Spinner showLabel /></p>
@@ -169,8 +173,7 @@
     <Button variant="secondary" onclick={() => void load()}>{t('common.retry')}</Button>
   </Alert>
 {:else if current !== undefined && form !== undefined && view !== undefined}
-  <section aria-labelledby="{uid}-state">
-    <h2 id="{uid}-state">{t('sysMaintenance.state.title')}</h2>
+  <Card title={t('sysMaintenance.state.title')} headingId="{uid}-state">
     <dl class="tt-dl">
       <dt>{t('sysMaintenance.state.label')}</dt>
       <dd><StatusBadge variant={view.variant} label={t(view.stateKey)} /></dd>
@@ -191,7 +194,7 @@
         <p>{t('sysMaintenance.forced.save')}</p>
       </Alert>
     {/if}
-  </section>
+  </Card>
 
   <FormSection
     title={t('sysMaintenance.form.title')}

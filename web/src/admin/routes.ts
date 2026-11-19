@@ -22,6 +22,7 @@ import Setup from './screens/auth/Setup.svelte';
 import Help from './screens/Help.svelte';
 import Home from './screens/Home.svelte';
 import NotFound from './screens/NotFound.svelte';
+import Search from './screens/Search.svelte';
 import AuditLog from './screens/ops/AuditLog.svelte';
 import AbuseReports from './screens/ops/AbuseReports.svelte';
 import Blocklist from './screens/ops/Blocklist.svelte';
@@ -71,9 +72,9 @@ export const ADMIN_BASE = '/admin';
 export interface AdminRoute extends Route<AdminScreenComponent> {
   /** Access level, checked by resolveAccess. */
   access: RouteAccess;
-  /** Shows the tenant sub-navigation (TenantNav) above the screen; the route has an :id. */
+  /** Shows the tenant block of the sidebar for the tenant :id of the route (sidebarModel). */
   tenantNav?: boolean;
-  /** Shows the system sub-navigation (SystemNav) above the screen; never with tenantNav. */
+  /** Shows the system block of the sidebar (super admin); never with tenantNav. */
   systemNav?: boolean;
 }
 
@@ -101,6 +102,15 @@ export const routes: readonly AdminRoute[] = [
     helpTopic: 'activation',
   },
   { pattern: '/', component: Home, titleKey: 'admin.home.title', access: 'auth', helpTopic: 'admin' },
+  {
+    // Results of the transfer search of the home header (searchTransfers). The query comes from
+    // the in-memory searchQuery store, never from the URL (T-412).
+    pattern: '/search',
+    component: Search,
+    titleKey: 'admin.search.title',
+    access: 'auth',
+    helpTopic: 'admin-search',
+  },
   {
     pattern: '/account',
     component: Account,

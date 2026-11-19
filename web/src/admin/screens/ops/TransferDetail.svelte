@@ -12,17 +12,21 @@
   // An auditor (read-only role) gets the same facts and no action: the actions section is not
   // rendered (the server answers 403 read-only-role to both calls anyway). The detail shown
   // never holds the message of the sender, whichever the role.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { onDestroy, onMount, tick } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
   import { deliveryProofAvailable, recipientsWithDelivery } from '../../../shared/api/proof';
+  import ActionLink from '../../components/ActionLink.svelte';
+  import Card from '../../components/Card.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import {
     Alert,
     Button,
     Checkbox,
     CopyButton,
     Dialog,
+    HelpIcon,
     ProofsSection,
     Spinner,
     TextArea,
@@ -283,12 +287,23 @@
 {/snippet}
 
 {#if notFound}
-  <h1 tabindex="-1">{t('opsTransfers.detail.notFoundTitle')}</h1>
-  <p>{t('opsTransfers.detail.notFoundText')}</p>
-  <p><a href={nav.href(listPath)} use:nav.link>{t('opsTransfers.detail.backToList')}</a></p>
+  <PageHeader
+    title={t('opsTransfers.detail.notFoundTitle')}
+    description={t('opsTransfers.detail.notFoundText')}
+  >
+    {#snippet actions()}
+      <ActionLink to={listPath} {nav} variant="secondary">{t('opsTransfers.detail.backToList')}</ActionLink>
+    {/snippet}
+  </PageHeader>
 {:else}
-  <h1 tabindex="-1" bind:this={heading}>{t('adminOps.transfers.detailTitle')}</h1>
-  <p><a href={nav.href(listPath)} use:nav.link>{t('opsTransfers.detail.backToList')}</a></p>
+  <PageHeader title={t('adminOps.transfers.detailTitle')} bind:element={heading}>
+    {#snippet help()}
+      <HelpIcon topic="tenant-transfers" title={t('adminOps.transfers.detailTitle')} {nav} />
+    {/snippet}
+    {#snippet actions()}
+      <ActionLink to={listPath} {nav} variant="secondary">{t('opsTransfers.detail.backToList')}</ActionLink>
+    {/snippet}
+  </PageHeader>
 
   {#if loading && transfer === undefined}
     <p><Spinner showLabel label={t('opsTransfers.detail.loadingLabel')} /></p>
@@ -306,8 +321,7 @@
         <Button variant="secondary" onclick={() => void load()}>{t('common.retry')}</Button>
       </Alert>
     {/if}
-    <section aria-labelledby="{uid}-meta">
-      <h2 id="{uid}-meta">{t('opsTransfers.detail.metadataTitle')}</h2>
+    <Card title={t('opsTransfers.detail.metadataTitle')} headingId="{uid}-meta">
       <dl class="tt-dl">
         <dt>{t('opsTransfers.detail.status')}</dt>
         <dd>
@@ -362,15 +376,14 @@
         </dd>
       </dl>
       <p>
-        <a href={nav.href(auditPath(tenantId, transfer.createdAt))} use:nav.link>
+        <a class="tt-link-target" href={nav.href(auditPath(tenantId, transfer.createdAt))} use:nav.link>
           {t('opsTransfers.detail.auditLink')}
         </a>
         <br /><span class="tt-hint">{t('opsTransfers.detail.auditHint')}</span>
       </p>
-    </section>
+    </Card>
 
-    <section aria-labelledby="{uid}-recipients">
-      <h2 id="{uid}-recipients">{t('opsTransfers.detail.recipientsTitle')}</h2>
+    <Card title={t('opsTransfers.detail.recipientsTitle')} headingId="{uid}-recipients">
       <!-- recipientTracking is absent for a single shared link (before 1.1),
            empty for per-recipient links not created yet. -->
       {#if transfer.recipientTracking && transfer.recipientVerification !== undefined}
@@ -383,6 +396,7 @@
       {/if}
       {#if transfer.recipientTracking?.length}
         <DataTable
+          variant="plain"
           caption={t('opsTransfers.detail.tracking.trackingCaption')}
           captionHidden
           rows={transfer.recipientTracking}
@@ -420,12 +434,12 @@
             : t('opsTransfers.detail.tracking.trackingNone')}
         </p>
       {/if}
-    </section>
+    </Card>
 
-    <section aria-labelledby="{uid}-files">
-      <h2 id="{uid}-files">{t('opsTransfers.detail.filesTitle')}</h2>
+    <Card title={t('opsTransfers.detail.filesTitle')} headingId="{uid}-files">
       <p>{t('opsTransfers.detail.noContent')}</p>
       <DataTable
+        variant="plain"
         caption={t('opsTransfers.detail.filesCaption')}
         captionHidden
         rows={transfer.files}
@@ -438,20 +452,21 @@
           { id: 'scan', header: t('opsTransfers.detail.filesColumns.scan'), cell: scanCell },
         ]}
       />
-    </section>
+    </Card>
 
     <!-- Proofs: read-only downloads, offered to every role including the auditor. -->
-    <ProofsSection
-      headingId="{uid}-proofs"
-      base={`/admin/tenants/${encodeURIComponent(tenantId)}/transfers/${encodeURIComponent(transferId)}`}
-      status={transfer.status}
-      delivered={deliveryProofAvailable(transfer.firstDownloadedAt)}
-      recipients={recipientsWithDelivery(transfer.recipientTracking)}
-    />
+    <Card tag="div">
+      <ProofsSection
+        headingId="{uid}-proofs"
+        base={`/admin/tenants/${encodeURIComponent(tenantId)}/transfers/${encodeURIComponent(transferId)}`}
+        status={transfer.status}
+        delivered={deliveryProofAvailable(transfer.firstDownloadedAt)}
+        recipients={recipientsWithDelivery(transfer.recipientTracking)}
+      />
+    </Card>
 
     {#if !readOnly && (canResend(transfer.status) || canDelete(transfer.status) || resendDone !== '')}
-      <section aria-labelledby="{uid}-actions">
-        <h2 id="{uid}-actions">{t('opsTransfers.detail.actionsTitle')}</h2>
+      <Card title={t('opsTransfers.detail.actionsTitle')} headingId="{uid}-actions">
         {#if resendDone !== ''}
           <Alert severity="success" live={false}>{resendDone}</Alert>
         {/if}
@@ -463,7 +478,7 @@
             <Button variant="danger" onclick={openDelete}>{t('opsTransfers.delete.button')}</Button>
           {/if}
         </div>
-      </section>
+      </Card>
     {/if}
 
     <Dialog
@@ -490,7 +505,7 @@
           <p>{resendMessage}</p>
           {#if resendError?.kind === 'mail-unavailable'}
             <p>
-              <a href={nav.href(tenantPath(tenantId, 'smtp'))} use:nav.link>
+              <a class="tt-link-target" href={nav.href(tenantPath(tenantId, 'smtp'))} use:nav.link>
                 {t('opsTransfers.resend.errors.smtpLink')}
               </a>
             </p>

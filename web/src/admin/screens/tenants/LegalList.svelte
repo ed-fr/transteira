@@ -3,11 +3,13 @@
   // language, each cell saying whether the text is written (badge, with its date) and linking
   // to the editor. There is no list operation: every document is read in every language
   // (GET .../legal/{document}/{lang}, an empty text meaning not written). The tenant
-  // sub-navigation is rendered by App.svelte.
+  // navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import type { components } from '../../../shared/api/schema';
-  import { Spinner, languageName } from '../../../shared/components';
+  import { HelpIcon, Spinner, languageName } from '../../../shared/components';
   import { formatDate, locale, supportedLanguages, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
+  import DataTable from '../../components/DataTable.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { loadLegalRows, type LegalDocumentName, type LegalRow } from '../../components/legal';
   import type { AdminScreenProps } from '../types';
@@ -49,86 +51,59 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('adminTenants.legal.title')}</h1>
-<p>{t('adminTenants.legal.intro')}</p>
+<PageHeader title={t('adminTenants.legal.title')} description={t('adminTenants.legal.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-legal" title={t('adminTenants.legal.title')} {nav} />
+  {/snippet}
+</PageHeader>
+
+{#snippet docCell(row: LegalRow)}
+  {t(`adminTenants.legal.document.${row.document}`)}
+{/snippet}
+
+{#snippet langCell(row: LegalRow, lang: string)}
+  {@const cell = row.cells[lang]}
+  {@const name = t(`adminTenants.legal.document.${row.document}`)}
+  <div class="tt-legal-cell">
+    {#if cell?.state === 'present'}
+      <StatusBadge variant="ok" label={t('adminTenants.legal.present')} />
+      {#if cell.updatedAt}
+        <span class="tt-legal-cell__date">
+          {t('admin.common.lastUpdated', { date: formatDate(cell.updatedAt) })}
+        </span>
+      {/if}
+    {:else if cell?.state === 'absent'}
+      <StatusBadge variant="missing" label={t('adminTenants.legal.absent')} />
+    {:else}
+      <StatusBadge variant="error" />
+    {/if}
+    <a
+      href={editHref(row.document, lang)}
+      use:nav.link
+      aria-label={t('adminTenants.legal.edit', {
+        document: name,
+        language: languageName(lang),
+      })}>{t('admin.common.edit')}</a
+    >
+  </div>
+{/snippet}
 
 {#if rows === undefined}
   <Spinner label={t('admin.common.loading')} />
 {:else}
-  <div class="tt-table-wrap">
-    <table class="tt-table">
-      <caption>{t('adminTenants.legal.caption')}</caption>
-      <thead>
-        <tr>
-          <th scope="col">{t('adminTenants.legal.columns.document')}</th>
-          {#each languages as lang (lang)}
-            <th scope="col" {lang}>{languageName(lang)}</th>
-          {/each}
-        </tr>
-      </thead>
-      <tbody>
-        {#each rows as row (row.document)}
-          {@const name = t(`adminTenants.legal.document.${row.document}`)}
-          <tr>
-            <th scope="row">{name}</th>
-            {#each languages as lang (lang)}
-              {@const cell = row.cells[lang]}
-              <td>
-                <div class="tt-legal-cell">
-                  {#if cell?.state === 'present'}
-                    <StatusBadge variant="ok" label={t('adminTenants.legal.present')} />
-                    {#if cell.updatedAt}
-                      <span class="tt-legal-cell__date">
-                        {t('admin.common.lastUpdated', { date: formatDate(cell.updatedAt) })}
-                      </span>
-                    {/if}
-                  {:else if cell?.state === 'absent'}
-                    <StatusBadge variant="missing" label={t('adminTenants.legal.absent')} />
-                  {:else}
-                    <StatusBadge variant="error" />
-                  {/if}
-                  <a
-                    href={editHref(row.document, lang)}
-                    use:nav.link
-                    aria-label={t('adminTenants.legal.edit', {
-                      document: name,
-                      language: languageName(lang),
-                    })}>{t('admin.common.edit')}</a
-                  >
-                </div>
-              </td>
-            {/each}
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </div>
+  <DataTable
+    caption={t('adminTenants.legal.caption')}
+    captionHidden
+    {rows}
+    key={(row) => row.document}
+    columns={[
+      { id: 'document', header: t('adminTenants.legal.columns.document'), cell: docCell, rowHeader: true },
+      ...languages.map((lang) => ({ id: lang, header: languageName(lang), lang, cell: langCell })),
+    ]}
+  />
 {/if}
 
 <style>
-  .tt-table-wrap {
-    overflow-x: auto;
-  }
-
-  .tt-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .tt-table caption {
-    text-align: start;
-    font-weight: var(--tt-font-weight-bold);
-    margin-bottom: var(--tt-space-2);
-  }
-
-  .tt-table th,
-  .tt-table td {
-    padding: var(--tt-space-2) var(--tt-space-3);
-    border-bottom: var(--tt-border-width) solid var(--tt-border);
-    text-align: start;
-    vertical-align: top;
-  }
-
   .tt-legal-cell {
     display: flex;
     flex-direction: column;
@@ -139,9 +114,5 @@
   .tt-legal-cell__date {
     color: var(--tt-muted);
     font-size: var(--tt-font-size-sm);
-  }
-
-  .tt-legal-cell a {
-    color: var(--tt-link);
   }
 </style>

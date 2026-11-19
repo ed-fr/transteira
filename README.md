@@ -250,7 +250,7 @@ novelties of 2.0 and the one-time secrets of 2.1, filmed on a demo instance.
 | **Email verification** by one-time code, no account | **New transfer**: files, recipients, message, confidentiality level |
 | ![Transfer sent: the recipients have been notified, and each file is listed with its antivirus status and SHA-256 fingerprint](docs/user/screenshots/en/deposit-sent.png) | ![Download page of a transfer: the number of files for you, the sender, information pills, message, download of all files as a ZIP archive, and for each file its Scanned badge, size and abbreviated SHA-256 fingerprint](docs/user/screenshots/en/download.png) |
 | **Transfer sent**, with antivirus status and fingerprints | **Download page**: each file or a ZIP archive |
-| ![Branding of an entity in the administration: primary and accent colours with their contrast ratio checked against the accessibility levels](docs/user/screenshots/en/admin-tenant-branding.png) | ![Statistics of an entity in the administration: key figures of the period and storage used against the quota](docs/user/screenshots/en/admin-stats.png) |
+| ![Branding of an entity in the administration, with its sidebar: primary and accent colours with their contrast ratios on light and dark backgrounds checked against the accessibility levels](docs/user/screenshots/en/admin-tenant-branding.png) | ![Statistics of an entity in the administration: the period, the key figure tiles with their trend against the previous period, and the storage used against the quota](docs/user/screenshots/en/admin-stats.png) |
 | **Branding per entity**, with contrast checks | **Statistics** and storage quota |
 | !["Share a secret" form: a text to seal in the browser, a duration, an optional passphrase and the delivery by link or by email](docs/user/screenshots/en/secret-create.png) | ![Reveal page of a one-time secret: the secret is shown only after the button is pressed, and it is destroyed once read](docs/user/screenshots/en/secret-reveal.png) |
 | **Share a secret**: sealed in the browser, read once | **Reveal page**: nothing is consumed before the button |
@@ -343,9 +343,9 @@ Every variable, with its default and its limits, is documented in [`.env.example
   recipient, delegated administrator, auditor and super administrator (the sender and recipient
   guides cover sharing and reading one-time secrets). The same guides are built into the
   application as its integrated help (`/help` on every entity host, `/admin/help` on the admin
-  host), with a help link in the footer and contextual help icons on the complex screens.
+  host), with a help link in the footer and a contextual help button next to the title of every administration screen.
 
-  ![Home page of the administration for the super admin: maintenance mode, disk space and the entities with their storage use](docs/user/screenshots/en/admin-home-super.png)
+  ![Home page of the administration for the super admin: sidebar, search, key figure tiles with their trend, the entities with their storage use and the system status](docs/user/screenshots/en/admin-home-super.png)
 
 - [API specification](api/openapi.yaml), browsable at `https://<admin host>/api/docs` on a
   running instance

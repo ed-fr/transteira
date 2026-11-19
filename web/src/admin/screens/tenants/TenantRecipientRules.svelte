@@ -4,12 +4,13 @@
   // are included, the deny list wins, a non-empty allow list restricts recipients to it. Same
   // behaviour as the network screen: no save while a list has invalid lines, non-blocking
   // warnings, lists shown again with the values normalised by the server.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { describeError } from '../../../shared/api/problem';
   import { Alert, HelpIcon, Spinner } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import LineListEditor from '../../components/LineListEditor.svelte';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
   import { parseDomain } from '../../forms/domain';
@@ -109,10 +110,11 @@
   }
 </script>
 
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminTenants.recipientRules.title')}</h1>
-  <HelpIcon topic="tenant-recipient-rules" title={t('adminTenants.recipientRules.title')} {nav} />
-</div>
+<PageHeader title={t('adminTenants.recipientRules.title')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-recipient-rules" title={t('adminTenants.recipientRules.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if loading}
   <p><Spinner showLabel /></p>

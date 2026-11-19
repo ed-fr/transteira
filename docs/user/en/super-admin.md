@@ -1,6 +1,6 @@
 # Super administrator guide
 
-This guide is for the operator of the TransTeira instance. As super administrator, you can do everything a delegated administrator does, on every entity: the common screens are described in the delegated administrator guide, for example [Signing in](topic:login), [My account](topic:account), [Entities](topic:tenants) and [Transfers](topic:tenant-transfers). This guide covers what only you can do: the first launch, the creation and opening of entities, administrator accounts, the system screens, provisioning tokens, maintenance mode and the master key. Your main navigation therefore has two extra entries, **Administrators** and **System**. The customised public documentation of each entity (printable version included) is described in [Entity user documentation](topic:tenant-docs).
+This guide is for the operator of the TransTeira instance. As super administrator, you can do everything a delegated administrator does, on every entity: the common screens are described in the delegated administrator guide, for example [Signing in](topic:login), [My account](topic:account), [Entities](topic:tenants) and [Transfers](topic:tenant-transfers). This guide covers what only you can do: the first launch, the creation and opening of entities, administrator accounts, the system screens, provisioning tokens, maintenance mode and the master key. The main navigation of your sidebar therefore has two extra entries, **Administrators** and **System**. The customised public documentation of each entity (printable version included) is described in [Entity user documentation](topic:tenant-docs).
 
 <!-- topic: setup -->
 ## First launch
@@ -28,26 +28,28 @@ Keep **two** super administrators. TransTeira refuses to delete, disable or demo
 <!-- topic: admin-home-super -->
 ## Home page
 
-Your home page gives the state of the whole instance at a glance. It starts with two cards, above the table of every entity.
+Your home page gives the state of the whole instance at a glance. The page header shows, under the **Home** title, a greeting line (**Hello**, your username, **Instance overview** and the number of entities of the instance, whatever their status) and, on the right, the **Search** field and its button, and the **New entity** button. Under it:
 
-![Super administrator home page with the Maintenance mode and Disk cards above the table of entities](../screenshots/en/admin-home-super.png)
+- **Key figures of the last 30 days**, for all the entities: **Transfers (30 days)**, **Volume exchanged (30 days)** (the volume deposited) and **Viruses blocked (30 days)**, each with a trend compared with the previous 30 days (a text such as **+12% vs the previous 30 days**, **Unchanged vs the previous 30 days** or **No activity in the previous 30 days**, never coloured), and the **Disk** tile: the share of the data disk used, a meter with the alert threshold marked, and the line **Alert at 85%** followed by the free space. The tile turns to its alert state, with **The disk alert is raised.**, when the disk alert is raised; **The alert is not sent by mail.** reminds you when no system SMTP server is configured.
+- **Entities**: a card with one row per entity (ten at most) showing its colour swatch, its name and its address, its **Status** pill (**Active**, **Being set up** or **Deletion in progress**), a storage meter (with **Nearly full** or **Full** only when it applies) and a **Configure** link; **See all** opens the list described in [Entities](topic:tenants).
+- **System status**: **Application** (**Operational** or **Degraded**), **Database** (its engine and **Available** or **Unavailable**), **Antivirus** followed by its engine (**Available**, **Unavailable** or **Disabled**), **File storage**, **Maintenance mode** (**Inactive** or **Active**, with **Forced by the environment** or **Turned on by a super administrator**) and **Version** (the running version, followed by **up to date**, **update available** and the latest version, **not checked yet** or **update check off**); **Manage maintenance mode** opens the maintenance screen.
 
-- **Maintenance mode**: **On** or **Off**, with the start date and **(forced by the environment)** when the `TT_MAINTENANCE` variable imposes it; **Manage maintenance mode** opens the maintenance screen.
-- **Disk**: the use of the data disk, the alert threshold and the alert state; **Open the system overview** opens the full figures.
-- **Entities**: one row per entity with its **Name**, **Domain name**, **Status** and **Storage**; **Open the full list of entities** opens the list described in [Entities](topic:tenants).
+![Super administrator home page: the sidebar, the Home title with its help button, the greeting, the search field and the New entity button; the Transfers, Volume exchanged, Viruses blocked and Disk tiles; the Entities card with two active entities and their storage; the System status box](../screenshots/en/admin-home-super.png)
+
+As a super administrator, the **Search** field looks for a transfer by identifier or by complete address in all the entities of the instance, as described in [Search](topic:admin-search) (the guide of the delegated administrator).
 
 ## Entities
 
-The list of entities works as described in [Entities](topic:tenants), with one extra button for you, **Create an entity**. Some settings of an entity, and its deletion, are reserved to you.
+The list of entities works as described in [Entities](topic:tenants), with extra links for you: **Create an entity** and **Import a configuration** at the top right of the page header, and on each row, after **Configure**, a **Duplicate** link followed by the name of the entity. Some settings of an entity, and its deletion, are reserved to you.
 
 <!-- topic: tenant-create -->
 ### Creating an entity
 
 An entity is an organisation (subsidiary, department) with its own public address, branding and settings. Before creating it, make sure its address (FQDN) points to the reverse proxy in the DNS and that the reverse proxy serves it with a certificate (with Caddy, the certificate can also be obtained on demand, see [Provisioning tokens](topic:system-provisioning)).
 
-On the **Entities** page, click **Create an entity**, then fill in the form.
+On the **Entities** page, click **Create an entity** (or **New entity** on your home page), then fill in the form, which starts with the **Entity details** card.
 
-![Form to create an entity with the name, address, default language, storage quota and ceiling of the size per transfer](../screenshots/en/admin-tenant-create.png)
+![Create an entity screen: the Entity details card with the entity name, the address (FQDN), the default language, the storage quota and the ceiling of the size per transfer](../screenshots/en/admin-tenant-create.png)
 
 - **Entity name**: shown on the public pages and in the emails, at most 100 characters.
 - **Address (FQDN)**: the domain name of the public pages of the entity, for example `transfer.entity-a.example.com`. It must be unique and cannot be the address of the administration.
@@ -65,9 +67,9 @@ Without a delegated administrator, you are taken to the setup of the entity righ
 <!-- topic: tenant-setup-super -->
 ### Setup of an entity
 
-The setup wizard of an entity is the **Setup** entry of its navigation (the **Configure** button of the list leads to the entity, and an entity being set up is also announced on your home page with a button to start its setup). It shows a checklist computed from the real configuration of the entity: each step is **Done** or **To do**, **Required** or **Optional**, and its **Configure** button leads to the matching screen. The steps are:
+The setup wizard of an entity is the **Setup** entry of its block in the sidebar (the **Configure** link of its row, in the list of entities or in the **Entities** card of your home page, opens the entity; while it is being set up, its **Status** pill reads **Being set up**, and its block in the sidebar shows the **Being set up** badge under its name). It shows a checklist computed from the real configuration of the entity: each step is **Done** or **To do**, **Required** or **Optional**, and its **Configure** link leads to the matching screen. The steps are:
 
-![Setup wizard of an entity being set up, with its badge and the list of setup steps marked done or to do, required or optional](../screenshots/en/admin-tenant-setup.png)
+![Setup wizard of an entity being set up: the Being set up badge under the title and in the sidebar, and the Setup steps card with each step marked To do, Required or Optional, and its Configure link](../screenshots/en/admin-tenant-setup.png)
 
 - required: **Mail (SMTP)** (settings tested successfully since their last change), **Internal IP ranges**, **Internal mail domains** (for an imported entity, done only once confirmed, see [Duplicate or import a configuration](topic:tenant-import)), **Legal notice** and **Privacy policy** (written in the default language of the entity, with no "To complete" marker left);
 - optional: **Logo**, **Colours** and **Mail templates**, which counts as done once you tick **I reviewed the mail templates**.
@@ -88,7 +90,7 @@ On the [General](topic:tenant-general) screen of an entity, you can change the s
 - **Storage quota**: when it is reached, new deposits are refused until space is freed (secrets with an attached file too: the files of the one-time secrets, 10 MiB by default and 25 MiB at most each, count in the quota and in the disk use while they exist). Alert emails are sent at 80 % and when the quota is reached, to the delegated administrators of the entity; when the entity has none, they go to the super administrators, through the SMTP settings of the entity. Review those settings when an entity is left without a delegated administrator.
 - **Ceiling of the size per transfer**: lowering it below the current maximum size per transfer lowers that size too.
 - **Antivirus analysis**: on by default. Turning it off (after a confirmation) delivers every file finalized from then on **without analysis**, flagged "not analysed: antivirus disabled": the sender is told by email and the download page warns the recipients. Files already waiting for analysis when you turn it off keep waiting for the antivirus; turning it back on never analyses files delivered in the meantime. The blocklist by fingerprint, the abuse detection and the forced download stay in force. Each change is recorded in the [audit log](topic:tenant-audit) (`tenant.antivirus_disabled`, `tenant.antivirus_enabled`). A delegated administrator sees the switch read-only. **Warning**: without analysis, the entity can be used to distribute malware; turn it off only knowingly. If the operator has disabled the antivirus for the whole instance (`TT_ANTIVIRUS_ENGINE=none`), the switch has no effect: no file is analysed, and the engine is shown read-only in the [system settings](topic:system-settings).
-- **End-to-end encryption**: **forbidden** (default), **allowed** or **required**. This setting is reserved to you. When allowed, senders using a client that implements end-to-end encryption can encrypt their files so that the server never holds the key and cannot read them. **Consequence: an encrypted file is never analysed by the antivirus** (it is flagged "not analysed: end-to-end encrypted" for the sender and the recipients), and the blocklist by fingerprint cannot apply to it; the address and domain blocklists and the abuse detection still do. **Required** therefore amounts to turning the antivirus off for every deposit of the entity (permanent drop link deposits become impossible). We recommend allowing it only for controlled confidentiality levels, whose recipients are known (each level can then tighten the setting, never loosen it, see [Confidentiality levels](topic:tenant-confidentiality)). A delegated administrator cannot change it. Each change is recorded in the [audit log](topic:tenant-audit) (`tenant.updated`). Senders encrypt from the browser interface (a box in the transfer form), and API clients that implement the format can do it too.
+- **End-to-end encryption**: **Forbidden** (default), **Allowed** or **Required**. This setting is reserved to you. When allowed, senders using a client that implements end-to-end encryption can encrypt their files so that the server never holds the key and cannot read them. **Consequence: an encrypted file is never analysed by the antivirus** (it is flagged "not analysed: end-to-end encrypted" for the sender and the recipients), and the blocklist by fingerprint cannot apply to it; the address and domain blocklists and the abuse detection still do. **Required** therefore amounts to turning the antivirus off for every deposit of the entity (permanent drop link deposits become impossible). We recommend allowing it only for controlled confidentiality levels, whose recipients are known (each level can then tighten the setting, never loosen it, see [Confidentiality levels](topic:tenant-confidentiality)). A delegated administrator cannot change it. Each change is recorded in the [audit log](topic:tenant-audit) (`tenant.updated`). Senders encrypt from the browser interface (a box in the transfer form), and API clients that implement the format can do it too.
 - **Link only**: allows the internal senders and the API tokens of the entity to create link-only transfers, whose link is mailed to no recipient but shown once to the sender (see “Sending with a link only” (depositor guide)). Off by default. This setting is reserved to you; each confidentiality level can then forbid it (see [Confidentiality levels](topic:tenant-confidentiality)). Link-only exposes a link anyone holding it can use, with no trace per recipient: turn it on knowingly. Turning the setting off does not affect existing transfers.
 
 **One-time secrets** are not reserved to you: you manage them like a delegated administrator, on the **Secrets settings** screen of any entity, **Enable one-time secrets** included (see the delegated administrator guide, [One-time secrets](topic:tenant-secrets)). Since 2.1 the module is **enabled by default in every entity, including those that existed before the upgrade**, with file attachments (10 MiB) and delivery by email allowed, and a delegated administrator can change these settings too, the file option included. After upgrading, review the settings of every entity, especially those with no delegated administrator, and turn off what an entity does not need.
@@ -107,9 +109,9 @@ Before turning the service on for an entity, check that its legal information gi
 
 You can create an entity from the configuration exported from another one, see [Exporting the configuration](topic:tenant-export). Import always creates a **new** entity, in the setup state: it never changes an existing entity.
 
-In the list of entities, click **Duplicate** on the row of the entity to copy, or click **Import a configuration** and choose a JSON file. Then enter the **Entity name**, the **Address (FQDN)** and the **Storage quota** of the new entity, and optionally its first delegated administrator, as in [Creating an entity](topic:tenant-create). The logo and the background image are imported only if the file contains them. The one-time secrets settings are copied and checked like the others: an invalid value is refused with its place (for example `/config/secretSettings/fileMaxBytes`). A file exported before 2.1 has no such settings: the new entity then gets the default ones, with the module enabled.
+In the list of entities, click **Duplicate** followed by the name of the entity on the row of the entity to copy, or click **Import a configuration** at the top right of the page header and choose a JSON file in **Configuration file (JSON)**. Then enter the **Entity name**, the **Address (FQDN)** and the **Storage quota** of the new entity, and optionally its first delegated administrator, as in [Creating an entity](topic:tenant-create). The logo and the background image are imported only if the file contains them. The one-time secrets settings are copied and checked like the others: an invalid value is refused with its place (for example `/config/secretSettings/fileMaxBytes`). A file exported before 2.1 has no such settings: the new entity then gets the default ones, with the module enabled.
 
-![Import a configuration screen, with the configuration file picker, the entity name, address and storage quota fields and the optional first delegated administrator](../screenshots/en/admin-tenant-import.png)
+![Import a configuration screen: the New entity card with the configuration file picker, the entity name, address and storage quota fields and the optional first delegated administrator](../screenshots/en/admin-tenant-import.png)
 
 The file is checked strictly, and the creation is all or nothing. If the file is refused, the message names the place of the first error (for example `/config/settings/maxTransferBytes`): fix it or export the source entity again. A file written by a newer version of TransTeira is refused as well, and an address already used by another entity is refused. Each import is recorded in the [audit log](topic:system-audit) (`tenant.imported`).
 
@@ -127,7 +129,7 @@ Some things are never copied, so complete them in the [setup wizard](topic:tenan
 
 Only you can configure single sign-on (OpenID Connect) for an entity; delegated administrators and auditors see the configuration in read-only mode. On the entity, open **Single sign-on** and fill in:
 
-![Single sign-on screen of an entity with the enable box, the issuer and the client ID](../screenshots/en/admin-tenant-sso.png)
+![Single sign-on screen of an entity: the Single sign-on settings card with Enable single sign-on ticked, the issuer, the client ID and the client secret, marked A secret is stored](../screenshots/en/admin-tenant-sso.png)
 
 - **Issuer**: the `https` address of the identity provider. For Microsoft Entra ID, use the issuer of your directory, `login.microsoftonline.com/<directory id>/v2.0`, preceded by `https://`; the multi-tenant addresses `common`, `organizations` and `consumers` are refused.
 - **Client ID** and **Client secret**: those of the application registered at the provider, with the redirect address `https://<administration host>/api/v1/admin/auth/oidc/callback`. The secret is never shown again; leave the field empty to keep the stored one. It is required again when the issuer or the client ID changes.
@@ -136,7 +138,7 @@ Only you can configure single sign-on (OpenID Connect) for an entity; delegated 
 - **Enforce single sign-on**: refuses the password sign-in of the delegated administrators and auditors of the entity. Their existing password sessions no longer reach the entity either, until they sign in through single sign-on. You are never affected.
 - **Enable single sign-on**: turns the feature on for the entity.
 
-Click **Test** before enabling: it checks that the provider can be reached and answers consistently, without signing anyone in. Changing the issuer or the client ID closes the single sign-on sessions of the entity and unpins the identities pinned for the previous provider (unless another entity of the account still uses it). Disabling or deleting the configuration closes the single sign-on sessions but keeps the pinned identities: they are unusable until a configuration with the same issuer and client ID returns.
+Save, then click **Test the issuer** in the **Test** card before enabling: it checks that the saved issuer can be reached and answers consistently, without signing anyone in. Changing the issuer or the client ID closes the single sign-on sessions of the entity and unpins the identities pinned for the previous provider (unless another entity of the account still uses it). Disabling or deleting the configuration closes the single sign-on sessions but keeps the pinned identities: they are unusable until a configuration with the same issuer and client ID returns.
 
 If the provider is down while single sign-on is enforced, sign in with your own account (you never use single sign-on: your password and second factor always work), untick **Enforce single sign-on** on the entity and save. Delegated administrators who have a password can then sign in again. Tick it again once the provider is back.
 
@@ -152,16 +154,16 @@ Every transfer, file, one-time secret (with its file and its keys), verified add
 <!-- topic: admins -->
 ## Administrator accounts
 
-The **Administrators** page lists every account with access to the administration. Its columns are **Username**, **Email address**, **Role**, **Entities**, **Two-factor authentication** (**Enabled**, **Not enabled** or **Required**), **Status** (**Active**, **Disabled** or **Pending activation**) and **Last sign-in**.
+The **Administrators** page lists every account with access to the administration. Its columns are **Username** (yours is followed by **(you)**), **Email address**, **Role**, **Entities**, **Two-factor authentication** (a pill: **Enabled**, **Not enabled** or **Required**), **Status** (a pill: **Active**, **Disabled** or **Pending activation**) and **Last sign-in**, followed by an **Edit** link.
 
-![List of administrators with their role, entities, two-factor authentication and status](../screenshots/en/admin-admins.png)
+![Administrators screen: the Create an administrator button in the page header and the list of accounts with their role, entities, two-factor authentication and status pills, last sign-in and Edit link](../screenshots/en/admin-admins.png)
 
 <!-- topic: admin-create -->
 ### Creating a delegated administrator
 
-A delegated administrator manages only the entities you attach to their account. An **auditor** is a read-only account on the entities you attach to it (see the [auditor guide](topic:auditor)), for example for a security officer or an audit. Click **Create an administrator** and fill in the form.
+A delegated administrator manages only the entities you attach to their account. An **auditor** is a read-only account on the entities you attach to it (see the [auditor guide](topic:auditor)), for example for a security officer or an audit. Click **Create an administrator** at the top right of the page header and fill in the form, which starts with the **Account details** card.
 
-![Form to create a delegated administrator with username, email address, attached entities and the two-factor requirement](../screenshots/en/admin-admin-create.png)
+![Create a delegated administrator screen: the Account details card with the role (Delegated administrator or Auditor (read-only)), the username, the email address and the attached entities](../screenshots/en/admin-admin-create.png)
 
 - **Role**: **Delegated administrator** (configures and operates the attached entities) or **Auditor (read-only)** (consults them and changes nothing). The auditor can read neither the configuration nor the instance screens. A super administrator is never created here: promote an activated account instead (see [Editing an account](topic:admin-edit)), and the role of an existing account can be changed to auditor the same way.
 - **Username**: 3 to 64 characters, lowercase letters, digits, dot, hyphen or underscore. It cannot be changed afterwards.
@@ -178,12 +180,12 @@ When no system SMTP server is configured, the mail delivery is refused with a me
 
 Click **Create the administrator**. The account is created without a password. With the mail delivery, a message confirms **Invitation sent** to the address, with the date until which the link is valid; the link itself cannot be retrieved. With the other one, an **Activation link** is shown **once**: click **Copy the link** and hand it over through another channel than the usual email (in person, by instant messaging or by phone), since anyone who gets it can set the password of the account. Then click **I have handed over the link**. The link is valid 72 hours and works once; what the person does with it is described in [Activating your account](topic:activation).
 
-To issue a new link for an account that is not activated yet (the mail did not arrive, the link expired), click **Send the invitation again…** on its row, choose the delivery as above, then click **Send the invitation**. The previous links are revoked, the new one is valid 72 hours, and at most 5 invitations per hour can be sent for the same account. The action is not offered once the account is activated. For a super administrator account, the link is never sent by mail: it is shown to you.
+To issue a new link for an account that is not activated yet (the mail did not arrive, the link expired), open the account with **Edit**, click **Send the invitation again…** in its **Actions** card, choose the delivery as above, then click **Send the invitation**. The previous links are revoked, the new one is valid 72 hours, and at most 5 invitations per hour can be sent for the same account. The action is not offered once the account is activated. For a super administrator account, the link is never sent by mail: it is shown to you.
 
 <!-- topic: admin-edit -->
 ### Editing an account
 
-Click **Edit** on the row of an account to change its email address, its attached entities, the two-factor requirement or its role, then click **Save**.
+Click **Edit** on the row of an account to change its email address, its attached entities, the two-factor requirement or its role, then click **Save**; **Back**, at the bottom of the page, returns to the list.
 
 - **Role**: only an activated account with two-factor authentication configured can become super administrator; its entity assignments are then removed. To demote a super administrator, select the entities to attach.
 - **Account disabled**: the account can no longer sign in and its open sessions are closed.
@@ -200,34 +202,35 @@ On the first single sign-on, the account is found by its verified email address 
 <!-- topic: admin-reset -->
 ### Lost password or device
 
-When an administrator has lost their password or their authentication device, reset their credentials. On their account, click **Reset credentials…**, then confirm: the password, two-factor authentication and recovery codes are erased, the sessions are closed, and a new activation link is shown once, to hand over as for a new account. A disabled account must be enabled first.
+When an administrator has lost their password or their authentication device, reset their credentials. Open their account with **Edit** and, in the **Actions** card, click **Reset credentials…**, then confirm: the password, two-factor authentication and recovery codes are erased, the sessions are closed, and a new activation link is shown once, to hand over as for a new account. A disabled account must be enabled first.
 
-To remove an account, click **Delete…** and confirm with **Delete permanently**. The audit log keeps track of its actions.
+To remove an account, click **Delete…** in the same card and confirm with **Delete permanently**. The audit log keeps track of its actions.
 
 If you are the only super administrator and lost your device, sign in with a recovery code (see [Recovery codes](topic:admin-recovery-codes)). If you have no recovery code left, or lost your password, an operator with access to the server can reset your account from the command line, for example `docker exec -it transteira transteira admin reset-totp <username>`: the commands are described in `docs/operations/admin.md`, sections "Losing the second factor" and "Losing the password".
 
 ## System
 
-The **System** entry gathers the settings of the whole instance. Its sub-navigation has eight screens: **Overview**, **Maintenance**, **Settings**, **Webhooks**, **Audit log**, **Security log**, **Master key** and **Provisioning tokens**. Delegated administrators do not see it.
+The **System** entry gathers the settings of the whole instance. On a system screen, its block in the sidebar, under **System**, lists eight screens: **Overview**, **Maintenance**, **Settings**, **Webhooks**, **Audit log**, **Security log**, **Master key** and **Provisioning tokens**. Delegated administrators do not see it.
 
 <!-- topic: system-overview -->
 ### System overview
 
 The system overview shows the activity of every entity and the use of the data disk. Choose the **Period**: **Last 7 days**, **Last 30 days** or **Last 12 months**.
 
-![System overview with the period, the data disk meter, the alert threshold and the table of entities](../screenshots/en/admin-system.png)
+![System overview: the period, the Transfers, Volume uploaded, Viruses blocked and Downloads tiles with their trend compared with the previous 30 days, the Disk used tile, and the start of the Data disk card with the alert threshold and the No alert pill](../screenshots/en/admin-system.png)
 
-- **Data disk**: the space used on the disk that holds the files, the alert threshold and a badge **Alert active** or **No alert**. The alert is raised at the threshold and cleared 5 points below it; **Change the alert threshold and address** opens the [System settings](topic:system-settings).
-- **Entities**: one row per active entity, with its **Transfers** and **Volume uploaded** over the period and its **Storage**.
+- **Tiles**: **Transfers**, **Volume uploaded**, **Viruses blocked** and **Downloads** over the period, for all the active entities, each with a trend compared with the previous 7 or 30 days (a neutral text, such as **Unchanged vs the previous 30 days**; no trend over 12 months), and **Disk used**, the share of the data disk in use with the space used out of the total, shown in its alert state while the disk alert is raised.
+- **Data disk** card: the space used on the disk that holds the files, on a meter that marks the alert threshold, the line **Alert threshold** with a pill **Alert active** or **No alert**. The alert is raised at the threshold and cleared 5 points below it; **Change the alert threshold and address** opens the [System settings](topic:system-settings).
+- **Entities** card: one row per active entity, with its name (a link to its General screen), its **Transfers**, **Volume uploaded**, **Viruses blocked** and **Downloads** over the period, and its **Storage** meter (with **Nearly full** or **Full** only when it applies).
 
 When no system SMTP server is configured, the warning **The disk alert is not sent by mail** appears: the alert is then only visible on this page, in the audit log and in the application log. To receive it by mail, set `TT_SYSTEM_SMTP_HOST`, `TT_SYSTEM_SMTP_FROM` and the related variables (see `.env.example`), then restart the application. The figures are indicative: the counters are updated about every 30 seconds.
 
 <!-- topic: system-version -->
 ### Version and updates
 
-The running TransTeira version is shown in the footer of the administration, for every administrator.
+The running TransTeira version is shown in the footer of the administration, for every administrator, and in the **System status** box of your home page, which also tells whether an update is available.
 
-The **Version** block of the [System overview](topic:system-overview) is reserved to the super administrator. It shows the running version, the **Latest published version** and the date of the **Last successful check**. The **Check now** button runs a check at once, at most once a minute for the whole instance. When a newer release exists, a notice appears with a link to its release page.
+The **Version** card, at the bottom of the [System overview](topic:system-overview), is reserved to the super administrator. It shows the running version, the **Latest published version** and the date of the **Last successful check**. The **Check now** button runs a check at once, at most once a minute for the whole instance. When a newer release exists, a notice appears with a link to its release page.
 
 TransTeira never updates itself: read the `CHANGELOG.md`, then follow the update procedure described in the installation documentation.
 
@@ -238,15 +241,15 @@ To turn the check off, for example on an air-gapped installation, set `TT_UPDATE
 
 Maintenance mode suspends new deposits during an update. While it is on, new deposits and invitations are refused on every entity and visitors see a maintenance page in their language; downloads, the administration and the health check keep working. Uploads in progress are suspended and resume once the mode is turned off.
 
-![Maintenance screen with the current state, the Maintenance mode on box and the warning about the messages](../screenshots/en/admin-system-maintenance.png)
+![Maintenance mode screen with the maintenance banner at the top, the Current state card (State On, Source, Since) and the Maintenance mode and messages card with its Maintenance mode on box, the warning about the messages and the message in French](../screenshots/en/admin-system-maintenance.png)
 
-**Current state** shows the **State**, the **Source** and the date the mode started (**Since**). To turn the mode on:
+The **Current state** card shows the **State**, the **Source** and the date the mode started (**Since**). To turn the mode on, in the **Maintenance mode and messages** card:
 
 1. Tick **Maintenance mode on**.
 2. If useful, write a **Message in French** and a **Message in English**: optional plain text, at most 500 characters, shown under the standard maintenance text. They are public on every entity: write nothing confidential. The **Preview** shows them as visitors will.
 3. Save, then confirm **Turn maintenance mode on?** with **Turn on**.
 
-To turn it off, untick the box, save and confirm with **Turn off**. While the mode is on, every administrator sees a banner at the top of the administration.
+To turn it off, untick the box, save and confirm with **Turn off**. While the mode is on, every administrator sees a banner at the top of the administration, with a **Manage maintenance mode** link.
 
 ![Public maintenance page seen by visitors](../screenshots/en/maintenance.png)
 
@@ -257,14 +260,14 @@ A typical update: turn maintenance mode on, wait for the uploads in progress to 
 <!-- topic: system-settings -->
 ### System settings (disk alert)
 
-The system settings hold the disk usage alert of the whole instance.
+The system settings hold the disk usage alert of the whole instance, in the **Disk usage alert** card.
 
-![System settings with the alert threshold and the additional alert address](../screenshots/en/admin-system-settings.png)
+![System settings screen: the Disk usage alert card with the alert threshold, the additional alert address, its warning and the Save button, and the Antivirus card with the engine and the last self-test](../screenshots/en/admin-system-settings.png)
 
 - **Alert threshold (% of the data disk)**: a percentage from 50 to 99, 85 by default. The alert is raised when disk usage reaches the threshold and clears once it falls 5 points below.
 - **Additional alert address**: optional, it receives the disk alert and the antivirus alert in addition to the super administrators. This address is not verified: type it a second time in **Alert address again** and check it carefully. Leave the field empty to remove it.
 
-Below the form, the **Antivirus** section shows the engine selected by the operator (read only) and, unless it is disabled, the result of the last **self-test**: outcome, date, signature when the test string was detected, and who started it (the instance or a super administrator). The self-test sends the harmless EICAR test string to the engine, which must report it infected. Click **Test the antivirus** to run it now; the result is announced and recorded in the [audit log](topic:system-audit) (`antivirus.self_test`). The button is not shown when the antivirus is disabled for the instance.
+Below, the **Antivirus** card shows the engine selected by the operator (read only) and, unless it is disabled, the result of the last **self-test**: outcome, date, signature when the test string was detected, and who started it (the instance or a super administrator). The self-test sends the harmless EICAR test string to the engine, which must report it infected. Click **Test the antivirus** to run it now; the result is announced and recorded in the [audit log](topic:system-audit) (`antivirus.self_test`). The button is not shown when the antivirus is disabled for the instance.
 
 A result other than **Detected (passed)** means that the engine does not do its job: it is unreachable, answers something unexpected, or does not report the test string (check its configuration and, for an HTTP engine, the verdict rules). Until a self-test passes, the engine is treated as unavailable and **files wait for analysis** (the antivirus alert follows after the usual delay). The instance retries by itself after a failure at startup; after a successful test it never repeats it by itself, and a test you run that fails closes the engine again.
 
@@ -275,7 +278,7 @@ Click **Save**. The alert mails go through the system SMTP server of the instanc
 
 The instance webhooks send the alerts of the whole instance to a Microsoft Teams or Slack channel, or to any JSON receiver, in addition to the alert emails. They work like the [webhooks of an entity](topic:tenant-webhooks), with other events: **Disk space alert**, **Disk space back to normal**, **Antivirus unavailable**, **Antivirus available again**, **Maintenance mode on**, **Maintenance mode off**, **Master key rotation completed**, **Master key rotation failed**, **Entity created by provisioning**, **Entity setup completed** and **Provisioning token created**. The last three concern the provisioning of entities, see [Provisioning tokens](topic:system-provisioning). They never receive the events of an entity, which are configured in each entity. The instance can have at most 20 webhooks.
 
-![List of the instance webhooks with their status and last delivery](../screenshots/en/admin-system-webhooks.png)
+![Instance webhooks screen: the Add a webhook button in the page header and a Slack webhook with its events, Enabled status, last delivery and its Test, Edit and Delete buttons](../screenshots/en/admin-system-webhooks.png)
 
 By default, the address of a webhook must use `https://` and lead to a public address; an address whose host name cannot be resolved is refused with the same message, so that the check reveals nothing of the internal DNS. Some networks can never be opened: unspecified addresses, link-local addresses (including the cloud metadata services), multicast, reserved and broadcast addresses, the networks of the TransTeira container itself, IPv4-compatible IPv6 addresses, and the ranges listed in `TT_WEBHOOK_DENY_NETWORKS`. The private ranges (RFC 1918, `100.64.0.0/10`, `fc00::/7` and the other reserved ranges listed in `.env.example`) are refused too, but the operator can open them for a receiver on the internal network by declaring its range in `TT_WEBHOOK_ALLOW_NETWORKS`. Plain `http://` is accepted only towards a range listed in `TT_WEBHOOK_ALLOW_HTTP_NETWORKS`, and that range must itself be reachable: a private range must also be listed in `TT_WEBHOOK_ALLOW_NETWORKS`. TransTeira refuses to start when an allowed range overlaps the networks that can never be opened, for example a range containing the Docker network of the container. These variables are described in `.env.example` and apply to the webhooks of every entity. Creating webhooks and entering new addresses is limited to 30 times per hour per administrator.
 
@@ -288,7 +291,7 @@ The instance can be monitored by Prometheus, Grafana, Zabbix or any script throu
 
 The global audit log gathers the audit events of every entity and of the instance itself. It works like the [Audit log](topic:tenant-audit) of an entity, with an extra **Entity** filter and column.
 
-![Global audit log with the Entity filter and the Entity column](../screenshots/en/admin-system-audit.png)
+![Global audit log screen: the filters card with the Entity filter (All entities and the instance) and the Action filter, and the list of events whose first column is the Entity](../screenshots/en/admin-system-audit.png)
 
 With **All entities and the instance**, the log also shows the events of the instance, marked **Instance**: setup, sign-ins and administrator accounts, maintenance mode, system settings, disk alerts, antivirus alerts, master key rotations and provisioning tokens (**Provisioning token created** and **Provisioning token revoked**). The events of an entity now include **Entity setup completed**, **Entity created by provisioning** and **Entity creation by provisioning refused**, and the sending of an invitation to a delegated administrator is recorded as **Administrator invited**. With an entity selected, only the events of that entity are shown. The one-time secrets actions of an entity (**One-time secrets** group: creation, reading, deletion, lock, settings change) are listed here too, without any content, key or link. Events are kept 12 months.
 
@@ -304,9 +307,9 @@ Filter by **Entity** (with **All entities and the instance**, the events without
 
 A provisioning token lets a managed service provider create entities by the API, without any access to the administration. The **Provisioning tokens** screen lists the tokens with their **Name**, **Prefix**, **Allowed IP ranges**, **Allowed FQDN suffixes**, **Entities created**, **Caps**, **Created**, **Last used**, **Expires** and **Status**. Revoked tokens stay listed. The technical side, for the provider, is in `docs/api/provisioning.md`.
 
-![Provisioning tokens screen with its introduction and the button to create a token](../screenshots/en/admin-provisioning-tokens.png)
+![Provisioning tokens screen: its introduction, the Create a provisioning token button in the page header and the card saying that there is no provisioning token yet](../screenshots/en/admin-provisioning-tokens.png)
 
-To create a token, click **Create a provisioning token** and fill in the form:
+To create a token, click **Create a provisioning token** at the top right of the page header and fill in the form:
 
 - **Name**: to recognise the token, for example the service provider it is given to.
 - **Allowed IP ranges**: one range per line (CIDR), the addresses the provider connects from. A range that allows any address is refused.
@@ -334,9 +337,9 @@ Proofs of deposit and delivery (see the [delegated administrator guide](topic:te
 
 The master key protects the encryption key of each file and the data keys of the one-time secrets, text and file (envelope encryption): it never encrypts the files directly. The cryptographic erasure destroys these keys when a secret is read, expires, is locked or is deleted, and a rotation re-wraps them like the file keys. A backup of the server taken while a secret was still waiting keeps its encrypted text and cannot be erased afterwards (a residual risk that is accepted): only the key of the secret, which is not on the server, and its passphrase protect it then. A copy of the master key must be kept in a password vault outside the VM, since a VM backup is unusable without it. The screen shows only key identifiers (`mk_` followed by 16 hexadecimal characters), never the keys themselves, and the administration cannot create, upload or download a key.
 
-![Master key screen with the current key, no new key configured and the steps to prepare a rotation](../screenshots/en/admin-system-master-key.png)
+![Master key screen: the Master keys card with the identifier of the current key and no new key configured, and the Prepare a rotation card with the steps to follow on the server](../screenshots/en/admin-system-master-key.png)
 
-Under **Master keys**, the screen shows the **Current key (TT_MASTER_KEY_FILE)** and the **New key (TT_MASTER_KEY_NEW_FILE)**, or **None configured**. Check these identifiers against the entries of your vault. After a completed rotation, a **Restart required** badge appears. **Latest rotation** gives the identifier, the **Status** (**Running**, **Completed** or **Failed**), the keys, the dates and the progress of the last rotation.
+In the **Master keys** card, the screen shows the **Current key (TT_MASTER_KEY_FILE)** and the **New key (TT_MASTER_KEY_NEW_FILE)**, or **None configured**. Check these identifiers against the entries of your vault. After a completed rotation, a **Restart required** badge appears. **Latest rotation** gives the identifier, the **Status** (**Running**, **Completed** or **Failed**), the keys, the dates and the progress of the last rotation.
 
 <!-- topic: master-key-rotation -->
 ### Rotating the master key

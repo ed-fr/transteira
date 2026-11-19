@@ -7,7 +7,7 @@
   //   stored; it must be typed again when the issuer or the client ID changes.
   // - Delegated admin and auditor: read-only view of the configuration.
   // The result of the test only shows translated text from closed lists, never a remote message.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { tick } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
@@ -24,6 +24,8 @@
   import { adminApi, adminSession } from '../../api';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import FormSection from '../../components/FormSection.svelte';
+  import Card from '../../components/Card.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import LineListEditor from '../../components/LineListEditor.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
@@ -161,10 +163,11 @@
   }
 </script>
 
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminTenants.sso.title')}</h1>
-  <HelpIcon topic="tenant-sso" title={t('adminTenants.sso.title')} {nav} />
-</div>
+<PageHeader title={t('adminTenants.sso.title')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-sso" title={t('adminTenants.sso.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if loading}
   <p><Spinner showLabel /></p>
@@ -180,35 +183,39 @@
     {#if saved === undefined}
       <Alert severity="info" live={false}>{t('adminTenants.sso.notConfigured')}</Alert>
     {:else}
-      <dl class="tt-dl">
-        <dt>{t('adminTenants.sso.status.label')}</dt>
-        <dd>
-          <StatusBadge
-            variant={saved.enabled ? 'ok' : 'info'}
-            label={t(saved.enabled ? 'adminTenants.sso.status.enabled' : 'adminTenants.sso.status.disabled')}
-          />
-        </dd>
-        <dt>{t('adminTenants.sso.issuer.label')}</dt>
-        <dd class="tt-break">{saved.issuer}</dd>
-        <dt>{t('adminTenants.sso.clientId.label')}</dt>
-        <dd class="tt-break">{saved.clientId}</dd>
-        <dt>{t('adminTenants.sso.clientSecret.label')}</dt>
-        <dd>
-          {t(saved.hasClientSecret ? 'adminTenants.sso.secretStored' : 'adminTenants.sso.secretMissing')}
-        </dd>
-        <dt>{t('adminTenants.sso.emailDomains.label')}</dt>
-        <dd>
-          <ul class="tt-list-plain">
-            {#each saved.emailDomains as domain (domain)}
-              <li>{domain}</li>
-            {/each}
-          </ul>
-        </dd>
-        <dt>{t('adminTenants.sso.enforced.label')}</dt>
-        <dd>{t(saved.enforced ? 'adminTenants.sso.yes' : 'adminTenants.sso.no')}</dd>
-        <dt>{t('adminTenants.sso.requireMfa.label')}</dt>
-        <dd>{t(saved.requireMfa ? 'adminTenants.sso.yes' : 'adminTenants.sso.no')}</dd>
-      </dl>
+      <Card>
+        <dl class="tt-dl">
+          <dt>{t('adminTenants.sso.status.label')}</dt>
+          <dd>
+            <StatusBadge
+              variant={saved.enabled ? 'ok' : 'info'}
+              label={t(
+                saved.enabled ? 'adminTenants.sso.status.enabled' : 'adminTenants.sso.status.disabled',
+              )}
+            />
+          </dd>
+          <dt>{t('adminTenants.sso.issuer.label')}</dt>
+          <dd class="tt-break">{saved.issuer}</dd>
+          <dt>{t('adminTenants.sso.clientId.label')}</dt>
+          <dd class="tt-break">{saved.clientId}</dd>
+          <dt>{t('adminTenants.sso.clientSecret.label')}</dt>
+          <dd>
+            {t(saved.hasClientSecret ? 'adminTenants.sso.secretStored' : 'adminTenants.sso.secretMissing')}
+          </dd>
+          <dt>{t('adminTenants.sso.emailDomains.label')}</dt>
+          <dd>
+            <ul class="tt-list-plain">
+              {#each saved.emailDomains as domain (domain)}
+                <li>{domain}</li>
+              {/each}
+            </ul>
+          </dd>
+          <dt>{t('adminTenants.sso.enforced.label')}</dt>
+          <dd>{t(saved.enforced ? 'adminTenants.sso.yes' : 'adminTenants.sso.no')}</dd>
+          <dt>{t('adminTenants.sso.requireMfa.label')}</dt>
+          <dd>{t(saved.requireMfa ? 'adminTenants.sso.yes' : 'adminTenants.sso.no')}</dd>
+        </dl>
+      </Card>
     {/if}
   {:else}
     <FormSection
@@ -302,9 +309,11 @@
     </FormSection>
 
     {#if saved !== undefined}
-      <section aria-labelledby="{uid}-test-title" class="tt-mt-6">
-        <h2 id="{uid}-test-title">{t('adminTenants.sso.test.title')}</h2>
-        <p>{t('adminTenants.sso.test.intro')}</p>
+      <Card
+        title={t('adminTenants.sso.test.title')}
+        headingId="{uid}-test-title"
+        description={t('adminTenants.sso.test.intro')}
+      >
         {#if dirty}
           <p class="tt-text-muted">{t('adminTenants.sso.test.saveFirst')}</p>
         {/if}
@@ -332,15 +341,17 @@
             </Alert>
           {/if}
         </div>
-      </section>
+      </Card>
 
-      <section aria-labelledby="{uid}-remove-title" class="tt-mt-6">
-        <h2 id="{uid}-remove-title">{t('adminTenants.sso.remove.title')}</h2>
-        <p>{t('adminTenants.sso.remove.text')}</p>
+      <Card
+        title={t('adminTenants.sso.remove.title')}
+        headingId="{uid}-remove-title"
+        description={t('adminTenants.sso.remove.text')}
+      >
         <Button variant="danger" onclick={() => (removeOpen = true)}
           >{t('adminTenants.sso.remove.action')}</Button
         >
-      </section>
+      </Card>
       <ConfirmDialog
         bind:open={removeOpen}
         title={t('adminTenants.sso.remove.confirmTitle')}

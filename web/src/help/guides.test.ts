@@ -1,7 +1,8 @@
 // The real user guides of docs/user against the route tables of the two applications: every help
 // topic of a screen opens a section in both languages, in a guide of the right application, and
 // a topic of a screen a delegated admin can open is in the guide offered to a delegated admin;
-// every contextual help icon (HelpIcon) uses the topic of a route of its application.
+// every contextual help icon (HelpIcon) uses the topic of a route of its application, and every
+// authenticated admin screen shows one in its PageHeader, with the topic of its route.
 import { describe, expect, it } from 'vitest';
 import manifestEntries from '../../../docs/user/screenshots/manifest.json';
 import { auditorRedirect } from '../admin/auth/guard';
@@ -157,7 +158,45 @@ const routeTopics = {
   ),
 };
 
+/** The screen sources of an admin component and of the screen components it imports (one level). */
+function screenSources(file: string): string[] {
+  const source = components[file] ?? '';
+  const base = new URL(file, 'http://web/src/help/');
+  const imported = [...source.matchAll(/^\s*import \w+ from '(\.{1,2}\/[^']+\.svelte)';$/gm)].map(
+    ([, spec]) => `..${new URL(spec ?? '', base).pathname.slice('/src'.length)}`,
+  );
+  return [file, ...imported.filter((f) => f.startsWith('../admin/screens/'))];
+}
+
 describe('contextual help icons', () => {
+  it('are shown by every authenticated admin screen, with the topic of its route', () => {
+    // Screens by component name (the file name): two screens with the same name would be ambiguous.
+    const screenFiles = Object.keys(components).filter((file) => file.startsWith('../admin/screens/'));
+    const screens = new Map(
+      screenFiles.map((file) => [file.slice(file.lastIndexOf('/') + 1, -'.svelte'.length), file]),
+    );
+    expect(screens.size).toBe(screenFiles.length);
+    const icons = helpIcons();
+    const problems: string[] = [];
+    for (const route of adminRoutes) {
+      if (route.helpTopic === undefined || (route.access !== 'auth' && route.access !== 'super')) continue;
+      const file = screens.get(route.component.name);
+      if (file === undefined) {
+        problems.push(`${route.pattern}: source of ${route.component.name} not found`);
+        continue;
+      }
+      const files = screenSources(file);
+      const shown = icons.some((icon) => files.includes(icon.file) && icon.topic === route.helpTopic);
+      const inHeader = files.some((f) => (components[f] ?? '').includes('{#snippet help()}'));
+      if (!shown || !inHeader) {
+        problems.push(
+          `${route.pattern}: no HelpIcon topic="${route.helpTopic}" in the PageHeader help snippet`,
+        );
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
   it('use the literal topic of a route, which opens a section of their application in every language', () => {
     const icons = helpIcons();
     expect(icons.length).toBeGreaterThan(0);

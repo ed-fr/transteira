@@ -1,17 +1,47 @@
 {
-  "welcome": "Welcome, {username}.",
+  "greeting": {
+    "superCount": {
+      "one": "Hello, {username} · Instance overview · {count} entity",
+      "other": "Hello, {username} · Instance overview · {count} entities"
+    },
+    "delegatedOne": "Hello, {username} · Overview of {name}",
+    "delegatedMany": {
+      "one": "Hello, {username} · Overview of your {count} entity",
+      "other": "Hello, {username} · Overview of your {count} entities"
+    },
+    "auditorOne": "Hello, {username} · Read-only overview of {name}",
+    "auditorMany": {
+      "one": "Hello, {username} · Read-only overview of your {count} entity",
+      "other": "Hello, {username} · Read-only overview of your {count} entities"
+    },
+    "plain": "Hello, {username}"
+  },
+  "newTenant": "New entity",
   "totpRecommended": "Two-factor authentication is not enabled on your account. We recommend enabling it.",
   "accountLink": "Enable it from My account",
   "noTenant": "No entity is attached to your account yet. Ask a super administrator to attach you to an entity.",
   "tenantsTitle": "Entities",
-  "periodNote": "Figures for the last 30 days. Storage shows the current usage.",
-  "allTenants": "Open the full list of entities",
-  "card": {
+  "seeAll": "See all",
+  "seeAllName": "See all the entities",
+  "tiles": {
+    "title": "Key figures of the last 30 days",
+    "loading": "Loading the key figures…",
+    "error": "The key figures could not be loaded.",
+    "errorTenants": "The statistics of {names} could not be loaded.",
     "transfers": "Transfers (30 days)",
-    "volume": "Volume uploaded (30 days)",
-    "loading": "Loading the statistics of {name}…",
-    "error": "The statistics of {name} could not be loaded.",
-    "retry": "Try again"
+    "volume": "Volume exchanged (30 days)",
+    "viruses": "Viruses blocked (30 days)",
+    "disk": "Disk",
+    "diskText": "Alert at {threshold} · {free} free",
+    "diskFree": "{free} free",
+    "diskValueText": "{percent} used: {used} of {total}",
+    "diskAlertActive": "The disk alert is raised.",
+    "diskMailOff": "The alert is not sent by mail.",
+    "storage": "Storage used",
+    "storageText": "{used} of {quota} · alert at {threshold}"
+  },
+  "shortcuts": {
+    "title": "Shortcuts"
   },
   "links": {
     "transfers": "Transfers of {name}",
@@ -22,9 +52,55 @@
   "table": {
     "caption": "Entities and storage usage",
     "empty": "No entity yet. Create one from the Entities page.",
-    "name": "Name",
-    "fqdn": "Domain name",
+    "entity": "Entity",
     "status": "Status",
-    "storage": "Storage"
+    "storage": "Storage",
+    "storageOf": "Storage of {name}",
+    "actions": "Actions",
+    "configure": "Configure",
+    "configureName": "Configure {name}",
+    "open": "Open",
+    "openName": "Open {name}"
+  },
+  "system": {
+    "title": "System status",
+    "loading": "Loading the system status…",
+    "error": "The system status could not be loaded.",
+    "application": "Application",
+    "database": "Database",
+    "databaseValue": "{engine} · {status}",
+    "antivirus": "Antivirus",
+    "antivirusEngine": "Antivirus ({engine})",
+    "storage": "File storage",
+    "maintenance": "Maintenance mode",
+    "manageMaintenance": "Manage maintenance mode",
+    "status": {
+      "operational": "Operational",
+      "degraded": "Degraded",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "disabled": "Disabled",
+      "active": "Active",
+      "inactive": "Inactive",
+      "unknown": "Unknown"
+    },
+    "engines": {
+      "sqlite": "SQLite",
+      "postgres": "PostgreSQL",
+      "clamd": "clamd",
+      "icap": "ICAP",
+      "http": "HTTP API"
+    },
+    "source": {
+      "environment": "Forced by the environment",
+      "admin": "Turned on by a super administrator"
+    },
+    "version": {
+      "label": "Version",
+      "upToDate": "{version} · up to date",
+      "update": "{version} · update available: {latest}",
+      "unchecked": "{version} · not checked yet",
+      "checkOff": "{version} · update check off"
+    }
   }
 }

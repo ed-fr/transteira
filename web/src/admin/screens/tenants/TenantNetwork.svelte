@@ -9,12 +9,13 @@
   // - the lists then show the values saved by the server, which normalises them again;
   // - version 2.0: for a tenant being set up whose rules no admin ever saved (a configuration
   //   import), a notice asks to check them and a "Confirm" button saves them unchanged.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, Checkbox, HelpIcon, Spinner } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import LineListEditor from '../../components/LineListEditor.svelte';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
   import { MAX_INTERNAL_CIDRS, parseCidr, parseCidrList } from '../../forms/cidr';
@@ -246,10 +247,11 @@
   }
 </script>
 
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminTenants.network.title')}</h1>
-  <HelpIcon topic="tenant-network" title={t('adminTenants.network.title')} {nav} />
-</div>
+<PageHeader title={t('adminTenants.network.title')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-network" title={t('adminTenants.network.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if loading}
   <p><Spinner showLabel /></p>

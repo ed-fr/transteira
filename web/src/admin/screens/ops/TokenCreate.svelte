@@ -8,12 +8,14 @@
   // Threat model T-167: the secret lives only in this component's state, is cleared when the
   // modal closes and when the screen goes away (navigation, sign-out), and is never put in the
   // URL, in storage, in a log or in an announcement.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { onDestroy } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, Checkbox, HelpIcon, TextField } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
+  import ActionLink from '../../components/ActionLink.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import LineListEditor from '../../components/LineListEditor.svelte';
   import SecretOnceModal from '../../components/SecretOnceModal.svelte';
@@ -100,11 +102,14 @@
   });
 </script>
 
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminOps.tokens.createTitle')}</h1>
-  <HelpIcon topic="tenant-tokens" title={t('adminOps.tokens.createTitle')} {nav} />
-</div>
-<p>{t('adminOps.tokens.intro')}</p>
+<PageHeader title={t('adminOps.tokens.createTitle')} description={t('adminOps.tokens.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-tokens" title={t('adminOps.tokens.createTitle')} {nav} />
+  {/snippet}
+  {#snippet actions()}
+    <ActionLink to={listPath} {nav} variant="secondary">{t('opsTokens.form.back')}</ActionLink>
+  {/snippet}
+</PageHeader>
 
 <FormSection
   title={t('opsTokens.form.title')}
@@ -190,8 +195,6 @@
     bind:checked={form.expressAllowed}
   />
 </FormSection>
-
-<p class="tt-mt-6"><a href={nav.href(listPath)} use:nav.link>{t('opsTokens.form.back')}</a></p>
 
 {#if secret !== ''}
   <SecretOnceModal

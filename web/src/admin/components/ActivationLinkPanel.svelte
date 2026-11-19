@@ -74,7 +74,7 @@
 
 <svelte:window onbeforeunload={onBeforeUnload} />
 
-<section class="tt-activation tt-card" aria-labelledby="{uid}-title">
+<section class="tt-activation" aria-labelledby="{uid}-title">
   <svelte:element
     this={`h${headingLevel}`}
     id="{uid}-title"
@@ -110,7 +110,11 @@
 
 <style>
   .tt-activation {
-    margin-bottom: var(--tt-space-6);
+    margin-bottom: var(--tt-space-4);
+    padding: var(--tt-space-5);
+    border: var(--tt-border-width) solid var(--tt-separator);
+    border-radius: var(--tt-radius-lg);
+    background: var(--tt-surface);
   }
 
   .tt-activation__field {

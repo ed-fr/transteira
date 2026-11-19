@@ -6,12 +6,13 @@
   // external quotas. Client-side validation mirrors the specification; the field errors of the
   // server (problem pointers) are shown next to the fields. An admin without the right to change
   // the tenant gets the 403 of the server on save.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Checkbox, HelpIcon, Spinner, TextField } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
   import type { AdminScreenProps } from '../types';
   import {
@@ -128,10 +129,11 @@
   }
 </script>
 
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminAbuse.thresholds.title')}</h1>
-  <HelpIcon topic="tenant-abuse" title={t('adminAbuse.thresholds.title')} {nav} />
-</div>
+<PageHeader title={t('adminAbuse.thresholds.title')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-abuse" title={t('adminAbuse.thresholds.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if loading}
   <p><Spinner showLabel /></p>

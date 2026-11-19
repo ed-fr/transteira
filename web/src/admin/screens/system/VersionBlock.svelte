@@ -9,6 +9,7 @@
   import { Alert, Button, Spinner, announce } from '../../../shared/components';
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
+  import Card from '../../components/Card.svelte';
   import {
     checkFailureText,
     checkResultText,
@@ -66,71 +67,72 @@
   });
 </script>
 
-<h2>{t('sysVersion.title')}</h2>
-{#if loadError !== ''}
-  <Alert severity="error">
-    <p>{loadError}</p>
-    <Button variant="secondary" onclick={() => void load()}>{t('common.retry')}</Button>
-  </Alert>
-{:else if info === undefined || check === undefined}
-  <Spinner />
-{:else}
-  <dl class="tt-version__list">
-    <dt>{t('sysVersion.running')}</dt>
-    <dd>{info.version}</dd>
-    {#if info.commit !== undefined && info.commit !== ''}
-      <dt>{t('sysVersion.commit')}</dt>
-      <dd class="tt-break"><code>{info.commit}</code></dd>
-    {/if}
-    {#if check.enabled}
-      <dt>{t('sysVersion.latest')}</dt>
-      <dd>{check.latestVersion ?? t('sysVersion.latestNone')}</dd>
-      <dt>{t('sysVersion.checkedAt')}</dt>
-      <dd>
-        {check.checkedAt === null
-          ? t('sysVersion.checkedAtNone')
-          : formatDate(check.checkedAt, { dateStyle: 'medium', timeStyle: 'short' })}
-      </dd>
-    {/if}
-  </dl>
-
-  {#if !check.enabled}
-    <Alert severity="info" live={false}><p>{t('sysVersion.disabled')}</p></Alert>
+<Card title={t('sysVersion.title')}>
+  {#if loadError !== ''}
+    <Alert severity="error">
+      <p>{loadError}</p>
+      <Button variant="secondary" onclick={() => void load()}>{t('common.retry')}</Button>
+    </Alert>
+  {:else if info === undefined || check === undefined}
+    <Spinner />
   {:else}
-    {#if notice.visible}
-      <Alert severity="info" live={false}>
-        <p>
-          <strong>{t('sysVersion.available', { version: notice.latest })}</strong>
-          {#if notice.releaseUrl !== undefined}
-            <a href={notice.releaseUrl} target="_blank" rel="noopener noreferrer">
-              {t('sysVersion.releaseLink', { version: notice.latest })}
-              <span class="visually-hidden">{t('sysVersion.newWindow')}</span>
-            </a>
-          {/if}
-        </p>
-        <p>{t('sysVersion.procedure')}</p>
-      </Alert>
-    {:else if errorKey === undefined && check.checkedAt !== null}
-      <p>{t('sysVersion.upToDate')}</p>
+    <dl class="tt-version__list">
+      <dt>{t('sysVersion.running')}</dt>
+      <dd>{info.version}</dd>
+      {#if info.commit !== undefined && info.commit !== ''}
+        <dt>{t('sysVersion.commit')}</dt>
+        <dd class="tt-break"><code>{info.commit}</code></dd>
+      {/if}
+      {#if check.enabled}
+        <dt>{t('sysVersion.latest')}</dt>
+        <dd>{check.latestVersion ?? t('sysVersion.latestNone')}</dd>
+        <dt>{t('sysVersion.checkedAt')}</dt>
+        <dd>
+          {check.checkedAt === null
+            ? t('sysVersion.checkedAtNone')
+            : formatDate(check.checkedAt, { dateStyle: 'medium', timeStyle: 'short' })}
+        </dd>
+      {/if}
+    </dl>
+
+    {#if !check.enabled}
+      <Alert severity="info" live={false}><p>{t('sysVersion.disabled')}</p></Alert>
+    {:else}
+      {#if notice.visible}
+        <Alert severity="info" live={false}>
+          <p>
+            <strong>{t('sysVersion.available', { version: notice.latest })}</strong>
+            {#if notice.releaseUrl !== undefined}
+              <a href={notice.releaseUrl} target="_blank" rel="noopener noreferrer">
+                {t('sysVersion.releaseLink', { version: notice.latest })}
+                <span class="visually-hidden">{t('sysVersion.newWindow')}</span>
+              </a>
+            {/if}
+          </p>
+          <p>{t('sysVersion.procedure')}</p>
+        </Alert>
+      {:else if errorKey === undefined && check.checkedAt !== null}
+        <p>{t('sysVersion.upToDate')}</p>
+      {/if}
+      {#if errorKey !== undefined}
+        <Alert severity="warning" live={false}><p>{t(errorKey)}</p></Alert>
+      {/if}
+      {#if checkError !== ''}
+        <Alert severity="error"><p>{checkError}</p></Alert>
+      {/if}
+      <p>
+        <Button
+          variant="secondary"
+          loading={checking}
+          loadingLabel={t('sysVersion.checking')}
+          onclick={() => void checkNow()}
+        >
+          {t('sysVersion.check')}
+        </Button>
+      </p>
     {/if}
-    {#if errorKey !== undefined}
-      <Alert severity="warning" live={false}><p>{t(errorKey)}</p></Alert>
-    {/if}
-    {#if checkError !== ''}
-      <Alert severity="error"><p>{checkError}</p></Alert>
-    {/if}
-    <p>
-      <Button
-        variant="secondary"
-        loading={checking}
-        loadingLabel={t('sysVersion.checking')}
-        onclick={() => void checkNow()}
-      >
-        {t('sysVersion.check')}
-      </Button>
-    </p>
   {/if}
-{/if}
+</Card>
 
 <style>
   .tt-version__list {

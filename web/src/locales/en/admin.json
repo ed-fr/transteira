@@ -13,7 +13,8 @@
     "signingOut": "Signing out…",
     "signedInAs": "Signed in as {username}",
     "roleOf": "Role: {role}",
-    "tenantNav": "Configuration of the entity {name}"
+    "tenantNav": "Configuration of the entity {name}",
+    "menu": "Menu"
   },
   "role": {
     "super_admin": "Super administrator",
@@ -23,6 +24,9 @@
   },
   "home": {
     "title": "Home"
+  },
+  "search": {
+    "title": "Search"
   },
   "common": {
     "save": "Save",

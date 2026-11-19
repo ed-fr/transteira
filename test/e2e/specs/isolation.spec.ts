@@ -145,6 +145,71 @@ test.describe('tenant isolation (delegated admin of entity A)', () => {
     });
   }
 
+  test('searching for entity B (its sender address, its recipient address, its transfer id) finds nothing', async ({
+    page,
+    state,
+  }) => {
+    const transferId = await entityBTransferId();
+    const b = state.tenants.b;
+    const senderB = internalEmail('isolation-b-search-sender');
+    const recipientB = internalEmail('isolation-b-search-recipient');
+    const token = await createTenantToken(b.id, `isolation search ${Date.now()}`);
+    const own = await tokenDeposit(
+      token.token,
+      senderB,
+      { recipients: [recipientB], files: [textFile('entity-b-search.txt', 'entity B search')] },
+      { host: HOSTS.b },
+    );
+    const searchCalls: Response[] = [];
+    page.on('response', (res) => {
+      if (res.url().endsWith('/api/v1/admin/transfers/search')) searchCalls.push(res);
+    });
+    await page.goto(`${ORIGINS.admin}/admin/`);
+    const box = page.getByRole('searchbox', { name: 'Search', exact: true });
+    for (const [query, empty] of [
+      [senderB, 'No transfer of your entities was sent from or to this address.'],
+      [recipientB, 'No transfer of your entities was sent from or to this address.'],
+      [own.id, 'No transfer of your entities has this identifier.'],
+      [transferId, 'No transfer of your entities has this identifier.'],
+    ] as const) {
+      await box.fill(query);
+      await box.press('Enter');
+      await expect(page.getByText(empty)).toBeVisible();
+      await expect(page.getByRole('table', { name: 'Transfers found' })).toHaveCount(0);
+      expect(page.url()).not.toContain(query);
+      const html = (await page.content()).replaceAll(query, '');
+      for (const marker of [b.name, b.fqdn, b.id, own.id, transferId, 'entity-b-search.txt']) {
+        expect(html, `DOM must not reveal "${marker}"`).not.toContain(marker);
+      }
+      // Back to the home page for the next query (the form of the header).
+      await page.goto(`${ORIGINS.admin}/admin/`);
+    }
+    for (const res of searchCalls) {
+      expect(res.status()).toBe(200);
+      const body = (await res.json()) as { items: unknown[]; tenants: unknown[] };
+      expect(body.items).toEqual([]);
+      expect(body.tenants).toEqual([]);
+    }
+    expect(searchCalls).toHaveLength(4);
+
+    // The same on the API, with the delegate session: nothing of entity B, whatever the query.
+    const api = delegateApi();
+    for (const q of [senderB, recipientB, own.id, transferId]) {
+      const res = await api.call<{ items: unknown[]; tenants: unknown[] }>(
+        'POST',
+        '/admin/transfers/search',
+        {
+          q,
+          limit: 50,
+        },
+      );
+      expect(res.status, q).toBe(200);
+      expect(res.json.items, q).toEqual([]);
+      expect(res.json.tenants, q).toEqual([]);
+      expect(res.text).not.toContain(b.name);
+    }
+  });
+
   test('an entity-B transfer id under the entity-A path is "Transfer not found"', async ({
     page,
     state,

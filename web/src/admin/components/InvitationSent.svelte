@@ -42,7 +42,7 @@
   });
 </script>
 
-<section class="tt-card tt-mb-4" aria-labelledby="{uid}-title">
+<section class="tt-sent" aria-labelledby="{uid}-title">
   <svelte:element
     this={`h${headingLevel}`}
     id="{uid}-title"
@@ -59,3 +59,13 @@
   <p>{t('adminAccounts.invitation.sent.notShown')}</p>
   <Button onclick={ondone}>{doneLabel}</Button>
 </section>
+
+<style>
+  .tt-sent {
+    margin-bottom: var(--tt-space-4);
+    padding: var(--tt-space-5);
+    border: var(--tt-border-width) solid var(--tt-separator);
+    border-radius: var(--tt-radius-lg);
+    background: var(--tt-surface);
+  }
+</style>

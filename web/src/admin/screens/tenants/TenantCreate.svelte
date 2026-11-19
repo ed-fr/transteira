@@ -15,13 +15,22 @@
   // shown and the entity is created with the default background (changeable later in Branding).
   import { tick } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Checkbox, RadioGroup, Spinner, TextField, announce } from '../../../shared/components';
+  import {
+    Alert,
+    Checkbox,
+    HelpIcon,
+    RadioGroup,
+    Spinner,
+    TextField,
+    announce,
+  } from '../../../shared/components';
   import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import ActivationLinkPanel from '../../components/ActivationLinkPanel.svelte';
   import BackgroundPresetPicker from '../../components/BackgroundPresetPicker.svelte';
   import { DEFAULT_PRESET, type PresetItem } from '../../components/backgroundPresets';
   import ByteSizeField from '../../components/ByteSizeField.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
   import InvitationFields from '../../components/InvitationFields.svelte';
@@ -198,7 +207,11 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('adminTenants.create.title')}</h1>
+<PageHeader title={t('adminTenants.create.title')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-create" title={t('adminTenants.create.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if result !== undefined}
   <Alert severity="success">{t('adminTenants.create.created', { name: result.tenant.name })}</Alert>
@@ -221,6 +234,7 @@
   <FormSection
     title={t('adminTenants.create.legend')}
     as="fieldset"
+    card
     intro={t('adminTenants.create.intro')}
     {dirty}
     addGuard={(guard) => nav.addGuard(guard)}

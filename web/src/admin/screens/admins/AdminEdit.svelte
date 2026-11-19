@@ -17,10 +17,22 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, Checkbox, RadioGroup, TextField, announce } from '../../../shared/components';
+  import {
+    Alert,
+    Button,
+    Checkbox,
+    HelpIcon,
+    RadioGroup,
+    TextField,
+    announce,
+  } from '../../../shared/components';
   import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import ActivationLinkPanel from '../../components/ActivationLinkPanel.svelte';
+  import ActionLink from '../../components/ActionLink.svelte';
+  import Card from '../../components/Card.svelte';
+  import DataTable from '../../components/DataTable.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
@@ -343,21 +355,46 @@
   });
 </script>
 
+{#snippet identityIssuerCell(identity: IdentityRow)}<span class="tt-break">{identity.issuer}</span>{/snippet}
+{#snippet identityClientCell(identity: IdentityRow)}<span class="tt-break">{identity.clientId}</span
+  >{/snippet}
+{#snippet identityLinkedCell(identity: IdentityRow)}{identity.linkedAt}{/snippet}
+{#snippet identityActionCell(identity: IdentityRow)}
+  <Button
+    variant="secondary"
+    small
+    onclick={() => {
+      unpinTarget = identity;
+      unpinOpen = true;
+    }}
+  >
+    {t('adminAccounts.sso.identities.unpin')}
+    <span class="visually-hidden"> {identity.issuer}</span>
+  </Button>
+{/snippet}
+
 {#if loading}
-  <h1 tabindex="-1">{t('adminAccounts.list.title')}</h1>
+  <PageHeader title={t('adminAccounts.list.title')} />
   <p>{t('admin.common.loading')}</p>
 {:else if notFound}
-  <h1 tabindex="-1">{t('adminAccounts.notFound.title')}</h1>
-  <p>{t('adminAccounts.notFound.text')}</p>
-  <p><a href={nav.href('/admins')} use:nav.link>{t('admin.common.back')}</a></p>
+  <PageHeader title={t('adminAccounts.notFound.title')} description={t('adminAccounts.notFound.text')}>
+    {#snippet actions()}
+      <ActionLink to="/admins" {nav} variant="secondary">{t('admin.common.back')}</ActionLink>
+    {/snippet}
+  </PageHeader>
 {:else if admin === undefined || form === undefined || actions === undefined}
-  <h1 tabindex="-1">{t('adminAccounts.list.title')}</h1>
+  <PageHeader title={t('adminAccounts.list.title')} />
   <Alert severity="error">
     <p>{loadError}</p>
     <Button variant="secondary" small onclick={() => void load()}>{t('common.retry')}</Button>
   </Alert>
 {:else}
-  <h1 tabindex="-1" bind:this={heading}>{t('adminAccounts.form.editTitle', { username: admin.username })}</h1>
+  {@const editTitle = t('adminAccounts.form.editTitle', { username: admin.username })}
+  <PageHeader title={editTitle} bind:element={heading}>
+    {#snippet help()}
+      <HelpIcon topic="admins" title={editTitle} {nav} />
+    {/snippet}
+  </PageHeader>
 
   {#if sent !== undefined}
     <Alert severity="success">{notice}</Alert>
@@ -377,37 +414,39 @@
       ondone={() => void linkDone()}
     />
   {:else}
-    <dl class="tt-dl">
-      <dt>{t('adminAccounts.list.columns.email')}</dt>
-      <dd>{admin.email}</dd>
-      <dt>{t('adminAccounts.list.columns.role')}</dt>
-      <dd>{t(roleKey(admin.role))}</dd>
-      <dt>{t('adminAccounts.list.columns.status')}</dt>
-      <dd>
-        <StatusBadge
-          variant={statusVariant(accountStatus(admin))}
-          label={t(`adminAccounts.status.${accountStatus(admin)}`)}
-        />
-      </dd>
-      <dt>{t('adminAccounts.list.columns.totp')}</dt>
-      <dd>
-        <StatusBadge
-          variant={statusVariant(totpStatus(admin))}
-          label={t(`adminAccounts.totp.${totpStatus(admin)}`)}
-        />
-      </dd>
-      {#if isSsoOnly(admin)}
-        <dt>{t('adminAccounts.sso.signIn')}</dt>
+    <Card padding="lg">
+      <dl class="tt-dl tt-admin-edit__summary">
+        <dt>{t('adminAccounts.list.columns.email')}</dt>
+        <dd>{admin.email}</dd>
+        <dt>{t('adminAccounts.list.columns.role')}</dt>
+        <dd>{t(roleKey(admin.role))}</dd>
+        <dt>{t('adminAccounts.list.columns.status')}</dt>
         <dd>
-          <StatusBadge variant="info" label={t('adminAccounts.sso.badge')} />
-          <span class="tt-text-sm tt-text-muted">{t('adminAccounts.sso.badgeHint')}</span>
+          <StatusBadge
+            variant={statusVariant(accountStatus(admin))}
+            label={t(`adminAccounts.status.${accountStatus(admin)}`)}
+          />
         </dd>
-      {/if}
-      <dt>{t('adminAccounts.list.columns.lastLogin')}</dt>
-      <dd>
-        {admin.lastLoginAt ? i18n.formatDate(admin.lastLoginAt) : t('adminAccounts.list.never')}
-      </dd>
-    </dl>
+        <dt>{t('adminAccounts.list.columns.totp')}</dt>
+        <dd>
+          <StatusBadge
+            variant={statusVariant(totpStatus(admin))}
+            label={t(`adminAccounts.totp.${totpStatus(admin)}`)}
+          />
+        </dd>
+        {#if isSsoOnly(admin)}
+          <dt>{t('adminAccounts.sso.signIn')}</dt>
+          <dd>
+            <StatusBadge variant="info" label={t('adminAccounts.sso.badge')} />
+            <span class="tt-text-sm tt-text-muted">{t('adminAccounts.sso.badgeHint')}</span>
+          </dd>
+        {/if}
+        <dt>{t('adminAccounts.list.columns.lastLogin')}</dt>
+        <dd>
+          {admin.lastLoginAt ? i18n.formatDate(admin.lastLoginAt) : t('adminAccounts.list.never')}
+        </dd>
+      </dl>
+    </Card>
 
     {#if actions.self}
       <Alert severity="info" live={false}><p>{t('adminAccounts.ownAccountNote')}</p></Alert>
@@ -470,56 +509,38 @@
     </FormSection>
 
     {#if admin.role !== 'super_admin'}
-      <section aria-labelledby="{uid}-identities" class="tt-mt-6">
-        <h2 id="{uid}-identities">{t('adminAccounts.sso.identities.title')}</h2>
+      <Card title={t('adminAccounts.sso.identities.title')} headingId="{uid}-identities">
         {#if identities.length === 0}
           <p>{t('adminAccounts.sso.identities.none')}</p>
         {:else}
           <p>{t('adminAccounts.sso.identities.intro')}</p>
-          <div class="tt-table">
-            <div class="tt-table__scroll">
-              <table>
-                <caption class="visually-hidden">{t('adminAccounts.sso.identities.title')}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">{t('adminAccounts.sso.identities.issuer')}</th>
-                    <th scope="col">{t('adminAccounts.sso.identities.clientId')}</th>
-                    <th scope="col">{t('adminAccounts.sso.identities.linkedAt')}</th>
-                    <th scope="col">{t('adminAccounts.list.columns.actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each identities as identity (identity.id)}
-                    <tr>
-                      <td class="tt-break">{identity.issuer}</td>
-                      <td class="tt-break">{identity.clientId}</td>
-                      <td>{identity.linkedAt}</td>
-                      <td>
-                        <Button
-                          variant="secondary"
-                          small
-                          onclick={() => {
-                            unpinTarget = identity;
-                            unpinOpen = true;
-                          }}
-                        >
-                          {t('adminAccounts.sso.identities.unpin')}
-                          <span class="visually-hidden"> {identity.issuer}</span>
-                        </Button>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <DataTable
+            variant="plain"
+            caption={t('adminAccounts.sso.identities.title')}
+            captionHidden
+            rows={identities}
+            key={(identity) => identity.id}
+            columns={[
+              { id: 'issuer', header: t('adminAccounts.sso.identities.issuer'), cell: identityIssuerCell },
+              {
+                id: 'clientId',
+                header: t('adminAccounts.sso.identities.clientId'),
+                cell: identityClientCell,
+              },
+              {
+                id: 'linkedAt',
+                header: t('adminAccounts.sso.identities.linkedAt'),
+                cell: identityLinkedCell,
+              },
+              { id: 'actions', header: t('adminAccounts.list.columns.actions'), cell: identityActionCell },
+            ]}
+          />
         {/if}
-      </section>
+      </Card>
     {/if}
 
     {#if actions.reset || actions.remove}
-      <section aria-labelledby="{uid}-actions">
-        <h2 id="{uid}-actions">{t('admin.common.actions')}</h2>
+      <Card title={t('admin.common.actions')} headingId="{uid}-actions">
         <div class="tt-cluster">
           {#if canInvite(admin) && !actions.self && !inviteOpen}
             <Button variant="secondary" bind:element={inviteButton} onclick={() => void openInvite()}
@@ -537,37 +558,43 @@
             >
           {/if}
         </div>
-      </section>
+      </Card>
     {/if}
 
     {#if inviteOpen}
-      <form class="tt-card tt-mt-4" aria-labelledby="{uid}-invite-title" onsubmit={invite}>
-        <h2 id="{uid}-invite-title" class="tt-mt-0" tabindex="-1" bind:this={inviteHeading}>
-          {t('adminAccounts.invitation.title')}
-        </h2>
-        <p>{t('adminAccounts.invitation.intro', { username: admin.username })}</p>
-        <Alert severity="warning" live={false}><p>{t('adminAccounts.invitation.revokes')}</p></Alert>
-        {#if inviteError !== ''}
-          <Alert severity="error" bind:element={inviteAlert}><p>{inviteError}</p></Alert>
-        {/if}
-        <InvitationFields
-          idPrefix={ids.invitation}
-          allowMail={canMailInvitation(admin)}
-          bind:delivery={inviteDelivery}
-          bind:language={inviteLanguage}
-        />
-        <div class="tt-cluster tt-mt-4">
-          <Button type="submit" disabled={inviteBusy}>
-            {inviteBusy ? t('adminAccounts.invitation.sending') : t('adminAccounts.invitation.submit')}
-          </Button>
-          <Button variant="secondary" onclick={() => void closeInvite()} disabled={inviteBusy}
-            >{t('admin.common.cancel')}</Button
-          >
-        </div>
-      </form>
+      <Card tag="div">
+        <form aria-labelledby="{uid}-invite-title" onsubmit={invite}>
+          <h2 id="{uid}-invite-title" class="tt-mt-0 tt-text-lg" tabindex="-1" bind:this={inviteHeading}>
+            {t('adminAccounts.invitation.title')}
+          </h2>
+          <p>{t('adminAccounts.invitation.intro', { username: admin.username })}</p>
+          <Alert severity="warning" live={false}><p>{t('adminAccounts.invitation.revokes')}</p></Alert>
+          {#if inviteError !== ''}
+            <Alert severity="error" bind:element={inviteAlert}><p>{inviteError}</p></Alert>
+          {/if}
+          <InvitationFields
+            idPrefix={ids.invitation}
+            allowMail={canMailInvitation(admin)}
+            bind:delivery={inviteDelivery}
+            bind:language={inviteLanguage}
+          />
+          <div class="tt-cluster tt-mt-4">
+            <Button type="submit" disabled={inviteBusy}>
+              {inviteBusy ? t('adminAccounts.invitation.sending') : t('adminAccounts.invitation.submit')}
+            </Button>
+            <Button variant="secondary" onclick={() => void closeInvite()} disabled={inviteBusy}
+              >{t('admin.common.cancel')}</Button
+            >
+          </div>
+        </form>
+      </Card>
     {/if}
 
-    <p class="tt-mt-6"><a href={nav.href('/admins')} use:nav.link>{t('admin.common.back')}</a></p>
+    <p class="tt-mt-6">
+      <a class="tt-admin-edit__back tt-link-target" href={nav.href('/admins')} use:nav.link
+        >{t('admin.common.back')}</a
+      >
+    </p>
   {/if}
 
   <ConfirmDialog

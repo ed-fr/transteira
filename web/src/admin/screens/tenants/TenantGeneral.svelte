@@ -19,8 +19,8 @@
   // The admin profile is reloaded after a rename and after a deletion (it lists the tenants).
   // - Auditor (read-only role): the same facts as text (summary), with no form, no webhook
   //   setting and no deletion; the antivirus state is shown but cannot be changed.
-  // The tenant sub-navigation (components/TenantNav.svelte) is rendered by App.svelte above
-  // every /tenants/:id/... screen: it is not rendered again here.
+  // The tenant navigation is the tenant block of the sidebar (components/SidebarTenantBlock.svelte,
+  // rendered by AdminShell for every /tenants/:id/... screen): it is not rendered again here.
   import { onMount, tick } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
@@ -28,6 +28,7 @@
     Alert,
     Button,
     Checkbox,
+    HelpIcon,
     RadioGroup,
     Spinner,
     TextField,
@@ -38,6 +39,8 @@
   import ByteSizeField from '../../components/ByteSizeField.svelte';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import SelectField from '../../components/SelectField.svelte';
+  import Card from '../../components/Card.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
@@ -367,7 +370,11 @@
 {#if notFound}
   <NotFound {params} {nav} />
 {:else}
-  <h1 tabindex="-1">{t('adminTenants.general.title')}</h1>
+  <PageHeader title={t('adminTenants.general.title')}>
+    {#snippet help()}
+      <HelpIcon topic="tenant-general" title={t('adminTenants.general.title')} {nav} />
+    {/snippet}
+  </PageHeader>
 
   {#if loading}
     <p><Spinner showLabel /></p>
@@ -378,18 +385,20 @@
     </Alert>
   {:else if tenant !== undefined && form !== undefined}
     {@const status = statusView(tenant.status)}
-    <p>
-      <StatusBadge variant={status.variant} label={t(status.key)} />
-    </p>
-    <p>{storageText(tenant)}</p>
-    {#if docsHref !== undefined}
+    <Card>
       <p>
-        <a href={docsHref} target="_blank" rel="noopener noreferrer">
-          {t('adminTenants.general.userDocs.link')}
-          <span class="visually-hidden">{t('adminTenants.general.userDocs.hint')}</span>
-        </a>
+        <StatusBadge variant={status.variant} label={t(status.key)} />
       </p>
-    {/if}
+      <p>{storageText(tenant)}</p>
+      {#if docsHref !== undefined}
+        <p class="tt-general__last">
+          <a href={docsHref} target="_blank" rel="noopener noreferrer">
+            {t('adminTenants.general.userDocs.link')}
+            <span class="visually-hidden">{t('adminTenants.general.userDocs.hint')}</span>
+          </a>
+        </p>
+      {/if}
+    </Card>
 
     {#if deleting}
       <Alert severity="warning" live={false}>{t('adminTenants.general.deletingBanner')}</Alert>
@@ -402,28 +411,31 @@
       <Alert severity="info" live={false}>
         {readOnly ? t('adminTenants.general.auditorNote') : t('adminTenants.general.delegatedNote')}
       </Alert>
-      <dl class="tt-dl">
-        <dt>{t('adminTenants.fields.name.label')}</dt>
-        <dd>{tenant.name}</dd>
-        <dt>{t('adminTenants.fields.fqdn.label')}</dt>
-        <dd>{tenant.fqdn}</dd>
-        <dt>{t('adminTenants.fields.storageQuota.label')}</dt>
-        <dd>{formatBytes(tenant.storageQuotaBytes)}</dd>
-        <dt>{t('adminTenants.fields.maxTransferCeiling.label')}</dt>
-        <dd>{formatBytes(tenant.maxTransferCeiling)}</dd>
-        {#if readOnly}
-          <dt>{t('adminTenants.fields.defaultLanguage.label')}</dt>
-          <dd>{languageLabel(tenant.defaultLanguage, locale.current)}</dd>
-          <dt>{t('adminTenants.fields.maxTransfer.label')}</dt>
-          <dd>{formatBytes(tenant.maxTransferBytes)}</dd>
-        {/if}
-      </dl>
+      <Card>
+        <dl class="tt-dl tt-general__last">
+          <dt>{t('adminTenants.fields.name.label')}</dt>
+          <dd>{tenant.name}</dd>
+          <dt>{t('adminTenants.fields.fqdn.label')}</dt>
+          <dd>{tenant.fqdn}</dd>
+          <dt>{t('adminTenants.fields.storageQuota.label')}</dt>
+          <dd>{formatBytes(tenant.storageQuotaBytes)}</dd>
+          <dt>{t('adminTenants.fields.maxTransferCeiling.label')}</dt>
+          <dd>{formatBytes(tenant.maxTransferCeiling)}</dd>
+          {#if readOnly}
+            <dt>{t('adminTenants.fields.defaultLanguage.label')}</dt>
+            <dd>{languageLabel(tenant.defaultLanguage, locale.current)}</dd>
+            <dt>{t('adminTenants.fields.maxTransfer.label')}</dt>
+            <dd>{formatBytes(tenant.maxTransferBytes)}</dd>
+          {/if}
+        </dl>
+      </Card>
     {/if}
 
     {#if !readOnly}
       <FormSection
         title={t('adminTenants.general.legend')}
         as="fieldset"
+        card
         {dirty}
         addGuard={(guard) => nav.addGuard(guard)}
         {validate}
@@ -525,67 +537,72 @@
     {/if}
 
     {#if !readOnly}
-      <section aria-labelledby="{uid}-export" data-testid="export-section">
-        <h2 id="{uid}-export">{t('adminTenants.general.export.title')}</h2>
-        <p>{t('adminTenants.general.export.intro')}</p>
-        <Alert severity="info" live={false}>{t('adminTenants.general.export.notice')}</Alert>
-        <Checkbox
-          id={ids.exportBranding}
-          label={t('adminTenants.general.export.includeBranding.label')}
-          hint={t('adminTenants.general.export.includeBranding.hint')}
-          bind:checked={exportBranding}
-        />
-        <p>
-          <a href={exportUrl(tenant.id, exportBranding)} download>
-            {t('adminTenants.general.export.download')}
-            <span class="visually-hidden">{t('adminTenants.general.export.downloadHint')}</span>
-          </a>
-        </p>
-      </section>
+      <div data-testid="export-section">
+        <Card
+          title={t('adminTenants.general.export.title')}
+          headingId="{uid}-export"
+          description={t('adminTenants.general.export.intro')}
+        >
+          <Alert severity="info" live={false}>{t('adminTenants.general.export.notice')}</Alert>
+          <Checkbox
+            id={ids.exportBranding}
+            label={t('adminTenants.general.export.includeBranding.label')}
+            hint={t('adminTenants.general.export.includeBranding.hint')}
+            bind:checked={exportBranding}
+          />
+          <p class="tt-general__last">
+            <a href={exportUrl(tenant.id, exportBranding)} download>
+              {t('adminTenants.general.export.download')}
+              <span class="visually-hidden">{t('adminTenants.general.export.downloadHint')}</span>
+            </a>
+          </p>
+        </Card>
+      </div>
     {/if}
 
-    <section aria-labelledby="{uid}-antivirus" data-testid="antivirus-section">
-      <h2 id="{uid}-antivirus">{t('adminTenants.general.antivirus.title')}</h2>
-      {#if isSuper}
-        <p>
-          {avState === 'disabled'
-            ? t('adminTenants.general.antivirus.statusDisabled')
-            : t('adminTenants.general.antivirus.statusEnabled')}
-        </p>
-      {:else}
-        <p>
-          {avState === 'disabled'
-            ? t('adminTenants.general.antivirus.statusDisabledDelegated')
-            : t('adminTenants.general.antivirus.statusEnabledDelegated')}
-        </p>
-      {/if}
-      {#if avState === 'instance_disabled'}
-        <Alert severity="info" live={false}>{t('adminTenants.general.antivirus.instanceNote')}</Alert>
-      {/if}
-      {#if avMessage !== ''}
-        <p role="status">{avMessage}</p>
-      {/if}
-      {#if avError !== ''}
-        <Alert severity="error">{avError}</Alert>
-      {/if}
-      {#if isSuper}
-        {#if avState === 'disabled'}
-          <Button disabled={deleting} onclick={() => void setAntivirus(true)}>
-            {t('adminTenants.general.antivirus.enable')}
-          </Button>
+    <div data-testid="antivirus-section">
+      <Card title={t('adminTenants.general.antivirus.title')} headingId="{uid}-antivirus">
+        {#if isSuper}
+          <p>
+            {avState === 'disabled'
+              ? t('adminTenants.general.antivirus.statusDisabled')
+              : t('adminTenants.general.antivirus.statusEnabled')}
+          </p>
         {:else}
-          <Button
-            variant="secondary"
-            disabled={deleting}
-            onclick={() => {
-              avConfirmOpen = true;
-            }}
-          >
-            {t('adminTenants.general.antivirus.disable')}
-          </Button>
+          <p>
+            {avState === 'disabled'
+              ? t('adminTenants.general.antivirus.statusDisabledDelegated')
+              : t('adminTenants.general.antivirus.statusEnabledDelegated')}
+          </p>
         {/if}
-      {/if}
-    </section>
+        {#if avState === 'instance_disabled'}
+          <Alert severity="info" live={false}>{t('adminTenants.general.antivirus.instanceNote')}</Alert>
+        {/if}
+        {#if avMessage !== ''}
+          <p role="status">{avMessage}</p>
+        {/if}
+        {#if avError !== ''}
+          <Alert severity="error">{avError}</Alert>
+        {/if}
+        {#if isSuper}
+          {#if avState === 'disabled'}
+            <Button disabled={deleting} onclick={() => void setAntivirus(true)}>
+              {t('adminTenants.general.antivirus.enable')}
+            </Button>
+          {:else}
+            <Button
+              variant="secondary"
+              disabled={deleting}
+              onclick={() => {
+                avConfirmOpen = true;
+              }}
+            >
+              {t('adminTenants.general.antivirus.disable')}
+            </Button>
+          {/if}
+        {/if}
+      </Card>
+    </div>
     {#if isSuper}
       <ConfirmDialog
         bind:open={avConfirmOpen}
@@ -618,14 +635,13 @@
         />
       </FormSection>
     {:else}
-      <section aria-labelledby="{uid}-link-only-ro">
-        <h2 id="{uid}-link-only-ro">{t('adminTenants.general.linkOnly.title')}</h2>
-        <p>
+      <Card title={t('adminTenants.general.linkOnly.title')} headingId="{uid}-link-only-ro">
+        <p class="tt-general__last">
           {tenant && linkOnlyEnabled(tenant)
             ? t('adminTenants.general.linkOnly.statusOn')
             : t('adminTenants.general.linkOnly.statusOff')}
         </p>
-      </section>
+      </Card>
     {/if}
 
     {#if isSuper}
@@ -649,20 +665,21 @@
         />
       </FormSection>
     {:else}
-      <section aria-labelledby="{uid}-e2e-ro">
-        <h2 id="{uid}-e2e-ro">{t('adminTenants.general.e2e.title')}</h2>
-        <p>
+      <Card title={t('adminTenants.general.e2e.title')} headingId="{uid}-e2e-ro">
+        <p class="tt-general__last">
           {t('adminTenants.general.e2e.status', {
             policy: t(`adminTenants.e2ePolicy.${tenant ? e2ePolicyOf(tenant) : 'forbidden'}`),
           })}
         </p>
-      </section>
+      </Card>
     {/if}
 
     {#if isSuper}
-      <section aria-labelledby="{uid}-delete">
-        <h2 id="{uid}-delete">{t('adminTenants.general.delete.title')}</h2>
-        <p>{t('adminTenants.general.delete.text')}</p>
+      <Card
+        title={t('adminTenants.general.delete.title')}
+        headingId="{uid}-delete"
+        description={t('adminTenants.general.delete.text')}
+      >
         <Button
           variant="danger"
           onclick={() => {
@@ -671,7 +688,7 @@
         >
           {t('adminTenants.general.delete.action')}
         </Button>
-      </section>
+      </Card>
       <ConfirmDialog
         bind:open={deleteOpen}
         title={t('adminTenants.general.delete.confirmTitle', { name: tenant.name })}
@@ -685,3 +702,15 @@
     {/if}
   {/if}
 {/if}
+
+<style>
+  .tt-general__last {
+    margin-bottom: 0;
+  }
+  /* Standalone links of the cards (documentation, export): 44 px click targets. */
+  .tt-general__last a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+</style>

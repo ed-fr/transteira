@@ -9,12 +9,14 @@
   // the checklist is shown for information. Version 2.0: internal ranges and domains that no admin
   // ever saved (written by a configuration import) are listed with a "Confirm" button that saves
   // them unchanged (PUT /admin/tenants/{id}/network): until then the network items stay to do.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { tick } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, Checkbox, Spinner } from '../../../shared/components';
+  import { Alert, Button, Checkbox, HelpIcon, Spinner } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
+  import Card from '../../components/Card.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { setupStates } from '../../setupStates.svelte';
@@ -154,7 +156,26 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('setup.wizard.title')}</h1>
+<PageHeader
+  title={t('setup.wizard.title')}
+  description={view.kind === 'ready'
+    ? active
+      ? t('setup.wizard.introActive')
+      : t('setup.wizard.intro')
+    : undefined}
+>
+  {#snippet help()}
+    <HelpIcon topic="tenant-setup" title={t('setup.wizard.title')} {nav} />
+  {/snippet}
+  {#if view.kind === 'ready'}
+    <p class="tt-setup__state">
+      <StatusBadge
+        variant={active ? 'ok' : 'warning'}
+        label={active ? t('setup.state.active') : t('setup.state.setup')}
+      />
+    </p>
+  {/if}
+</PageHeader>
 
 {#if view.kind === 'loading'}
   <Spinner label={t('setup.wizard.loading')} />
@@ -164,14 +185,6 @@
     <Button variant="secondary" onclick={() => void load()}>{t('setup.wizard.retry')}</Button>
   </Alert>
 {:else}
-  <p>
-    <StatusBadge
-      variant={active ? 'ok' : 'warning'}
-      label={active ? t('setup.state.active') : t('setup.state.setup')}
-    />
-  </p>
-  <p>{active ? t('setup.wizard.introActive') : t('setup.wizard.intro')}</p>
-
   {#if result !== undefined}
     <Alert severity={result.severity} bind:element={resultElement}>
       <p>{result.text}</p>
@@ -223,94 +236,106 @@
     </Alert>
   {/if}
 
-  <h2 id="{uid}-list">{t('setup.wizard.listLabel')}</h2>
-  <ol class="tt-setup__list" aria-labelledby="{uid}-list">
-    {#each items as item (item.key)}
-      {@const path = itemPath(tenantId, item.key)}
-      {@const hint = hintOf(item.key)}
-      <li class="tt-setup__item">
-        <div class="tt-setup__head">
-          <span class="tt-setup__label tt-break">{labelOf(item.key)}</span>
-          <StatusBadge
-            variant={item.done ? 'ok' : item.required ? 'warning' : 'info'}
-            label={item.done ? t('setup.wizard.done') : t('setup.wizard.todo')}
-          />
-          <span class="tt-setup__required">
-            {item.required ? t('setup.wizard.required') : t('setup.wizard.optional')}
-          </span>
-        </div>
-        {#if hint !== undefined}
-          <p class="tt-setup__hint">{hint}</p>
-        {/if}
-        {#if item.key === 'mail_templates' && !active}
-          <Checkbox
-            label={t('setup.wizard.reviewed')}
-            hint={t('setup.wizard.reviewedHint')}
-            bind:checked={reviewed}
-          />
-        {/if}
-        {#if path !== undefined}
-          <p>
-            <a
-              href={nav.href(path)}
-              use:nav.link
-              aria-label={t('setup.wizard.configureItem', { item: labelOf(item.key) })}
-            >
-              {t('setup.wizard.configure')}
-            </a>
-          </p>
-        {/if}
-      </li>
-    {/each}
-  </ol>
+  <Card title={t('setup.wizard.listLabel')} headingId="{uid}-list">
+    <ol class="tt-setup__list" aria-labelledby="{uid}-list">
+      {#each items as item (item.key)}
+        {@const path = itemPath(tenantId, item.key)}
+        {@const hint = hintOf(item.key)}
+        <li class="tt-setup__item">
+          <div class="tt-setup__head">
+            <span class="tt-setup__label tt-break">{labelOf(item.key)}</span>
+            <StatusBadge
+              variant={item.done ? 'ok' : item.required ? 'warning' : 'info'}
+              label={item.done ? t('setup.wizard.done') : t('setup.wizard.todo')}
+            />
+            <span class="tt-setup__required">
+              {item.required ? t('setup.wizard.required') : t('setup.wizard.optional')}
+            </span>
+          </div>
+          {#if hint !== undefined}
+            <p class="tt-setup__hint">{hint}</p>
+          {/if}
+          {#if item.key === 'mail_templates' && !active}
+            <Checkbox
+              label={t('setup.wizard.reviewed')}
+              hint={t('setup.wizard.reviewedHint')}
+              bind:checked={reviewed}
+            />
+          {/if}
+          {#if path !== undefined}
+            <p>
+              <a
+                class="tt-link-target"
+                href={nav.href(path)}
+                use:nav.link
+                aria-label={t('setup.wizard.configureItem', { item: labelOf(item.key) })}
+              >
+                {t('setup.wizard.configure')}
+              </a>
+            </p>
+          {/if}
+        </li>
+      {/each}
+    </ol>
+  </Card>
 
   {#if !active}
-    {#if !view.setup.canComplete && missingNow.length > 0}
-      <p id="{uid}-missing">{t('setup.wizard.canCompleteNo')}</p>
-      <ul>
-        {#each missingNow as item (item.key)}
-          <li>{labelOf(item.key)}</li>
-        {/each}
-      </ul>
-    {/if}
-    <div class="tt-setup__actions">
-      <Button
-        disabled={!view.setup.canComplete}
-        aria-describedby={!view.setup.canComplete && missingNow.length > 0 ? `${uid}-missing` : undefined}
-        loading={completing}
-        loadingLabel={t('setup.wizard.completing')}
-        onclick={() => void complete(false)}
-      >
-        {t('setup.wizard.complete')}
-      </Button>
-      {#if canForce(me)}
-        <Button variant="danger" disabled={completing} onclick={() => (forceOpen = true)}>
-          {t('setup.wizard.force.action')}
-        </Button>
+    <Card>
+      {#if !view.setup.canComplete && missingNow.length > 0}
+        <p id="{uid}-missing">{t('setup.wizard.canCompleteNo')}</p>
+        <ul>
+          {#each missingNow as item (item.key)}
+            <li>{labelOf(item.key)}</li>
+          {/each}
+        </ul>
       {/if}
-    </div>
-    {#if canForce(me)}
-      <p class="tt-setup__hint">{t('setup.wizard.force.hint')}</p>
-    {/if}
-    <ConfirmDialog
-      bind:open={forceOpen}
-      title={t('setup.wizard.force.title')}
-      text={t('setup.wizard.force.text')}
-      confirmLabel={t('setup.wizard.force.confirm')}
-      danger
-      onconfirm={confirmForce}
-    />
+      <div class="tt-setup__actions">
+        <Button
+          disabled={!view.setup.canComplete}
+          aria-describedby={!view.setup.canComplete && missingNow.length > 0 ? `${uid}-missing` : undefined}
+          loading={completing}
+          loadingLabel={t('setup.wizard.completing')}
+          onclick={() => void complete(false)}
+        >
+          {t('setup.wizard.complete')}
+        </Button>
+        {#if canForce(me)}
+          <Button variant="danger" disabled={completing} onclick={() => (forceOpen = true)}>
+            {t('setup.wizard.force.action')}
+          </Button>
+        {/if}
+      </div>
+      {#if canForce(me)}
+        <p class="tt-setup__hint">{t('setup.wizard.force.hint')}</p>
+      {/if}
+      <ConfirmDialog
+        bind:open={forceOpen}
+        title={t('setup.wizard.force.title')}
+        text={t('setup.wizard.force.text')}
+        confirmLabel={t('setup.wizard.force.confirm')}
+        danger
+        onconfirm={confirmForce}
+      />
+    </Card>
   {/if}
 {/if}
 
 <style>
+  .tt-setup__state {
+    margin: var(--tt-space-2) 0 0;
+  }
+
   .tt-setup__list {
-    margin: 0 0 var(--tt-space-4);
+    margin: 0;
     padding-left: var(--tt-space-5);
   }
 
   .tt-setup__item {
     margin-bottom: var(--tt-space-4);
+  }
+
+  .tt-setup__item:last-child {
+    margin-bottom: 0;
   }
 
   .tt-setup__head {

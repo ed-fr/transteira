@@ -3,15 +3,16 @@
   // page): filters reflected in the URL (tenant, action from a grouped list or typed), one row per
   // event with its tenant ("Instance" for the events without tenant), date, actor, action,
   // object, IP and free details. The API has no "instance events only" filter, so the tenant
-  // select only offers "All" and the tenants (see globalAudit.ts). The system sub-navigation is
-  // rendered by App.svelte.
+  // select only offers "All" and the tenants (see globalAudit.ts). The system navigation is in the
+  // sidebar.
   import { untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, TextField } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, TextField } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import AuditEventsTable from '../../components/AuditEventsTable.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import SelectField from '../../components/SelectField.svelte';
   import { loadAllPages } from '../admins/admins';
   import { loadedText } from '../ops/audit';
@@ -156,8 +157,11 @@
   {/if}
 {/snippet}
 
-<h1 tabindex="-1">{t('adminSystem.audit.title')}</h1>
-<p>{t('adminSystem.audit.intro')}</p>
+<PageHeader title={t('adminSystem.audit.title')} description={t('adminSystem.audit.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="system-audit" title={t('adminSystem.audit.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 <FilterBar
   label={t('sysAudit.filters.label')}

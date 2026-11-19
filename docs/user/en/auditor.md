@@ -1,6 +1,6 @@
 # Auditor guide
 
-As an auditor, you consult the entities attached to your account, in read-only mode: their summary, audit log, security log, statistics, transfers and proofs, their one-time secrets (metadata only), and their permanent drop links. This role is meant for a security officer or an audit (for example ISO 27001). You cannot change anything except your own password and second factor. Everything happens in the administration, at the address given by your organisation (for example `admin.transfer.example.com/admin/`). The **Help** link at the bottom of each screen opens the matching section of this guide.
+As an auditor, you consult the entities attached to your account, in read-only mode: their summary, audit log, security log, statistics, transfers and proofs, their one-time secrets (metadata only), and their permanent drop links. This role is meant for a security officer or an audit (for example ISO 27001). You cannot change anything except your own password and second factor. Everything happens in the administration, at the address given by your organisation (for example `admin.transfer.example.com/admin/`). The help button (**?**) next to the title of each screen, and the **Help** link at the bottom of the page, open the matching section of this guide.
 
 <!-- topic: auditor-roles -->
 ## Your role: read-only
@@ -49,7 +49,7 @@ On **Sign in to the administration**, enter your **Username** and your **Passwor
 - type the 6-digit **Authentication code** shown by your authenticator app (renewed every 30 seconds), then click **Verify**;
 - if you no longer have your app, click **Use a recovery code** and type one of your recovery codes instead.
 
-This second step must be completed within 5 minutes. To protect against password guessing, 5 failed attempts for the same username from the same network address within 15 minutes lock the sign-in for 15 minutes. Your session ends after 30 minutes of inactivity, and in any case after 12 hours (default values, set by the operator). To leave earlier, click **Sign out** in the main navigation.
+This second step must be completed within 5 minutes. To protect against password guessing, 5 failed attempts for the same username from the same network address within 15 minutes lock the sign-in for 15 minutes. Your session ends after 30 minutes of inactivity, and in any case after 12 hours (default values, set by the operator). To leave earlier, click **Sign out** at the bottom of the sidebar.
 
 > **Note** Lost your password or your authentication device? Ask a super administrator to reset your credentials: he or she hands you a new activation link.
 
@@ -87,20 +87,25 @@ Each code works only once. Configuring a new device generates new codes and the 
 <!-- topic: auditor-admin -->
 ## Home page
 
-The home page gives you an overview of the entities you consult. Each entity has a card with **Transfers (30 days)**, **Volume uploaded (30 days)**, **Storage used** (a meter of the space occupied compared with the quota) and quick links to its transfers, audit log, security log and statistics. You have no setup call to action: configuring an entity is the business of the delegated administrators.
+The home page gives you an overview of the entities you consult. At the top, under the **Home** title, a greeting line (**Hello**, your username, then **Read-only overview of** followed by your entity, or the number of your entities) and, on the right, the **Search** field and its button. The **Key figures of the last 30 days** tiles, added up over your entities, show **Transfers (30 days)**, **Volume exchanged (30 days)** (the volume deposited) and **Viruses blocked (30 days)**, each with a neutral trend compared with the previous 30 days (for example **Unchanged vs the previous 30 days**), and **Storage used** (the share of the quota in use, on a meter marked at the 80 % alert threshold). The **Entities** card lists your entities (ten at most; **See all** opens the list) with their colour swatch, name and address, **Status** pill and storage meter, each with an **Open** link, and the **Shortcuts** card gives the links **Transfers of**, **Audit log of**, **Security log of** and **Statistics of** each entity. You have no setup call to action: configuring an entity is the business of the delegated administrators.
 
-![Home page of an auditor with the card of one entity and its read-only links](../screenshots/en/admin-home-auditor.png)
+![Home page of an auditor: the sidebar with the Consultation group of Entity A, the Home title with its help button, the greeting, the search field for a transfer identifier, the two-factor recommendation, the four key figure tiles, the Entities card with its Open link and the Shortcuts card](../screenshots/en/admin-home-auditor.png)
 
-If a card cannot load its figures, click **Try again**. If two-factor authentication is not enabled on your account, a banner recommends it. If no entity is attached to your account yet, the page says so: ask a super administrator to attach you to one.
+If the figures cannot be loaded, click **Try again**. If two-factor authentication is not enabled on your account, a banner recommends it. If no entity is attached to your account yet, the page says so: ask a super administrator to attach you to one.
 
-The main navigation, at the top, contains **Home**, **Entities**, **My account** and **Sign out**. The footer holds the **Help** link and the **Language** selector, remembered in this browser.
+The administration has a **sidebar** on the left (on a small screen, the **Menu** button at the top opens it, and it closes again once you choose a page). The main navigation contains **Home**, **Entities** and **My account**. Under **Entities**, the block of the open entity (always shown when a single entity is attached to your account) shows its name and its single group, **Consultation**, which you can fold and unfold (see [Entities and summary](topic:auditor-tenants)). At the bottom of the sidebar, **Signed in as** followed by your username, your **Role** and the **Sign out** button. The footer, under the page, holds the **Help** link, the **Language** selector (remembered in this browser), the **Dark theme** box and the version. Every screen starts with its title and help button; its content is grouped in cards, and on a narrow screen a wide table scrolls sideways inside its card.
+
+<!-- topic: auditor-admin-search -->
+### Search
+
+The **Search** field of the home page, and the **Search** screen it opens, find a transfer in the entities you consult. As an auditor, you search by **transfer identifier only** (`trf_` followed by 26 letters and digits): the search by address is not available to you, and an address is refused with a message. The transfer opens directly. At most 30 searches per minute are accepted, and the query is never put in the address bar of the browser nor stored.
 
 <!-- topic: auditor-tenants -->
 ### Entities and summary
 
-The **Entities** page lists the entities attached to your account, with their address, status, storage used and default language. If only one entity is attached to your account, this page takes you straight to it.
+The **Entities** page lists the entities attached to your account, with their colour swatch and name, address, **Status** pill, storage used and default language, and the link **Open the summary of** followed by the name of the entity. If only one entity is attached to your account, this page takes you straight to it.
 
-Once an entity is open, a navigation bar shows its name and a single group, **Consultation**, with **Summary**, **Single sign-on**, **Transfers**, **Drop links**, **Audit log**, **Security log** and **Statistics**. No configuration screen is offered.
+Once an entity is open, the block of the entity in the sidebar, under **Entities**, shows its name and a single group, **Consultation**, with **Summary**, **Single sign-on**, **Transfers**, **Drop links**, **One-time secrets**, **Audit log**, **Security log** and **Statistics**. No configuration screen is offered.
 
 <!-- topic: auditor-tenant-general -->
 ### Summary
@@ -115,16 +120,16 @@ The **Single sign-on** screen shows the single sign-on settings of the entity in
 <!-- topic: auditor-tenant-transfers -->
 ## Transfers and proofs
 
-The **Transfers** screen lists the transfers of the entity, most recent first. Filter by **Status** or by **Created from**, then click **Apply**; **Reset** clears the filters. You cannot search by email address: the filter is not offered to you, and the API refuses it with **read-only-role**. The columns show **Created**, **Sender**, **Recipients**, **Files and size**, **Status**, **Origin**, **Downloads** and **Expires**. Long lists show their first rows; click **Load more** for the next ones.
+The **Transfers** screen lists the transfers of the entity, most recent first. In the filters card, filter by **Status** or by **Created from**, then click **Apply**; **Reset** clears the filters. You cannot search by email address: the filter is not offered to you, and the API refuses it with **read-only-role**. The columns show **Created**, **Sender**, **Recipients**, **Files and size**, **Status**, **Origin**, **Downloads** and **Expires**. Long lists show their first rows; click **Load more** for the next ones.
 
-Open a transfer to see its **Transfer details**: status, dates, first download, sender, origin, options (including the **Confidentiality level**), recipients with the files each of them downloaded and when, and the files with their size, SHA-256 fingerprint and antivirus result. These are metadata only: file contents, download links and the message of the sender are never available, and you have no button to resend or delete a transfer.
+Click the creation date of a transfer to open its **Transfer details** (**Back to the transfers**, at the top right, returns to the list): the **Information** card (status, dates, first download, downloads, **Confidentiality level**, sender and sender IP address, origin and options, with the link **View the audit log from the day of this transfer**), the **Recipients** card with the files each of them downloaded and when, the **Files** card with their size, SHA-256 fingerprint and antivirus result, and the **Proofs** card. These are metadata only: file contents, download links and the message of the sender are never available, and you have no button to resend or delete a transfer.
 
-![Transfer details as an auditor: information, recipients, files and proofs, without any action](../screenshots/en/admin-transfer-detail-auditor.png)
+![Transfer details as an auditor: the Back to the transfers button in the page header, the Information card and the start of the Recipients card, without any action; the sidebar shows the Consultation group](../screenshots/en/admin-transfer-detail-auditor.png)
 
 <!-- topic: auditor-tenant-proofs -->
 ### Proofs of deposit and delivery
 
-The details of a transfer have a **Proofs** section. It offers PDF files signed by the instance: the **proof of deposit** (written at the end of the antivirus analysis), the **proof of delivery** (written at the first complete download) and, when recipients have personal links, one **proof of delivery** per recipient. A proof not written yet is shown as unavailable.
+The details of a transfer have a **Proofs** card. It offers PDF files signed by the instance: the **proof of deposit** (written at the end of the antivirus analysis), the **proof of delivery** (written at the first complete download) and, when recipients have personal links, one **proof of delivery** per recipient. A proof not written yet is shown as unavailable.
 
 Proofs are kept 12 months after they were issued, even if the transfer was deleted. The statement signed inside the PDF is authoritative, not its visible text: it lists the entity, the sender, the recipients, the files with their SHA-256 fingerprints and the dates, and no IP address. A proof is worth the trust placed in the operator of the instance, since there is no third-party timestamping. Each download of a proof is recorded in the audit log.
 
@@ -135,7 +140,7 @@ The **Audit log** screen shows the actions recorded for the entity over the last
 
 Filter by **Action** (grouped by theme) and by period with **From** and **To**, then click **Apply**. The **Actor** filter is not offered to you, as for the transfers. The columns show the **Date**, **Actor**, **Action**, **Object**, **IP address** and **Details** (click **Show the details**). When the object is a transfer, a link opens its details. The filters are kept in the page address, so you can bookmark a view or share it with another person who has access to the entity.
 
-![Audit log of an entity with the filters and the list of events](../screenshots/en/admin-audit.png)
+![Audit log screen as a delegated administrator sees it: the filters card (Action, Actor, From, To; the Actor filter is not offered to you) and the list of events with their date, actor, action, object, IP address and Show the details](../screenshots/en/admin-audit.png)
 
 The **One-time secrets** group of actions holds **Secret created**, **Secret link mailed** (only the domain of the recipient), **Secret read**, **Secret file downloaded**, **Secret expired unread**, **Secret deleted**, **Secret locked after wrong proofs** and **Secrets settings updated**. None of them holds a content, a key, a proof or a link.
 
@@ -146,32 +151,32 @@ An address erased at the request of the person concerned appears as a pseudonym 
 
 The **Security log** screen shows the security events of the entity over the last 12 months: wrong verification codes or transfer passwords, refused deposits, rate limits, invalid tokens and drop links, unknown secret links and wrong secret proofs (**Unknown secret link**, **Wrong secret proof**: repeated wrong proofs mean that someone holding a secret link is guessing its passphrase). These are the events that the intrusion prevention tools (fail2ban, CrowdSec) work on, which is different from the audit log. The log never contains an email address.
 
-Filter by **Event type** (choose a type in the list, or **Other type** and type its code) and by period with **From** and **To**. The columns show the **Date**, the **Type**, the **Reason**, the **IP address** and the **Occurrences**: identical events (same type, reason and address) seen within a short time are grouped in one row, with the number of occurrences and the date of the last one.
+Filter by **Event type** (choose a type in the list, or **Other type** and type its code) and by period with **From** and **To**, then click **Apply**. The columns show the **Date**, the **Type**, the **Reason**, the **IP address** and the **Occurrences**: identical events (same type, reason and address) seen within a short time are grouped in one row, with the number of occurrences and the date of the last one.
 
-![Security log of an entity with the filters and the list of events](../screenshots/en/admin-security-log.png)
+![Security log screen: the filters card (Event type, From, To, Apply, Reset) and the list of events with their date, type and technical code, reason, IP address and occurrences](../screenshots/en/admin-security-log.png)
 
 Events that belong to no entity (an unknown address, a failed administrator sign-in) are not shown here: they concern the instance and are reserved to the super administrator.
 
 <!-- topic: auditor-tenant-stats -->
 ## Statistics
 
-The **Statistics** screen shows the activity of the entity over a period. Choose the **Period**: **Last 7 days**, **Last 30 days** or **Last 12 months**. The **Key figures** give the **Transfers deposited**, **Volume deposited**, **Downloads**, **Volume downloaded**, **One-time secrets created** and **Virus detections**; the storage used is shown too, with charts per day or per month. Each chart has a **Show the data table** button for a readable version. The figures are indicative: the counters are updated about every 30 seconds. The storage used includes the files of the one-time secrets while they exist. **One-time secrets created** counts the secrets created in the period, whatever became of them afterwards (unfinished ones included); it starts at the upgrade to 2.1.
+The **Statistics** screen shows the activity of the entity over a period. Choose the **Period**: **Last 7 days**, **Last 30 days** or **Last 12 months**. The **Key figures** tiles give the **Transfers deposited**, **Volume deposited**, **Downloads**, **Volume downloaded**, **One-time secrets created** and **Virus detections**, each with a neutral trend compared with the previous 7 or 30 days (none over 12 months, since the daily counters are not kept long enough). The **Storage** card shows the storage used (current), and the **Activity** card the charts per day or per month. Each chart has a **Show the data table** button for a readable version. The figures are indicative: the counters are updated about every 30 seconds. The storage used includes the files of the one-time secrets while they exist. **One-time secrets created** counts the secrets created in the period, whatever became of them afterwards (unfinished ones included); it starts at the upgrade to 2.1.
 
-![Statistics of an entity with the key figures, the storage and the charts](../screenshots/en/admin-stats.png)
+![Statistics screen: the period, the six Key figures tiles with their trend compared with the previous 30 days, and the start of the Storage card](../screenshots/en/admin-stats.png)
 
 <!-- topic: auditor-tenant-drop-links -->
 ## Drop links
 
-The **Drop links** screen lists the permanent drop links of the entity, read-only: fixed addresses given to third parties to send files to a service of the entity. The list shows for each link its **Label**, **Recipients**, **Validity**, **Status** (**Active**, **Expired**, **Disabled** or **Revoked**), **Ends**, **Deposits per hour**, **Created** and **Last used**. A link neither used nor created for 12 months carries an **Unused for 12 months** badge.
+The **Drop links** screen lists the permanent drop links of the entity, read-only: fixed addresses given to third parties to send files to a service of the entity. The list shows for each link its **Label**, **Recipients**, **Validity**, **Level** (the confidentiality level), **Ends**, **Deposits per hour**, **Status** (**Active**, **Expired**, **Disabled** or **Revoked**) and **Last used**. A link neither used nor created for 12 months carries an **Unused for 12 months** badge.
 
 You can neither create, change, rotate nor revoke a link. The secret of a link, which is part of its address, is never shown to you.
 
 <!-- topic: auditor-tenant-secrets -->
 ## One-time secrets
 
-The **One-time secrets** screen lists, read-only, the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State** (**Pending**, **Active**, **Read**, **Expired**, **Deleted** or **Locked**), **Expiry** and **Read**. Filter by **State**. The **Author address** filter is not offered to you, as for the transfers and the audit log. An ended secret stays listed for 30 days as a tombstone, without any content, then disappears. You never see the content of a secret, its link or its passphrase, and you cannot delete any secret. The secrets settings are not offered to you.
+The **One-time secrets** screen lists, read-only, the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State** (**Pending**, **Active**, **Read**, **Expired**, **Deleted** or **Locked**), **Expiry** and **Read**. Filter by **State**, then click **Apply**. The **Author address** filter is not offered to you, as for the transfers and the audit log. An ended secret stays listed for 30 days as a tombstone, without any content, then disappears. You never see the content of a secret, its link or its passphrase, and you cannot delete any secret. The secrets settings are not offered to you.
 
-**Express secrets.** The list also holds the **express secrets** of the entity, created without authentication (see the delegated administrator guide): they carry an **Express** badge, and the author of an anonymous one is **Anonymous (express secret)**, with no address. **Find a secret from its link** lets you paste a secret link to see its metadata (identifier, type, state, dates). Your browser sends only the identifier of the secret (`tts_…`) extracted from the link, never the key, even from a link rewritten by a mail filter (whose `#` is encoded as `%23`), and the link is not kept; the lookup is recorded in the audit log (**Secret looked up from a link**). You never see the content, and the result has no **Delete** button for you. In the audit log, the creation of an express secret shows the address of the connection it came from, or the API token used.
+**Express secrets.** The list also holds the **express secrets** of the entity, created without authentication (see the delegated administrator guide): they carry an **Express** badge, and the author of an anonymous one is **Anonymous (express secret)**, with no address. The **Find a secret from its link** card, at the top of the screen, lets you paste a secret link in **Secret link** and click **Find the secret** to see its metadata (identifier, type, state, dates). Your browser sends only the identifier of the secret (`tts_…`) extracted from the link, never the key, even from a link rewritten by a mail filter (whose `#` is encoded as `%23`), and the link is not kept; the lookup is recorded in the audit log (**Secret looked up from a link**). You never see the content, and the result has no **Delete** button for you. In the audit log, the creation of an express secret shows the address of the connection it came from, or the API token used.
 
 <!-- topic: auditor-account -->
 ## My account
@@ -182,7 +187,7 @@ My account gathers your profile, your password and your second factor: the only 
 - **Change password**: type your **Current password**, then the **New password** twice, and click **Change the password**. Your other open sessions are closed; this one stays active. An account that signs in with single sign-on only has no password to change.
 - **Two-factor authentication** shows its status. **Configure a new device** (or **Enable two-factor authentication** if it is not enabled yet) asks for your current password, then follows the steps of [Two-factor authentication](topic:auditor-totp). The previous app stops working, new [recovery codes](topic:auditor-recovery-codes) replace the old ones, and your other sessions are closed. The screen does not offer you to disable two-factor authentication.
 
-![My account screen with the profile, the password change and the two-factor sections](../screenshots/en/admin-account.png)
+![My account screen (here of a delegated administrator) with the Profile card and the Change password card, followed by the Two-factor authentication card](../screenshots/en/admin-account.png)
 
 <!-- topic: auditor-limits -->
 ## What you cannot do

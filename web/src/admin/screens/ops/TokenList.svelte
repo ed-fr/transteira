@@ -8,13 +8,15 @@
   // - a link to the creation screen, to the interactive API documentation and a mention of the
   //   integration guide.
   // The secret of a token is never available here: the API never returns it again.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { tick, untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, HelpIcon, announce } from '../../../shared/components';
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
+  import ActionLink from '../../components/ActionLink.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import DataTable from '../../components/DataTable.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { tenantPath } from '../../shell';
@@ -193,19 +195,24 @@
   {/if}
 {/snippet}
 
-<div class="tt-title-row">
-  <h1 tabindex="-1" bind:this={heading}>{t('adminOps.tokens.title')}</h1>
-  <HelpIcon topic="tenant-tokens" title={t('adminOps.tokens.title')} {nav} />
-</div>
-<p>{t('adminOps.tokens.intro')}</p>
-<p>
-  {t('opsTokens.list.docsIntro')}
-  <a href={API_DOCS_PATH}>{t('opsTokens.list.docsLink')}</a>
-</p>
-
-<p>
-  <a href={nav.href(`${tenantPath(tenantId, 'tokens')}/new`)} use:nav.link>{t('opsTokens.list.create')}</a>
-</p>
+<PageHeader
+  title={t('adminOps.tokens.title')}
+  description={t('adminOps.tokens.intro')}
+  bind:element={heading}
+>
+  {#snippet help()}
+    <HelpIcon topic="tenant-tokens" title={t('adminOps.tokens.title')} {nav} />
+  {/snippet}
+  {#snippet actions()}
+    <ActionLink to={`${tenantPath(tenantId, 'tokens')}/new`} {nav} icon="plus">
+      {t('opsTokens.list.create')}
+    </ActionLink>
+  {/snippet}
+  <p class="tt-tokens__docs">
+    {t('opsTokens.list.docsIntro')}
+    <a href={API_DOCS_PATH}>{t('opsTokens.list.docsLink')}</a>
+  </p>
+</PageHeader>
 
 {#if loadError !== ''}
   <Alert severity="error">
@@ -260,6 +267,11 @@
 />
 
 <style>
+  .tt-tokens__docs {
+    margin: var(--tt-space-1) 0 0;
+    color: var(--tt-muted);
+  }
+
   .tt-tokens__values {
     margin: 0;
   }

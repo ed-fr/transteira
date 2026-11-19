@@ -5,6 +5,8 @@
   // it did not change; other changes of the text (initial load, "Load more", whose added rows the
   // DataTable announces) are not announced (filterBar.ts). onapply may return false when it
   // applied nothing (e.g. refused by validation, whose errors are shown instead).
+  // Look (CLAUDE.md section 13.2): a card of the administration (radius 16 px, decorative
+  // --tt-separator border); the fields keep their --tt-border outline.
   //
   //   <FilterBar label={filtersLabel} onapply={load} onreset={clear} busy={loading}
   //              resultText={loadedText}>
@@ -102,11 +104,13 @@
 
 <style>
   .tt-filter {
+    min-width: 0;
     margin-bottom: var(--tt-space-4);
-    padding: var(--tt-space-4);
-    border: var(--tt-border-width) solid var(--tt-border);
-    border-radius: var(--tt-radius);
+    padding: var(--tt-space-5);
+    border: var(--tt-border-width) solid var(--tt-separator);
+    border-radius: var(--tt-radius-lg);
     background: var(--tt-surface);
+    color: var(--tt-text);
   }
 
   .tt-filter__fields {
@@ -126,5 +130,17 @@
     margin: var(--tt-space-3) 0 0;
     color: var(--tt-muted);
     font-size: var(--tt-font-size-sm);
+  }
+
+  @media (max-width: 40rem) {
+    .tt-filter {
+      padding: var(--tt-space-4);
+    }
+  }
+
+  @media (forced-colors: active) {
+    .tt-filter {
+      border-color: CanvasText;
+    }
   }
 </style>

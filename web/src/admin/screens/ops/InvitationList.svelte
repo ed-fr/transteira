@@ -6,12 +6,13 @@
   //   invitations still usable (pending or used, not expired);
   // - revocation (DELETE, 204 also when already revoked or expired) after a confirmation that
   //   says the link stops working immediately and deposits started with it end.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { tick, untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, announce } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, announce } from '../../../shared/components';
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
+  import PageHeader from '../../components/PageHeader.svelte';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import DataTable from '../../components/DataTable.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
@@ -193,8 +194,15 @@
   {/if}
 {/snippet}
 
-<h1 tabindex="-1" bind:this={heading}>{t('adminOps.invitations.title')}</h1>
-<p>{t('adminOps.invitations.intro')}</p>
+<PageHeader
+  title={t('adminOps.invitations.title')}
+  description={t('adminOps.invitations.intro')}
+  bind:element={heading}
+>
+  {#snippet help()}
+    <HelpIcon topic="tenant-invitations" title={t('adminOps.invitations.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 <FilterBar
   label={t('opsInvitations.filters.label')}

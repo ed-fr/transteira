@@ -6,9 +6,13 @@
   // delegated admin with a single tenant goes straight to its general settings.
   import { onMount } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button } from '../../../shared/components';
-  import { formatNumber, i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
+  import { Alert, Button, HelpIcon } from '../../../shared/components';
+  import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
+  import ActionLink from '../../components/ActionLink.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
+  import QuotaMeter from '../../components/QuotaMeter.svelte';
+  import TenantSwatch from '../../components/TenantSwatch.svelte';
   import DataTable from '../../components/DataTable.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { tenantPath } from '../../shell';
@@ -18,7 +22,6 @@
     canManageTenants,
     languageLabel,
     listRedirect,
-    quotaUsage,
     statusView,
     type Tenant,
   } from './tenants';
@@ -78,19 +81,13 @@
     }
     void load();
   });
-
-  function usageText(tenant: Tenant): string {
-    const usage = quotaUsage(tenant);
-    return t('adminTenants.list.quotaUsage', {
-      used: formatBytes(usage.used),
-      quota: formatBytes(usage.quota),
-      percent: formatNumber(usage.percent, { maximumFractionDigits: 1 }),
-    });
-  }
 </script>
 
 {#snippet nameCell(row: Tenant)}
-  <a class="tt-break" href={nav.href(tenantPath(row.id, 'general'))} use:nav.link>{row.name}</a>
+  <span class="tt-tenant-name">
+    <TenantSwatch color={row.primaryColor} size="sm" />
+    <a class="tt-break" href={nav.href(tenantPath(row.id, 'general'))} use:nav.link>{row.name}</a>
+  </span>
 {/snippet}
 
 {#snippet fqdnCell(row: Tenant)}
@@ -103,7 +100,15 @@
 {/snippet}
 
 {#snippet quotaCell(row: Tenant)}
-  {usageText(row)}
+  <QuotaMeter
+    used={row.storageUsedBytes}
+    quota={row.storageQuotaBytes}
+    label={t('adminTenants.list.quotaFor', { name: row.name })}
+    {formatBytes}
+    labelHidden
+    showLevel="alert"
+    compact
+  />
 {/snippet}
 
 {#snippet languageCell(row: Tenant)}
@@ -121,16 +126,17 @@
   {/if}
 {/snippet}
 
-<h1 tabindex="-1">{t('adminTenants.list.title')}</h1>
-<p>{t('adminTenants.list.intro')}</p>
-
-{#if canCreate}
-  <p>
-    <a href={nav.href('/tenants/new')} use:nav.link>{t('adminTenants.list.create')}</a>
-    ·
-    <a href={nav.href(importPath())} use:nav.link>{t('adminTenants.list.import')}</a>
-  </p>
-{/if}
+<PageHeader title={t('adminTenants.list.title')} description={t('adminTenants.list.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="tenants" title={t('adminTenants.list.title')} {nav} />
+  {/snippet}
+  {#snippet actions()}
+    {#if canCreate}
+      <ActionLink to="/tenants/new" {nav} icon="plus">{t('adminTenants.list.create')}</ActionLink>
+      <ActionLink to={importPath()} {nav} variant="secondary">{t('adminTenants.list.import')}</ActionLink>
+    {/if}
+  {/snippet}
+</PageHeader>
 
 {#if error !== ''}
   <Alert severity="error">
@@ -165,3 +171,11 @@
     <Alert severity="error">{moreError}</Alert>
   {/if}
 {/if}
+
+<style>
+  .tt-tenant-name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--tt-space-3);
+  }
+</style>

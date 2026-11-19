@@ -3,14 +3,15 @@
   // with the cursor), filtered by status, address (sender or recipient; not for an auditor) and
   // creation day. The filters live in the URL query string (bookmarkable, restored by the back
   // button): the screen is kept when only the query changes, so the list reloads when the filter
-  // query changes. The date column links to the detail screen. The tenant sub-navigation is
-  // rendered by App.svelte.
+  // query changes. The date column links to the detail screen. The tenant navigation is
+  // in the sidebar (SidebarTenantBlock of AdminShell).
   import { untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, TextField } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, TextField } from '../../../shared/components';
   import { formatDate, formatNumber, i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import DataTable from '../../components/DataTable.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
   import SelectField from '../../components/SelectField.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -172,12 +173,16 @@
   {dateOr(row.expiresAt, t('opsTransfers.list.noExpiry'), dateTime)}
 {/snippet}
 
-<h1 tabindex="-1">{t('adminOps.transfers.title')}</h1>
-<p>
-  {adminSession.me?.role === 'auditor'
+<PageHeader
+  title={t('adminOps.transfers.title')}
+  description={adminSession.me?.role === 'auditor'
     ? t('adminOps.transfers.introReadOnly')
     : t('adminOps.transfers.intro')}
-</p>
+>
+  {#snippet help()}
+    <HelpIcon topic="tenant-transfers" title={t('adminOps.transfers.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 <FilterBar
   label={t('opsTransfers.list.filtersLabel')}

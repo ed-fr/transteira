@@ -5,6 +5,8 @@ import {
   SYSTEM_SMTP_VARIABLES,
   diskView,
   loadGlobalStats,
+  overviewTotals,
+  trendDays,
   tenantStatsRow,
   tenantStatsRows,
   type DiskStats,
@@ -116,6 +118,10 @@ describe('tenant rows', () => {
       path: '/tenants/ten_B/general',
       transfers: '#4',
       volume: '2 GiB',
+      viruses: '#0',
+      downloads: '#0',
+      used: 90 * GiB,
+      quota: 100 * GiB,
       usage: 'adminComponents.quota.usage {"used":"90 GiB","quota":"100 GiB","percent":"90 %"}',
       level: 'warning',
       levelVariant: 'warning',
@@ -127,6 +133,8 @@ describe('tenant rows', () => {
     const rows = tenantStatsRows(stats, fmt, t);
     expect(rows.map((r) => r.id)).toEqual(['ten_B', 'ten_A']);
     expect(rows[1]).toMatchObject({
+      used: 0,
+      quota: 0,
       level: 'ok',
       levelVariant: 'ok',
       usage: 'adminComponents.quota.noQuota {"used":"0 GiB"}',
@@ -141,5 +149,50 @@ describe('tenant rows', () => {
     );
     expect(row.level).toBe('full');
     expect(row.levelVariant).toBe('error');
+  });
+});
+
+describe('overviewTotals', () => {
+  const row = (n: number, previous?: boolean) => ({
+    ...stats.tenants[0]!,
+    transferCount: n,
+    bytesUploaded: n * 10,
+    virusDetections: n,
+    downloadCount: n * 2,
+    ...(previous
+      ? {
+          previous: {
+            transferCount: 1,
+            bytesUploaded: 2,
+            downloadCount: 3,
+            bytesDownloaded: 0,
+            virusDetections: 4,
+            secretsCreated: 0,
+          },
+        }
+      : {}),
+  });
+
+  it('sums the counters and the previous period when every row has one', () => {
+    const totals = overviewTotals({ ...stats, tenants: [row(1, true), row(2, true)] });
+    expect(totals.current).toEqual({ transfers: 3, bytes: 30, viruses: 3, downloads: 6 });
+    expect(totals.previous).toEqual({ transfers: 2, bytes: 4, viruses: 8, downloads: 6 });
+  });
+
+  it('has no previous period when a row lacks it, or without rows, and tolerates missing counters', () => {
+    expect(overviewTotals({ ...stats, tenants: [row(1, true), row(2)] }).previous).toBeUndefined();
+    expect(overviewTotals({ ...stats, tenants: [] })).toEqual({
+      current: { transfers: 0, bytes: 0, viruses: 0, downloads: 0 },
+      previous: undefined,
+    });
+    expect(overviewTotals(stats).current.viruses).toBe(0);
+  });
+});
+
+describe('trendDays', () => {
+  it('gives the length of the periods that have a previous one', () => {
+    expect(trendDays('7d')).toBe(7);
+    expect(trendDays('30d')).toBe(30);
+    expect(trendDays('12m')).toBeUndefined();
   });
 });

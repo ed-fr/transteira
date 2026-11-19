@@ -106,10 +106,6 @@
 </section>
 
 <style>
-  .tt-presets {
-    margin-bottom: var(--tt-space-8);
-  }
-
   .tt-presets__heading {
     margin: 0 0 var(--tt-space-2);
   }

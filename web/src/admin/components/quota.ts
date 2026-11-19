@@ -44,9 +44,27 @@ export function quotaLevel(ratio: number, warningRatio?: number): QuotaLevel {
   return ratio >= warningRatioOrDefault(warningRatio) ? 'warning' : 'ok';
 }
 
+/**
+ * When QuotaMeter shows its level pill: always (true), never (false: the screen states the level
+ * next to the meter itself, e.g. the disk alert), or 'alert' (dense tables: only when the level is
+ * nearly full or full, so that these levels are always written out, never conveyed by the colour
+ * of the fill alone, while the OK rows stay light).
+ */
+export type QuotaLevelDisplay = boolean | 'alert';
+
+/** Whether the level pill of a meter is shown, for a display mode and a level. */
+export function showsQuotaLevel(display: QuotaLevelDisplay, level: QuotaLevel): boolean {
+  return display === 'alert' ? level !== 'ok' : display;
+}
+
 /** StatusBadge variant of a level. */
 export function quotaBadgeVariant(level: QuotaLevel): 'ok' | 'warning' | 'error' {
   return level === 'full' ? 'error' : level;
+}
+
+/** Colour level of the gauge of a level (Gauge.svelte): full is danger. */
+export function quotaGaugeLevel(level: QuotaLevel): 'default' | 'warning' | 'danger' {
+  return level === 'full' ? 'danger' : level === 'warning' ? 'warning' : 'default';
 }
 
 /** Attributes of the native <meter> of a quota (max at least 1 so that the meter stays valid). */

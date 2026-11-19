@@ -6,6 +6,7 @@ import { tenantStatsPeriodValues, type components } from '../../../shared/api/sc
 import type { ApiClient } from '../../../shared/api/client';
 import type { ChartPoint } from '../../components/charts';
 import type { Translate } from '../../../shared/i18n/messages';
+import { trend, trendText } from '../../components/trend';
 
 /** Translation function (the t of the i18n module). */
 export type { Translate };
@@ -16,6 +17,51 @@ export type TenantStats = components['schemas']['TenantStats'];
 export type StatsPeriod = TenantStats['period'];
 /** Metric of a chart series. */
 export type SeriesMetric = 'transfers' | 'bytesUploaded';
+/** Number of days of the periods that have a previous period (none for 12 months). */
+const PERIOD_DAYS: Partial<Record<StatsPeriod, number>> = { '7d': 7, '30d': 30 };
+
+/**
+ * Neutral trend texts of the key figure cards against the previous period ("+18 % vs the previous
+ * 30 days"), by card id. Empty for 12 months (no previous period) and for a figure the server does
+ * not report; a card absent from the result shows no trend.
+ */
+export function cardTrends(
+  stats: TenantStats,
+  t: Translate,
+  formatPercent: (ratio: number) => string,
+): Partial<Record<StatCardView['id'], string>> {
+  const days = PERIOD_DAYS[stats.period];
+  const previous = stats.previous;
+  if (days === undefined || previous === undefined) {
+    return {};
+  }
+  const current: Record<StatCardView['id'], number | undefined> = {
+    transfers: stats.transferCount,
+    bytesUploaded: stats.bytesUploaded,
+    downloads: stats.downloadCount,
+    bytesDownloaded: stats.bytesDownloaded,
+    secretsCreated: stats.secretsCreated,
+    virusDetections: stats.virusDetections,
+  };
+  const before: Record<StatCardView['id'], number> = {
+    transfers: previous.transferCount,
+    bytesUploaded: previous.bytesUploaded,
+    downloads: previous.downloadCount,
+    bytesDownloaded: previous.bytesDownloaded,
+    secretsCreated: previous.secretsCreated,
+    virusDetections: previous.virusDetections,
+  };
+  const texts: Partial<Record<StatCardView['id'], string>> = {};
+  for (const id of Object.keys(current) as StatCardView['id'][]) {
+    const now = current[id];
+    const text = now === undefined ? undefined : trendText(trend(now, before[id]), days, t, formatPercent);
+    if (text !== undefined) {
+      texts[id] = text;
+    }
+  }
+  return texts;
+}
+
 /** Granularity of the series of a period. */
 export type SeriesGranularity = 'day' | 'month';
 

@@ -4,7 +4,8 @@
   //
   // Props:
   //   name   icon of the set: alert, check, chevron, clock, copy, download, file, folder, globe,
-  //          help, info, list, lock, moon, send, shield, sun, upload, x
+  //          grid, help, home, info, list, lock, logs, menu, moon, plus, search, send, settings,
+  //          shield, sun, upload, user, users, x
   //   size   'xs' (0.75rem), 'sm' (1rem), 'md' (1.25rem, default), 'lg' (1.5rem), 'xl' (2rem)
   //   label  accessible name: the icon is then role="img" with aria-label; without it (the
   //          default) the icon is decorative, aria-hidden="true", and the text next to it names

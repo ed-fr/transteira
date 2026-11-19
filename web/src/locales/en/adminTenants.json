@@ -11,7 +11,7 @@
       "language": "Default language",
       "actions": "Actions"
     },
-    "quotaUsage": "{used} of {quota} ({percent}%)",
+    "quotaFor": "Storage used by {name}",
     "empty": "No entity yet.",
     "emptyDelegated": "No entity is attached to your account. Contact a super administrator.",
     "create": "Create an entity",
@@ -462,6 +462,8 @@
       "quota-warning": "Quota alert (80%)",
       "quota-reached": "Quota reached",
       "antivirus-unavailable": "Antivirus unavailable",
+      "abuse-alert": "Abuse alert",
+      "abuse-report": "Abuse report",
       "secret-notification": "Secret notification",
       "secret-receipt": "Secret read receipt"
     },
@@ -476,6 +478,8 @@
       "quota-warning": "Sent to the delegated administrators at 80% of the quota.",
       "quota-reached": "Sent to the delegated administrators when the quota is reached.",
       "antivirus-unavailable": "Sent to the administrators of the entity when the antivirus has not responded for several minutes while transfers are waiting for analysis.",
+      "abuse-alert": "Sent to the delegated administrators when an abuse threshold is exceeded.",
+      "abuse-report": "Sent to the delegated administrators when a recipient reports an abuse.",
       "secret-notification": "Sent to the recipient of an e-mail secret with the link to read it once.",
       "secret-receipt": "Sent to the creator when the secret was read, expired or locked."
     },

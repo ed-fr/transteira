@@ -6,10 +6,12 @@
   // is shown when its name cannot be loaded).
   import { onMount } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button } from '../../../shared/components';
+  import { Alert, Button, HelpIcon } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
+  import ActionLink from '../../components/ActionLink.svelte';
   import DataTable from '../../components/DataTable.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import type { AdminScreenProps } from '../types';
   import {
@@ -113,12 +115,14 @@
   </a>
 {/snippet}
 
-<div class="tt-cluster tt-cluster--between tt-mb-4">
-  <h1 tabindex="-1" class="tt-mb-0">{t('adminAccounts.list.title')}</h1>
-  <a class="tt-admins__create" href={nav.href('/admins/new')} use:nav.link>{t('adminAccounts.list.create')}</a
-  >
-</div>
-<p>{t('adminAccounts.list.intro')}</p>
+<PageHeader title={t('adminAccounts.list.title')} description={t('adminAccounts.list.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="admins" title={t('adminAccounts.list.title')} {nav} />
+  {/snippet}
+  {#snippet actions()}
+    <ActionLink to="/admins/new" {nav} icon="plus">{t('adminAccounts.list.create')}</ActionLink>
+  {/snippet}
+</PageHeader>
 
 {#if error !== ''}
   <Alert severity="error">
@@ -160,10 +164,3 @@
     <Alert severity="error">{moreError}</Alert>
   {/if}
 {/if}
-
-<style>
-  .tt-admins__create {
-    font-weight: var(--tt-font-weight-bold);
-    color: var(--tt-link);
-  }
-</style>

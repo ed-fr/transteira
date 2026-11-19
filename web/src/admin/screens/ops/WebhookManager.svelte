@@ -19,6 +19,7 @@
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import DataTable from '../../components/DataTable.svelte';
   import SecretOnceModal from '../../components/SecretOnceModal.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -355,23 +356,22 @@
   </div>
 {/snippet}
 
-<div class="tt-title-row">
-  <h1 tabindex="-1" bind:this={heading}>{title}</h1>
-  <!-- Literal topics: src/help/guides.test.ts checks them against the routes and the guides. -->
-  {#if scope === 'system'}
-    <HelpIcon topic="system-webhooks" {title} {nav} />
-  {:else}
-    <HelpIcon topic="tenant-webhooks" {title} {nav} />
-  {/if}
-</div>
-<p>{intro}</p>
-{#if notice}{@render notice()}{/if}
-
-<p>
-  <Button onclick={startCreate} disabled={loading || loadError !== '' || atLimit}>
-    {t('opsWebhooks.list.create')}
-  </Button>
-</p>
+<PageHeader {title} description={intro} bind:element={heading}>
+  {#snippet help()}
+    <!-- Literal topics: src/help/guides.test.ts checks them against the routes and the guides. -->
+    {#if scope === 'system'}
+      <HelpIcon topic="system-webhooks" {title} {nav} />
+    {:else}
+      <HelpIcon topic="tenant-webhooks" {title} {nav} />
+    {/if}
+  {/snippet}
+  {#snippet actions()}
+    <Button onclick={startCreate} disabled={loading || loadError !== '' || atLimit}>
+      {t('opsWebhooks.list.create')}
+    </Button>
+  {/snippet}
+  {#if notice}{@render notice()}{/if}
+</PageHeader>
 {#if atLimit}
   <Alert severity="info" live={false}>{t('opsWebhooks.errors.limit', { max: MAX_WEBHOOKS })}</Alert>
 {/if}

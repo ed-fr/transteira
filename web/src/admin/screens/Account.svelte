@@ -11,7 +11,7 @@
   // cleared when it goes away or when the session ends (threat model T-162).
   import { onDestroy, tick } from 'svelte';
   import { describeError } from '../../shared/api/problem';
-  import { Alert, Button, announce } from '../../shared/components';
+  import { Alert, Button, HelpIcon, announce } from '../../shared/components';
   import { i18n, t } from '../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../api';
   import type { TotpEnrollment } from '../auth/machine';
@@ -23,9 +23,11 @@
     validatePasswordChange,
     type FormFailure,
   } from '../auth/views';
+  import Card from '../components/Card.svelte';
   import ConfirmDialog from '../components/ConfirmDialog.svelte';
   import FormSection from '../components/FormSection.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../components/form';
+  import PageHeader from '../components/PageHeader.svelte';
   import PasswordField from '../components/PasswordField.svelte';
   import RecoveryCodes from '../components/RecoveryCodes.svelte';
   import TotpEnroll from '../components/TotpEnroll.svelte';
@@ -199,11 +201,14 @@
   });
 </script>
 
-<h1 tabindex="-1">{t('adminAuth.account.title')}</h1>
+<PageHeader title={t('adminAuth.account.title')}>
+  {#snippet help()}
+    <HelpIcon topic="account" title={t('adminAuth.account.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if me}
-  <section aria-labelledby="{uid}-profile">
-    <h2 id="{uid}-profile">{t('adminAuth.account.profile.title')}</h2>
+  <Card title={t('adminAuth.account.profile.title')} headingId="{uid}-profile">
     <dl class="tt-dl">
       <dt>{t('adminAuth.account.profile.username')}</dt>
       <dd class="tt-break">{me.username}</dd>
@@ -226,7 +231,7 @@
         {/if}
       </dd>
     </dl>
-  </section>
+  </Card>
 
   <FormSection
     title={t('adminAuth.account.password.title')}
@@ -263,8 +268,7 @@
     />
   </FormSection>
 
-  <section aria-labelledby="{uid}-totp">
-    <h2 id="{uid}-totp">{t('adminAuth.account.totp.title')}</h2>
+  <Card title={t('adminAuth.account.totp.title')} headingId="{uid}-totp">
     <p>
       {t('adminAuth.account.totp.status', {
         status: me.totpEnabled ? t('adminAuth.account.totp.enabled') : t('adminAuth.account.totp.disabled'),
@@ -342,7 +346,7 @@
         </Button>
       {/if}
     {/if}
-  </section>
+  </Card>
 
   <ConfirmDialog
     bind:open={disableOpen}

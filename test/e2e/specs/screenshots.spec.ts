@@ -417,7 +417,7 @@ async function openSecurity(page: Page, lang: Lang): Promise<void> {
  * ULID or random suffix: ten_..., trf_..., mk_...), SHA-256 fingerprints and other hexadecimal
  * digests, API token prefixes and secrets, dates and times (server timestamps).
  */
-const VOLATILE: readonly [string, 'id' | 'hex' | 'token' | 'digits' | 'ip' | 'relative'][] = [
+const VOLATILE: readonly [string, 'id' | 'hex' | 'token' | 'digits' | 'ip' | 'relative' | 'version'][] = [
   [/\b[a-z]{2,4}_(?=[0-9A-Za-z]*\d)[0-9A-Za-z]{12,}\b/.source, 'id'],
   // SHA-256 fingerprints, pseudonyms of erased addresses and other digests (letters and digits).
   [/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{12,}\b/.source, 'hex'],
@@ -433,6 +433,9 @@ const VOLATILE: readonly [string, 'id' | 'hex' | 'token' | 'digits' | 'ip' | 're
     'relative',
   ],
   [/\btt_[A-Za-z0-9_-]{4,}/.source, 'token'],
+  // Version of the build in the system status card and the footer (0.0.0-dev+abc1234): the
+  // commit hash changes at every build.
+  [/\b\d+\.\d+\.\d+-dev\+[0-9a-z.]+/.source, 'version'],
   // Dates (10/24/26, 24/10/2026, 2026-10-24, Oct 24, 2026) and times (7:58 PM, 19:58:50); the
   // lookarounds keep IPv4 addresses and IPv6 examples (2001:db8::) out.
   [
@@ -443,6 +446,39 @@ const VOLATILE: readonly [string, 'id' | 'hex' | 'token' | 'digits' | 'ip' | 're
   // setup), but not the ranges of the network settings (followed by a prefix length).
   [/\b\d{1,3}(?:\.\d{1,3}){3}\b(?!\/)/.source, 'ip'],
 ];
+
+/**
+ * Wraps the date of the maintenance banner of the administration (the text of the shell,
+ * which also holds the "Manage" link): the date is replaced by a fixed value, in a span of its
+ * own, so that the capture is deterministic and the rest of the banner stays visible. Throws
+ * when a banner exists but no date matched, so that a change of the date format fails loudly.
+ */
+async function isolateBannerDate(page: Page): Promise<void> {
+  const unmatched = await page.evaluate(() => {
+    let missed = 0;
+    const date =
+      /[A-Z][a-z]{2}\.?\s\d{1,2},\s\d{4},?\s\d{1,2}:\d{2}(?:\s[AP]M)?|\d{1,2}\s[a-zéû]{3,5}\.?\s\d{4}(?:,|\sà)?\s\d{1,2}:\d{2}/u;
+    const paragraphs = document.querySelectorAll('p:has(> a[href$="/system/maintenance"])');
+    for (const p of paragraphs) {
+      let matched = false;
+      for (const node of Array.from(p.childNodes)) {
+        const text = node.nodeValue ?? '';
+        const found = node.nodeType === Node.TEXT_NODE ? date.exec(text) : null;
+        if (found === null) continue;
+        matched = true;
+        const fr = /^\d/.test(found[0]);
+        const span = document.createElement('span');
+        span.textContent = fr ? '01 janv. 2026, 12:00' : 'Jan 1, 2026, 12:00 PM';
+        const tail = document.createTextNode(text.slice(found.index + found[0].length));
+        node.nodeValue = text.slice(0, found.index);
+        node.after(span, tail);
+      }
+      if (!matched) missed += 1;
+    }
+    return missed;
+  });
+  if (unmatched > 0) throw new Error('The maintenance banner has no date in a known format');
+}
 
 /**
  * Neutralises the volatile values in the text of the page and marks their elements with
@@ -466,6 +502,7 @@ async function neutraliseVolatileText(page: Page): Promise<void> {
             if (kind === 'hex') return m.replace(/[0-9a-f]/g, '0');
             if (kind === 'relative')
               return m.startsWith('Expires') ? 'Expires in 7 days' : 'Expire dans 7 jours';
+            if (kind === 'version') return '0.0.0-dev+0000000';
             if (kind === 'token') return `tt_${'X'.repeat(m.length - 3)}`;
             if (kind === 'ip') return fixedIps.includes(m) ? m : '000.000.000.000';
             return m.replace(/\d/g, '0');
@@ -485,10 +522,19 @@ async function neutraliseVolatileText(page: Page): Promise<void> {
 function volatileAreas(page: Page, lang: Lang): Locator[] {
   return [
     page.locator('[data-e2e-volatile]'),
-    // Disk space of the machine running the capture (home and system overview).
+    // Disk space of the machine running the capture. On the home page of the super admin the
+    // disk tile keeps its card and its label: only its value and its gauge with the free space
+    // are masked. The disk meter of the system overview is masked as a whole.
+    page.locator('.tt-home__disk .tt-stat__value, .tt-home__disk .tt-stat__extra'),
     page
       .locator('.tt-quota')
       .filter({ has: page.getByRole('meter', { name: msg(lang, 'sysStats.disk.label') }) }),
+    // Disk tile of the system overview: its value and the used and total volumes of the machine
+    // are masked, the card and its label stay visible.
+    page
+      .locator('.tt-stat')
+      .filter({ hasText: msg(lang, 'sysStats.tiles.disk') })
+      .locator('.tt-stat__value, .tt-stat__hint'),
     page.locator('input[type="date"], input[type="datetime-local"], input[type="time"]'),
   ];
 }
@@ -603,6 +649,7 @@ async function shoot(
     }, MASK_COLOR);
   }
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  await isolateBannerDate(page);
   await neutraliseVolatileText(page);
   await page.evaluate(async () => {
     await document.fonts.ready;

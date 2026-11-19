@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AdminMe } from './auth/machine';
 import {
+  closesSidebarMenu,
+  inAdminFrame,
   SYSTEM_SECTIONS,
   TENANT_CONFIG_SECTIONS,
   TENANT_OPS_SECTIONS,
@@ -19,6 +21,13 @@ import {
   tenantLinks,
   tenantNameOf,
   tenantPath,
+  isGroupOpen,
+  pinnedTenantId,
+  revealCurrentGroups,
+  sidebarModel,
+  toggleGroup,
+  type CollapsedGroups,
+  type SidebarModel,
 } from './shell';
 
 const available = ['en', 'fr'];
@@ -266,6 +275,13 @@ describe('role-aware navigation', () => {
 
   it('builds the main navigation per role', () => {
     const paths = (role: Parameters<typeof mainLinks>[0]) => mainLinks(role).map((l) => l.path);
+    expect(mainLinks('super_admin').map((l) => [l.id, l.icon])).toEqual([
+      ['home', 'home'],
+      ['tenants', 'grid'],
+      ['admins', 'users'],
+      ['system', 'settings'],
+      ['account', 'user'],
+    ]);
     expect(paths('super_admin')).toEqual(['/', '/tenants', '/admins', '/system', '/account']);
     expect(paths('delegated_admin')).toEqual(['/', '/tenants', '/account']);
     expect(paths('auditor')).toEqual(['/', '/tenants', '/account']);
@@ -300,5 +316,197 @@ describe('canSearchByAddress', () => {
     expect(canSearchByAddress('auditor')).toBe(false);
     expect(canSearchByAddress('observer')).toBe(false);
     expect(canSearchByAddress(undefined)).toBe(false);
+  });
+});
+
+describe('sidebar model', () => {
+  const tenantA = { id: 'ten_a', name: 'Entity A', fqdn: 'transfer.entity-a.example.com' };
+  const tenantB = { id: 'ten_b', name: 'Entity B', fqdn: 'transfer.entity-b.example.com' };
+  const profile = (role: AdminMe['role'], tenants: AdminMe['tenants']): AdminMe => ({
+    id: 'adm_1',
+    username: 'alice',
+    email: 'alice@example.com',
+    role,
+    totpEnabled: true,
+    csrfToken: 'x',
+    tenants,
+  });
+  const superAdmin = profile('super_admin', [tenantA, tenantB]);
+  const delegate = profile('delegated_admin', [tenantA]);
+  const delegateOfTwo = profile('delegated_admin', [tenantA, tenantB]);
+  const auditor = profile('auditor', [tenantA]);
+
+  const entry = (model: SidebarModel, id: string) => model.entries.find((e) => e.id === id);
+  const currentLinks = (model: SidebarModel) =>
+    model.entries.flatMap((e) => [
+      ...(e.current === undefined ? [] : [[e.path, e.current]]),
+      ...(e.tenant?.groups ?? []).flatMap((g) =>
+        g.links.filter((l) => l.current !== undefined).map((l) => [l.path, l.current]),
+      ),
+      ...(e.system?.links ?? []).filter((l) => l.current !== undefined).map((l) => [l.path, l.current]),
+    ]);
+
+  it('pins the tenant of an admin who has exactly one', () => {
+    expect(pinnedTenantId(delegate)).toBe('ten_a');
+    expect(pinnedTenantId(auditor)).toBe('ten_a');
+    expect(pinnedTenantId(superAdmin)).toBeUndefined();
+    expect(pinnedTenantId(profile('delegated_admin', []))).toBeUndefined();
+    expect(pinnedTenantId(undefined)).toBeUndefined();
+  });
+
+  it('lists the main entries of the role with their icon, home current', () => {
+    const model = sidebarModel(superAdmin, '/', undefined, false);
+    expect(model.entries.map((e) => [e.id, e.path, e.key, e.icon, e.current])).toEqual([
+      ['home', '/', 'admin.nav.home', 'home', 'page'],
+      ['tenants', '/tenants', 'admin.nav.tenants', 'grid', undefined],
+      ['admins', '/admins', 'admin.nav.admins', 'users', undefined],
+      ['system', '/system', 'admin.nav.system', 'settings', undefined],
+      ['account', '/account', 'admin.nav.account', 'user', undefined],
+    ]);
+    expect(model.entries.some((e) => e.tenant !== undefined || e.system !== undefined)).toBe(false);
+    expect(sidebarModel(delegateOfTwo, '/account', undefined, false).entries.map((e) => e.id)).toEqual([
+      'home',
+      'tenants',
+      'account',
+    ]);
+  });
+
+  it('nests the block of the tenant shown under Entities, with both groups', () => {
+    const model = sidebarModel(superAdmin, '/tenants/ten_b/templates/code/fr', 'ten_b', false);
+    const tenants = entry(model, 'tenants');
+    expect(tenants?.current).toBe('true');
+    expect(tenants?.tenant).toMatchObject({ tenantId: 'ten_b', name: 'Entity B', pinned: false });
+    expect(tenants?.tenant?.groups.map((g) => [g.group, g.labelKey, g.holdsCurrent])).toEqual([
+      ['configuration', 'adminOps.nav.groupConfiguration', true],
+      ['operations', 'adminOps.nav.groupOperations', false],
+    ]);
+    expect(tenants?.tenant?.groups[0]?.links.find((l) => l.section === 'templates')).toEqual({
+      section: 'templates',
+      path: '/tenants/ten_b/templates',
+      labelKey: 'adminTenants.nav.templates',
+      current: 'true',
+    });
+    expect(currentLinks(model)).toEqual([
+      ['/tenants', 'true'],
+      ['/tenants/ten_b/templates', 'true'],
+    ]);
+    expect(entry(model, 'system')?.system).toBeUndefined();
+  });
+
+  it('gives an auditor the single consultation group', () => {
+    const model = sidebarModel(auditor, '/tenants/ten_a/audit', 'ten_a', false);
+    const block = entry(model, 'tenants')?.tenant;
+    expect(block?.pinned).toBe(true);
+    expect(block?.groups.map((g) => g.group)).toEqual(['consultation']);
+    expect(block?.groups[0]?.links.map((l) => l.section)).toEqual([
+      'general',
+      'sso',
+      'transfers',
+      'dropLinks',
+      'secrets',
+      'audit',
+      'security',
+      'stats',
+    ]);
+    expect(block?.groups[0]?.holdsCurrent).toBe(true);
+  });
+
+  it('shows the pinned tenant on every page of an admin with one tenant', () => {
+    const home = sidebarModel(delegate, '/', undefined, false);
+    expect(entry(home, 'tenants')?.tenant).toMatchObject({ tenantId: 'ten_a', pinned: true });
+    expect(entry(home, 'tenants')?.tenant?.groups.every((g) => !g.holdsCurrent)).toBe(true);
+    expect(currentLinks(home)).toEqual([['/', 'page']]);
+  });
+
+  it('never shows a tenant outside the scope of the admin', () => {
+    // The delegate of A on a page of B ("not found"): its own pinned block, never B.
+    const pinned = sidebarModel(delegate, '/tenants/ten_b/general', 'ten_b', false);
+    expect(entry(pinned, 'tenants')?.tenant?.tenantId).toBe('ten_a');
+    expect(JSON.stringify(pinned)).not.toContain('ten_b');
+    // An admin of two tenants on an unknown one: no block at all.
+    const none = sidebarModel(delegateOfTwo, '/tenants/ten_x/general', 'ten_x', false);
+    expect(entry(none, 'tenants')?.tenant).toBeUndefined();
+    expect(JSON.stringify(none)).not.toContain('ten_x');
+    // Without a tenant page and without a pinned tenant: no block.
+    expect(
+      entry(sidebarModel(delegateOfTwo, '/tenants', undefined, false), 'tenants')?.tenant,
+    ).toBeUndefined();
+  });
+
+  it('nests the system block under System on the system pages of a super admin', () => {
+    const overview = sidebarModel(superAdmin, '/system', undefined, true);
+    const system = entry(overview, 'system');
+    expect(system?.system?.links.map((l) => l.section)).toEqual([...SYSTEM_SECTIONS]);
+    // The overview is the exact page: the entry itself is only "true".
+    expect(currentLinks(overview)).toEqual([
+      ['/system', 'true'],
+      ['/system', 'page'],
+    ]);
+    const maintenance = sidebarModel(superAdmin, '/system/maintenance', undefined, true);
+    expect(currentLinks(maintenance)).toEqual([
+      ['/system', 'true'],
+      ['/system/maintenance', 'page'],
+    ]);
+    expect(entry(sidebarModel(superAdmin, '/admins', undefined, false), 'system')?.system).toBeUndefined();
+    // Never for another role, even if asked.
+    expect(sidebarModel(delegate, '/system', undefined, true).entries.some((e) => e.system)).toBe(false);
+  });
+
+  it('keeps an entry "page" when its block does not hold the page', () => {
+    const list = sidebarModel(delegate, '/tenants', undefined, false);
+    expect(entry(list, 'tenants')?.current).toBe('page');
+  });
+
+  it('builds the entries of an unknown profile without block', () => {
+    const model = sidebarModel(undefined, '/', 'ten_a', true);
+    expect(model.entries.map((e) => e.id)).toEqual(['home', 'tenants', 'account']);
+    expect(model.entries.some((e) => e.tenant !== undefined || e.system !== undefined)).toBe(false);
+  });
+});
+
+describe('sidebar groups', () => {
+  const none: CollapsedGroups = new Set();
+
+  it('opens every group by default and toggles one', () => {
+    expect(isGroupOpen(none, 'configuration')).toBe(true);
+    const collapsed = toggleGroup(none, 'operations');
+    expect(isGroupOpen(collapsed, 'operations')).toBe(false);
+    expect(isGroupOpen(collapsed, 'configuration')).toBe(true);
+    expect(none.size).toBe(0);
+    expect(isGroupOpen(toggleGroup(collapsed, 'operations'), 'operations')).toBe(true);
+  });
+
+  it('opens the group of the page shown on a navigation', () => {
+    const collapsed = toggleGroup(toggleGroup(none, 'operations'), 'configuration');
+    const revealed = revealCurrentGroups(collapsed, [
+      { group: 'configuration', holdsCurrent: false },
+      { group: 'operations', holdsCurrent: true },
+    ]);
+    expect(isGroupOpen(revealed, 'operations')).toBe(true);
+    expect(isGroupOpen(revealed, 'configuration')).toBe(false);
+    expect(revealCurrentGroups(revealed, [{ group: 'operations', holdsCurrent: true }])).toBe(revealed);
+  });
+});
+
+describe('inAdminFrame', () => {
+  const me = { id: 'adm_1', username: 'root', role: 'super_admin', tenants: [] } as unknown as AdminMe;
+
+  it('is the signed-in frame only for an authenticated session with a profile', () => {
+    expect(inAdminFrame({ state: { kind: 'authenticated' }, me })).toBe(true);
+    expect(inAdminFrame({ state: { kind: 'authenticated' }, me: undefined })).toBe(false);
+    expect(inAdminFrame({ state: { kind: 'anonymous' }, me })).toBe(false);
+    expect(inAdminFrame({ state: { kind: 'loading' }, me: undefined })).toBe(false);
+  });
+});
+
+describe('closesSidebarMenu', () => {
+  it('closes the open menu on Escape when the focus is on its button or in its panel', () => {
+    expect(closesSidebarMenu('Escape', true, true)).toBe(true);
+  });
+
+  it('leaves a closed menu, another key or a focus outside the sidebar alone', () => {
+    expect(closesSidebarMenu('Escape', false, true)).toBe(false);
+    expect(closesSidebarMenu('Enter', true, true)).toBe(false);
+    expect(closesSidebarMenu('Escape', true, false)).toBe(false);
   });
 });

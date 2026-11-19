@@ -1,6 +1,6 @@
 # Guide de l’administrateur délégué
 
-En tant qu’administrateur délégué, vous configurez et exploitez les entités rattachées à votre compte : habillage, règles réseau, serveur de messagerie, modèles de mails et mentions légales, ainsi que le suivi des transferts, des invitations, des secrets à usage unique, de la liste de blocage, des jetons d’API, des webhooks, du journal d’audit, des statistiques et des demandes relatives aux données personnelles. Tout se passe dans l’administration, à l’adresse communiquée par votre organisation (par exemple `admin.transfer.example.com/admin/`). Le lien **Aide** en bas de chaque écran ouvre directement la section correspondante de ce guide.
+En tant qu’administrateur délégué, vous configurez et exploitez les entités rattachées à votre compte : habillage, règles réseau, serveur de messagerie, modèles de mails et mentions légales, ainsi que le suivi des transferts, des invitations, des secrets à usage unique, de la liste de blocage, des jetons d’API, des webhooks, du journal d’audit, des statistiques et des demandes relatives aux données personnelles. Tout se passe dans l’administration, à l’adresse communiquée par votre organisation (par exemple `admin.transfer.example.com/admin/`). Le bouton d’aide (**?**) à côté du titre de chaque écran, et le lien **Aide** en bas de la page, ouvrent directement la section correspondante de ce guide.
 
 <!-- topic: admin-roles -->
 ## Rôles
@@ -47,7 +47,7 @@ Cette seconde étape doit être terminée dans les 5 minutes. Si vous rechargez 
 
 Contre les attaques par essais successifs, 5 échecs pour un même identifiant depuis une même adresse réseau en 15 minutes bloquent la connexion pendant 15 minutes ; la page affiche le temps restant. Les codes de second facteur erronés sont comptés de la même façon.
 
-Votre session prend fin après 30 minutes d’inactivité, et dans tous les cas après 12 heures (valeurs par défaut, réglées par l’exploitant). Pour partir plus tôt, cliquez sur **Se déconnecter** dans la navigation principale.
+Votre session prend fin après 30 minutes d’inactivité, et dans tous les cas après 12 heures (valeurs par défaut, réglées par l’exploitant). Pour partir plus tôt, cliquez sur **Se déconnecter** en bas de la barre latérale.
 
 > **À savoir** Mot de passe ou appareil perdu ? La page de connexion le rappelle : **Mot de passe ou appareil d’authentification perdu ? Demandez à un super administrateur de réinitialiser vos accès.** Le super administrateur vous remet alors un nouveau lien d’activation.
 
@@ -64,7 +64,7 @@ Sur **Configurer la double authentification** :
 2. Scannez le QR code. Si vous ne le pouvez pas, saisissez la **Clé de configuration** à la main dans l’application ; **Copier la clé** la copie.
 3. Saisissez le code à 6 chiffres affiché par l’application dans **Code de confirmation**, puis cliquez sur **Activer la double authentification**.
 
-![Configuration de la double authentification avec les trois étapes, la clé de configuration et le champ du code de confirmation](../screenshots/fr/admin-account-totp.png)
+![Carte Configurer la double authentification de Mon compte, avec les trois étapes, le QR code, la clé de configuration, le champ du code de confirmation et le bouton Activer la double authentification](../screenshots/fr/admin-account-totp.png)
 
 Si le code est refusé, vérifiez que l’horloge de votre appareil est à l’heure : les codes dépendent de l’heure.
 
@@ -85,21 +85,35 @@ Chaque code ne sert qu’une fois. La configuration d’un nouvel appareil gén�
 <!-- topic: admin -->
 ## Page d’accueil
 
-La page d’accueil donne une vue d’ensemble des entités que vous administrez.
+La page d’accueil vous donne une vue d’ensemble des entités que vous administrez. En haut, sous le titre **Accueil**, une ligne d’accueil (**Bonjour**, votre identifiant, puis **Vue d’ensemble de** suivi de votre entité, ou du nombre de vos entités) et, à droite, le champ **Rechercher** et son bouton, décrits dans [Recherche](topic:admin-search).
 
-Chaque entité dispose d’une carte avec :
+Les **Chiffres clés des 30 derniers jours** sont des tuiles, cumulées sur vos entités :
 
-- **Transferts (30 jours)** et **Volume déposé (30 jours)** ;
-- **Stockage utilisé**, une jauge de l’espace occupé par rapport au quota, avec son niveau : **OK**, **Presque plein** à partir de 80 %, **Plein** à 100 % ;
-- des liens rapides vers les transferts, le journal d’audit et les statistiques de l’entité.
+- **Transferts (30 jours)**, **Volume échangé (30 jours)** (le volume déposé) et **Virus bloqués (30 jours)**, chacun avec une tendance par rapport aux 30 jours précédents (par exemple **+12 % par rapport aux 30 jours précédents**, **Stable par rapport aux 30 jours précédents** ou **Aucune activité les 30 jours précédents**). La tendance n’est qu’un texte, jamais coloré : une hausse n’est ni bonne ni mauvaise ;
+- **Stockage utilisé** : la part du quota de vos entités qui est occupée, une jauge avec un repère au seuil d’alerte de 80 %, et l’espace occupé sur le quota suivi de **alerte à 80 %**. À partir de 80 %, la tuile affiche aussi **Presque plein**, et **Plein** à 100 %.
 
-![Page d’accueil d’un administrateur délégué avec la carte d’une entité](../screenshots/fr/admin-home-delegate.png)
+Sous les tuiles, la carte **Entités** liste vos entités (dix au plus ; **Tout voir** ouvre la liste complète) : la pastille de couleur, le nom et l’adresse de chaque entité, sa pastille de **Statut**, sa jauge de stockage (avec **Presque plein** ou **Plein** seulement le cas échéant) et un lien **Configurer**. La carte **Accès rapides** donne, pour chaque entité, les liens **Transferts de**, **Journal d’audit de** et **Statistiques de** suivis de son nom.
 
-Si une carte ne parvient pas à charger ses chiffres, cliquez sur **Réessayer**.
+![Page d’accueil d’un administrateur délégué : la barre latérale avec le bloc d’Entity A, le titre Accueil et son bouton d’aide, la ligne d’accueil, le champ de recherche, la recommandation de double authentification, les tuiles Transferts, Volume échangé, Virus bloqués et Stockage utilisé, la carte Entités et la carte Accès rapides](../screenshots/fr/admin-home-delegate.png)
 
-Si la double authentification n’est pas activée sur votre compte, un bandeau la recommande, avec le lien **L’activer depuis Mon compte**. Si aucune entité n’est encore rattachée à votre compte, la page l’indique : demandez à un super administrateur de vous en rattacher une.
+Si les chiffres ne peuvent pas être chargés, cliquez sur **Réessayer**.
 
-La navigation principale, en haut, comprend **Accueil**, **Entités**, **Mon compte** et **Se déconnecter**. Le pied de page contient le lien **Aide** et le sélecteur **Langue**, mémorisé dans ce navigateur.
+Si la double authentification n’est pas activée sur votre compte, un bandeau la recommande, avec le lien **L’activer depuis Mon compte**. Si l’une de vos entités est encore en cours de mise en service, un avertissement **Mise en service à terminer** propose **Commencer la mise en service de** suivi de son nom (voir [Assistant de configuration](topic:tenant-setup)). Si aucune entité n’est encore rattachée à votre compte, la page l’indique : demandez à un super administrateur de vous en rattacher une.
+
+L’administration a une **barre latérale** à gauche (sur un petit écran, le bouton **Menu** en haut l’ouvre, et elle se referme dès que vous choisissez une page). La navigation principale comprend **Accueil**, **Entités** et **Mon compte**. Sous **Entités**, le bloc de l’entité ouverte (toujours affiché si vous n’administrez qu’une entité) affiche son nom et ses groupes **Configuration** et **Exploitation**, que vous pouvez replier et déplier (voir [Navigation d’une entité](topic:tenant-nav)). En bas de la barre latérale, **Connecté en tant que** suivi de votre identifiant, votre **Rôle** et le bouton **Se déconnecter**. Le pied de page, sous la page, contient le lien **Aide**, le sélecteur **Langue** (mémorisé dans ce navigateur), la case **Thème sombre** et la version.
+
+Chaque écran commence par un en-tête de page : son titre, le bouton d’aide (**?**), parfois une courte description et, à droite, les actions principales de l’écran (par exemple **Créer un jeton** ou **Retour aux transferts**). En dessous, le contenu est regroupé en cartes ; sur un écran étroit, un tableau large défile horizontalement dans sa carte.
+
+<!-- topic: admin-search -->
+### Recherche
+
+Le champ **Rechercher** de la page d’accueil, et l’écran **Recherche** qu’il ouvre, retrouvent un transfert dans toutes les entités que vous administrez, sans ouvrir chaque entité.
+
+1. Saisissez soit un identifiant de transfert (`trf_` suivi de 26 lettres et chiffres), soit l’adresse **complète** d’un expéditeur ou d’un destinataire, puis cliquez sur **Rechercher**.
+2. Avec un identifiant, le transfert s’ouvre directement. Avec une adresse, la carte **Résultats** liste les transferts trouvés, du plus récent au plus ancien : **Entité**, **Transfert** (le lien ouvre son détail), **Expéditeur**, **Destinataires**, **Création** et **Statut**.
+3. Lorsqu’il y a plus de transferts que ceux affichés, l’avis **Seuls les transferts les plus récents sont affichés.** apparaît avec un lien **Tous les transferts de cette adresse dans** suivi de l’entité : il ouvre la liste des transferts de cette entité, filtrée par cette adresse.
+
+Limites : la recherche porte sur l’adresse exacte uniquement (ni fragment d’adresse, ni domaine), et 30 recherches par minute au plus sont acceptées : au-delà, l’écran indique quand réessayer. La requête n’est jamais placée dans la barre d’adresse du navigateur ni conservée : elle disparaît à la déconnexion. Les entités que vous n’administrez pas ne sont jamais interrogées.
 
 <!-- topic: account -->
 ## Mon compte
@@ -112,28 +126,28 @@ Mon compte regroupe votre profil, votre mot de passe et votre second facteur.
 - **Changer d’appareil d’authentification** : cliquez sur **Configurer un nouvel appareil**, saisissez votre mot de passe actuel, puis suivez les étapes décrites dans [Double authentification](topic:admin-totp) (si elle n’est pas encore activée, le bouton s’intitule **Activer la double authentification**). L’ancienne application cesse de fonctionner, de nouveaux [codes de secours](topic:admin-recovery-codes) remplacent les précédents et vos autres sessions sont fermées.
 - **Désactiver la double authentification** : possible uniquement si elle n’est pas obligatoire pour votre compte. Sinon, la demande est refusée avec **La double authentification est obligatoire pour votre compte : elle ne peut pas être désactivée.**
 
-![Écran Mon compte avec le profil, le changement de mot de passe et la double authentification](../screenshots/fr/admin-account.png)
+![Écran Mon compte avec la carte Profil et la carte Changer de mot de passe, suivies de la carte Double authentification](../screenshots/fr/admin-account.png)
 
 <!-- topic: tenants -->
 ## Entités
 
 La page **Entités** liste les entités que vous administrez, chacune avec son adresse, son habillage et sa configuration propres.
 
-Les colonnes indiquent le **Nom**, l’**Adresse (FQDN)** de ses pages publiques, le **Statut**, le **Stockage utilisé** et la **Langue par défaut**. Cliquez sur le nom, ou sur **Configurer** suivi du nom, pour ouvrir une entité. Si une seule entité est rattachée à votre compte, cette page vous y mène directement.
+Les colonnes indiquent le **Nom** (après la pastille de couleur de l’entité), l’**Adresse (FQDN)** de ses pages publiques, la pastille de **Statut** (**Active**, **En cours de mise en service** ou **Suppression en cours**), le **Stockage utilisé** (une jauge de l’espace occupé sur le quota ; **Presque plein** à partir de 80 % ou **Plein** à 100 % n’apparaît à côté que dans ce cas) et la **Langue par défaut**. Cliquez sur le nom, ou sur le lien **Configurer** suivi du nom en fin de ligne, pour ouvrir une entité. Si une seule entité est rattachée à votre compte, cette page vous y mène directement.
 
-![Liste des entités avec leur adresse, leur statut, le stockage utilisé et la langue par défaut](../screenshots/fr/admin-tenants.png)
+![Liste des entités : pour chaque entité, sa pastille de couleur et son nom, son adresse, la pastille de statut Active, sa jauge de stockage, sa langue par défaut et le lien Configurer](../screenshots/fr/admin-tenants.png)
 
 La création et la suppression d’une entité sont réservées au super administrateur : ces actions ne vous sont pas proposées.
 
 <!-- topic: tenant-nav -->
 ### Navigation d’une entité
 
-Une fois une entité ouverte, une barre de navigation affiche son nom et deux groupes d’écrans.
+Une fois une entité ouverte, son bloc dans la barre latérale, sous **Entités**, affiche son nom et deux groupes d’écrans. Cliquez sur le nom d’un groupe pour le replier ou le déplier ; le groupe de l’écran courant est toujours déplié à l’arrivée. Avec une seule entité, le bloc est toujours affiché.
 
 - **Configuration** : **Mise en service**, **Général**, **Habillage**, **Réseau**, **Domaines destinataires**, **Détection des abus**, **Niveaux de confidentialité**, **Réglages des secrets**, **Messagerie (SMTP)**, **Authentification unique**, **Modèles de mails**, **Mentions légales**.
-- **Exploitation** : **Transferts**, **Invitations**, **Liens de dépôt**, **Secrets à usage unique**, **Liste de blocage**, **Signalements**, **Jetons d’API**, **Webhooks**, **Journal d’audit**, **Journal de sécurité**, **Statistiques**, **Données personnelles**.
+- **Exploitation** : **Transferts**, **Invitations**, **Liste de blocage**, **Signalements**, **Jetons d’API**, **Liens de dépôt**, **Secrets à usage unique**, **Webhooks**, **Journal d’audit**, **Journal de sécurité**, **Statistiques**, **Données personnelles**.
 
-Les filtres des listes sont conservés dans l’adresse de la page : vous pouvez mettre une vue filtrée en favori ou la partager avec un autre administrateur de l’entité. Les longues listes affichent leurs premières lignes ; cliquez sur **Charger plus** pour voir la suite. Si vous quittez un formulaire avec des modifications non enregistrées, l’administration vous demande d’abord confirmation.
+Les listes ont leurs filtres dans une carte au-dessus du tableau : choisissez-les, puis cliquez sur **Appliquer** ; **Réinitialiser** les efface. Les filtres sont conservés dans l’adresse de la page : vous pouvez mettre une vue filtrée en favori ou la partager avec un autre administrateur de l’entité. Les longues listes affichent leurs premières lignes ; cliquez sur **Charger plus** pour voir la suite. Si vous quittez un formulaire avec des modifications non enregistrées, l’administration vous demande d’abord confirmation.
 
 ## Configurer une entité
 
@@ -144,7 +158,7 @@ Les écrans de configuration déterminent l’apparence et le comportement des p
 
 Une nouvelle entité démarre à l’état **En cours de mise en service**. L’assistant de configuration (écran **Mise en service**) liste ce qui reste à configurer avant d’ouvrir l’entité au public.
 
-Il apparaît à deux endroits : sur la [page d’accueil](topic:admin), un avertissement **Mise en service à terminer** propose **Commencer la mise en service de** suivi du nom de l’entité ; et dans la navigation de l’entité, qui affiche le badge **En cours de mise en service** et un lien **Mise en service**. Tant que l’entité n’est pas ouverte, le public ne voit que le message « Service en cours de mise en service » et tout dépôt, téléchargement et invitation est refusé.
+Il apparaît à deux endroits : sur la [page d’accueil](topic:admin), un avertissement **Mise en service à terminer** propose **Commencer la mise en service de** suivi du nom de l’entité ; et dans le bloc de l’entité de la barre latérale, qui affiche le badge **En cours de mise en service** sous le nom de l’entité et un lien **Mise en service**. Tant que l’entité n’est pas ouverte, le public ne voit que le message « Service en cours de mise en service » et tout dépôt, téléchargement et invitation est refusé.
 
 La liste **Étapes de la mise en service** est calculée d’après la configuration réelle de l’entité ; chaque étape indique **Fait** ou **À faire**, et **Obligatoire** ou **Facultatif**.
 
@@ -154,7 +168,7 @@ La liste **Étapes de la mise en service** est calculée d’après la configura
 - **Mentions légales** et **Politique de confidentialité** (obligatoires) : rédigées dans la langue par défaut de l’entité, sans aucune mention `[À compléter : …]` (ou `[To complete: …]`). Voir [Mentions légales](topic:tenant-legal).
 - **Modèles de mails** (facultatif) : cochez **J’ai relu les modèles de mails** une fois les modèles relus ou adaptés (voir [Modèles de mails](topic:tenant-templates)) ; cela est enregistré à la fin de la mise en service.
 
-Chaque étape propose un lien **Configurer** vers l’écran correspondant. Sur cet écran, **Retour à la mise en service** vous ramène à la liste. Une étape passe à **Fait** dès que la configuration la satisfait : vous pouvez revenir à la liste dans l’ordre de votre choix.
+Chaque étape propose un lien **Configurer** vers l’écran correspondant. Sur cet écran, le lien **Retour à la mise en service**, au-dessus du titre, vous ramène à la liste. Une étape passe à **Fait** dès que la configuration la satisfait : vous pouvez revenir à la liste dans l’ordre de votre choix.
 
 Dans l’éditeur d’un document légal, **Utiliser le texte proposé** remplit l’éditeur avec un texte préparé d’après la configuration de l’entité (nom, adresse, durées des transferts, durées de conservation, cookies, antivirus). Si l’éditeur contient déjà du texte, TransTeira demande confirmation avant de le remplacer. Rien n’est enregistré tant que vous n’avez pas cliqué sur **Enregistrer**. La proposition est un point de départ, pas un avis juridique : faites-la relire par votre délégué à la protection des données ou par un juriste. Chaque information que TransTeira ne peut pas connaître est marquée `[À compléter : …]` (en anglais `[To complete: …]`) ; l’éditeur compte les mentions restantes, et l’étape n’est **Fait** que lorsqu’il n’en reste plus dans la langue par défaut.
 
@@ -176,22 +190,28 @@ Sur une entité, l’écran **Authentification unique** montre la configuration 
 
 L’écran Général présente l’identité de l’entité et permet de régler sa langue et sa taille par envoi.
 
-En haut, le statut de l’entité et la ligne **Stockage utilisé** indiquent l’espace occupé par rapport au quota. Le nom, l’adresse (FQDN), le quota de stockage et le plafond de la taille par envoi sont affichés pour information : comme le rappelle l’écran, **Seuls la langue par défaut et la taille maximale par envoi peuvent être modifiés par un administrateur délégué. Les autres réglages sont gérés par le super administrateur.**
+En haut, une carte donne la pastille de statut de l’entité, la ligne **Stockage utilisé** (l’espace occupé par rapport au quota) et le lien **Ouvrir la documentation utilisateur de l’entité** (voir [Documentation de l’entité](topic:tenant-docs)). En dessous, le nom, l’adresse (FQDN), le quota de stockage et le plafond de la taille par envoi sont affichés pour information : comme le rappelle la note qui les précède, **Seuls la langue par défaut et la taille maximale par envoi peuvent être modifiés par un administrateur délégué. Les autres réglages sont gérés par le super administrateur.**
 
-![Écran Général avec le stockage utilisé, les réglages en lecture seule et les champs modifiables](../screenshots/fr/admin-tenant-general.png)
+![Écran Général : la carte avec le statut Active, le stockage utilisé et le lien vers la documentation utilisateur, la note sur les réglages réservés au super administrateur, les réglages en lecture seule et la carte Paramètres de l’entité](../screenshots/fr/admin-tenant-general.png)
+
+La carte **Paramètres de l’entité** contient les deux réglages que vous pouvez modifier :
 
 - **Langue par défaut** : utilisée sur les pages publiques lorsque la langue du navigateur du visiteur n’est pas disponible, et pour les mails.
 - **Taille maximale par envoi** : somme des fichiers d’un envoi. Vous pouvez choisir toute valeur jusqu’au plafond fixé par le super administrateur, lui-même de 20 Go au plus. Abaissez-la si vos utilisateurs ne doivent pas envoyer de très gros transferts.
-- **Analyse antivirus** (lecture seule) : indique si les fichiers de l’entité sont analysés. Seul le super administrateur peut la modifier. Lorsqu’elle est désactivée, chaque fichier déposé est remis **sans analyse**, avec la mention « non analysé : antivirus désactivé » : les expéditeurs sont prévenus par mail et les destinataires avertis sur la page de téléchargement. La liste de blocage par empreinte et la détection des abus s’appliquent toujours. Lorsque l’exploitant a désactivé l’antivirus pour tout le service, une note d’information indique qu’aucun fichier n’est analysé, quel que soit ce réglage. Sa désactivation ou sa réactivation est enregistrée dans le [journal d’audit](topic:tenant-audit).
 
 Cliquez sur **Enregistrer** pour appliquer.
 
-La section **Webhooks** ci-dessous règle le contenu des alertes envoyées aux [webhooks](topic:tenant-webhooks) de l’entité. **Inclure les adresses dans les webhooks** ajoute les adresses de l’expéditeur et des destinataires concernés. Les adresses sont des données personnelles qui quittent TransTeira avec chaque alerte : cochez la case seulement si les destinataires en ont besoin et sont de confiance. Elle est décochée par défaut ; cliquez sur **Enregistrer le réglage des webhooks** sous la case pour appliquer.
+Plus bas, des cartes en lecture seule montrent des réglages que seul le super administrateur peut modifier :
+
+- **Analyse antivirus** : indique si les fichiers de l’entité sont analysés. Lorsqu’elle est désactivée, chaque fichier déposé est remis **sans analyse**, avec la mention « non analysé : antivirus désactivé » : les expéditeurs sont prévenus par mail et les destinataires avertis sur la page de téléchargement. La liste de blocage par empreinte et la détection des abus s’appliquent toujours. Lorsque l’exploitant a désactivé l’antivirus pour tout le service, une note d’information indique qu’aucun fichier n’est analysé, quel que soit ce réglage. Sa désactivation ou sa réactivation est enregistrée dans le [journal d’audit](topic:tenant-audit).
+- **Transferts par lien seul** et **Chiffrement de bout en bout** : indiquent si l’entité les autorise (voir les niveaux de confidentialité, qui ne peuvent que les durcir).
+
+La carte **Webhooks**, sous les Paramètres de l’entité, règle le contenu des alertes envoyées aux [webhooks](topic:tenant-webhooks) de l’entité. **Inclure les adresses dans les webhooks** ajoute les adresses de l’expéditeur et des destinataires concernés. Les adresses sont des données personnelles qui quittent TransTeira avec chaque alerte : cochez la case seulement si les destinataires en ont besoin et sont de confiance. Elle est décochée par défaut ; cliquez sur **Enregistrer le réglage des webhooks** sous la case pour appliquer.
 
 <!-- topic: tenant-export -->
 ### Exporter la configuration
 
-La section **Exporter la configuration** en bas de l’écran Général télécharge les réglages de l’entité dans un fichier JSON. Le super administrateur s’en sert pour créer une autre entité en dupliquant celle-ci.
+La carte **Exporter la configuration** de l’écran Général, sous la carte Webhooks, télécharge les réglages de l’entité dans un fichier JSON. Le super administrateur s’en sert pour créer une autre entité en dupliquant celle-ci.
 
 Le fichier contient les réglages généraux (sans le quota de stockage), les couleurs et le fond prédéfini, les plages réseau et les domaines, les règles de domaines destinataires, les niveaux de confidentialité, les seuils de détection des abus, les modèles d’e-mail personnalisés uniquement, les textes légaux, la liste de blocage, le serveur, le port, le chiffrement et l’adresse d’expéditeur du SMTP, les réglages des secrets à usage unique (activation, durées proposées, durée par défaut, fichier joint et sa taille maximale, envoi par mail et phrase de passe), et les webhooks par nom, type et événements seulement. Cochez **Inclure le logo et l’image de fond** pour ajouter les deux fichiers image.
 
@@ -199,7 +219,7 @@ Le fichier ne contient jamais l’identifiant et le mot de passe SMTP, les adres
 
 Cliquez sur **Télécharger la configuration** pour télécharger le fichier. Chaque export est consigné dans le [journal d’audit](topic:tenant-audit) (`tenant.exported`).
 
-![Section Exporter la configuration de l’écran Général, avec l’avertissement sur les données personnelles, la case Inclure le logo et l’image de fond et le lien Télécharger la configuration](../screenshots/fr/admin-tenant-export.png)
+![Carte Exporter la configuration de l’écran Général, avec l’avertissement sur les données personnelles, la case Inclure le logo et l’image de fond et le lien Télécharger la configuration, suivie des cartes Analyse antivirus et Transferts par lien seul telles que les voit un super administrateur](../screenshots/fr/admin-tenant-export.png)
 
 > **Attention** Le fichier contient des données personnelles : les adresses de la liste de blocage et les contacts écrits dans les textes légaux. Traitez-le comme un document confidentiel, ne l’envoyez pas par e-mail en clair et supprimez-le une fois la nouvelle entité créée.
 
@@ -212,7 +232,7 @@ L’écran Habillage règle le logo, les couleurs et l’image de fond des pages
 
 La section **Contraste** contrôle chaque paire de couleurs utilisée par l’interface. Le rapport doit atteindre au moins 4,5:1 (niveau AA) pour que les textes restent lisibles. Une paire marquée **Insuffisant** est un avertissement : l’enregistrement reste possible, mais corrigez-la pour respecter les exigences d’accessibilité (RGAA). Le contrôle porte sur les deux thèmes : les paires **Couleur principale sur fond sombre** et **Couleur d’accent sur fond sombre** sont informatives et ne déclenchent jamais l’avertissement. Lorsqu’une couleur n’est pas assez lisible sur fond sombre, les liens et les indicateurs de focus utilisent les couleurs par défaut accessibles du thème sombre, et la couleur d’accent reste purement décorative. L’**Aperçu de la page publique** montre les thèmes clair et sombre côte à côte avant l’enregistrement.
 
-![Écran Habillage avec les couleurs, le contrôle de contraste et l’aperçu de la page publique](../screenshots/fr/admin-tenant-branding.png)
+![Écran Habillage : la carte Couleurs avec la couleur principale et la couleur d’accent, leurs ratios de contraste sur fond clair et sur fond sombre marqués AAA, AA ou Insuffisant, et le début de la section Contraste](../screenshots/fr/admin-tenant-branding.png)
 
 **Bibliothèque d’images de fond** : sous l’image de fond, choisissez l’une des images fournies avec TransTeira et cliquez sur **Appliquer**. Une image de fond que vous téléversez vous-même est prioritaire : le choix de la bibliothèque ne s’applique qu’après la suppression de votre image, et l’écran l’indique.
 
@@ -236,15 +256,15 @@ Un utilisateur est interne lorsque les **deux** conditions sont réunies : son a
 - **Plages d’adresses IP internes** : une plage par ligne au format CIDR, par exemple `192.0.2.0/24` ou `2001:db8::/32`.
 - **Domaines de messagerie internes** : un domaine par ligne, par exemple `entity-a.example.com`.
 
-![Écran Réseau avec les plages IP internes et les domaines de messagerie internes](../screenshots/fr/admin-tenant-network.png)
+![Écran Réseau : la carte Plages et domaines internes avec les plages d’adresses IP internes, les domaines de messagerie internes, le nombre d’entrées de chaque liste et le bouton Enregistrer](../screenshots/fr/admin-tenant-network.png)
 
 Les erreurs sont signalées ligne par ligne, parfois avec une correction proposée que vous pouvez appliquer. Les lignes répétées sont ignorées, et le serveur normalise les valeurs qu’il enregistre (les listes affichées après l’enregistrement sont celles enregistrées). Cliquez sur **Enregistrer**.
 
 Si l’entité en cours de mise en service a été créée par l’import d’une configuration, un avertissement **Plages et domaines importés à confirmer** apparaît au-dessus des listes : vérifiez-les, puis cliquez sur **Confirmer**. Enregistrer les listes vaut aussi confirmation.
 
-**Autoriser le dépôt depuis l’extérieur pour les internes vérifiés** : option désactivée par défaut. Activée, une adresse d’un domaine interne **déjà vérifiée depuis le réseau interne** peut déposer hors des plages, sans invitation, avec un code à chaque dépôt (voir le guide du déposant, section « Dépôt depuis l’extérieur »). Les invitations restent réservées au réseau interne, et ces dépôts sont signalés dans le [journal d’audit](topic:tenant-audit) et comptés par la [détection des abus](topic:tenant-abuse). Une boîte mail compromise permettrait alors de déposer depuis Internet : n’activez l’option qu’après évaluation. L’option est publique dans la configuration de l’entité. Lorsqu’elle est activée, une demande de code venant de l’extérieur pour une adresse non éligible (autre domaine, jamais vérifiée depuis le réseau interne, inactive, inconnue) reçoit la même réponse qu’une adresse éligible, sans mail envoyé : la tentative compte dans les limites de codes et tout code est refusé à la confirmation. Si un utilisateur dit ne recevoir aucun code depuis l’extérieur, vérifiez son éligibilité. Option désactivée, les personnes extérieures reçoivent le refus générique. Les adresses de la liste de blocage restent refusées.
+**Autoriser le dépôt depuis l’extérieur pour les internes déjà vérifiés** (carte **Dépôt depuis l’extérieur**) : option désactivée par défaut. Activée, une adresse d’un domaine interne **déjà vérifiée depuis le réseau interne** peut déposer hors des plages, sans invitation, avec un code à chaque dépôt (voir le guide du déposant, section « Dépôt depuis l’extérieur »). Les invitations restent réservées au réseau interne, et ces dépôts sont signalés dans le [journal d’audit](topic:tenant-audit) et comptés par la [détection des abus](topic:tenant-abuse). Une boîte mail compromise permettrait alors de déposer depuis Internet : n’activez l’option qu’après évaluation. L’option est publique dans la configuration de l’entité. Lorsqu’elle est activée, une demande de code venant de l’extérieur pour une adresse non éligible (autre domaine, jamais vérifiée depuis le réseau interne, inactive, inconnue) reçoit la même réponse qu’une adresse éligible, sans mail envoyé : la tentative compte dans les limites de codes et tout code est refusé à la confirmation. Si un utilisateur dit ne recevoir aucun code depuis l’extérieur, vérifiez son éligibilité. Option désactivée, les personnes extérieures reçoivent le refus générique. Les adresses de la liste de blocage restent refusées.
 
-**Autoriser les destinataires à répondre à un transfert** (section **Réponse à un transfert**) : option désactivée par défaut. Activée, un destinataire qui ouvre son lien personnel voit un bouton **Répondre** et peut renvoyer des fichiers à l’expéditeur d’origine sans invitation (voir le guide du destinataire, section « Répondre à un transfert »). Elle ne concerne que les transferts envoyés par un utilisateur interne ou un jeton d’API, jamais ceux d’un invité externe ni une réponse, et jamais les anciens liens partagés d’avant la version 1.1. Le destinataire de la réponse est toujours l’expéditeur d’origine. Le répondant doit confirmer son adresse par un code à chaque réponse, même si l’expéditeur n’avait pas demandé de vérification. La réponse est soumise à tout ce qui s’applique aux personnes externes : quotas des externes (voir [Détection des abus](topic:tenant-abuse)), limite de taille par envoi, quota de stockage de l’entité, antivirus, liste de blocage (répondant et expéditeur d’origine) et niveaux de confidentialité. Elle doit se terminer avant l’expiration du transfert d’origine, qui est revérifié à la création et à la finalisation ; désactiver l’option arrête aussitôt les nouvelles réponses, et le mode maintenance les refuse. Le risque principal est l’hameçonnage : un lien transféré ou une boîte mail compromise permet de déposer des fichiers chez un utilisateur interne. C’est pourquoi le destinataire interne voit, dans le mail et sur la page de téléchargement, un avertissement indiquant une réponse externe à l’adresse vérifiée. Dans le [journal d’audit](topic:tenant-audit), une réponse produit `transfer.created` avec l’origine `reply`, puis `transfer.reply_created` ; un refus lié à l’expéditeur d’origine est tracé `transfer.recipient_refused`. Le refus d’un répondant par la liste de blocage figure dans le journal de sécurité (`deposit_refused`, motif `blocklist`). Dans la liste des transferts, ces envois ont l’origine **Réponse**.
+**Autoriser les destinataires à répondre à un transfert** (carte **Réponse à un transfert**) : option désactivée par défaut. Activée, un destinataire qui ouvre son lien personnel voit un bouton **Répondre** et peut renvoyer des fichiers à l’expéditeur d’origine sans invitation (voir le guide du destinataire, section « Répondre à un transfert »). Elle ne concerne que les transferts envoyés par un utilisateur interne ou un jeton d’API, jamais ceux d’un invité externe ni une réponse, et jamais les anciens liens partagés d’avant la version 1.1. Le destinataire de la réponse est toujours l’expéditeur d’origine. Le répondant doit confirmer son adresse par un code à chaque réponse, même si l’expéditeur n’avait pas demandé de vérification. La réponse est soumise à tout ce qui s’applique aux personnes externes : quotas des externes (voir [Détection des abus](topic:tenant-abuse)), limite de taille par envoi, quota de stockage de l’entité, antivirus, liste de blocage (répondant et expéditeur d’origine) et niveaux de confidentialité. Elle doit se terminer avant l’expiration du transfert d’origine, qui est revérifié à la création et à la finalisation ; désactiver l’option arrête aussitôt les nouvelles réponses, et le mode maintenance les refuse. Le risque principal est l’hameçonnage : un lien transféré ou une boîte mail compromise permet de déposer des fichiers chez un utilisateur interne. C’est pourquoi le destinataire interne voit, dans le mail et sur la page de téléchargement, un avertissement indiquant une réponse externe à l’adresse vérifiée. Dans le [journal d’audit](topic:tenant-audit), une réponse produit `transfer.created` avec l’origine `reply`, puis `transfer.reply_created` ; un refus lié à l’expéditeur d’origine est tracé `transfer.recipient_refused`. Le refus d’un répondant par la liste de blocage figure dans le journal de sécurité (`deposit_refused`, motif `blocklist`). Dans la liste des transferts, ces envois ont l’origine **Réponse**.
 
 Soyez attentif aux avertissements :
 
@@ -258,7 +278,7 @@ TransTeira voit l’adresse du client telle que la transmet le reverse proxy. Si
 
 L’écran Domaines destinataires limite les domaines de messagerie que les expéditeurs peuvent adresser, par exemple pour éviter que des fichiers partent vers des messageries personnelles grand public.
 
-![Écran Domaines destinataires avec les listes de domaines autorisés et interdits](../screenshots/fr/admin-tenant-recipient-rules.png)
+![Écran Domaines destinataires : la carte Règles des destinataires avec une liste vide de domaines autorisés et une liste de domaines interdits](../screenshots/fr/admin-tenant-recipient-rules.png)
 
 - **Domaines autorisés** : un domaine par ligne. Quand cette liste n’est pas vide, les destinataires ne peuvent appartenir qu’à ces domaines.
 - **Domaines interdits** : un domaine par ligne. Un domaine interdit est toujours refusé.
@@ -272,7 +292,7 @@ Les règles s’appliquent à tout nouveau transfert, qu’il soit envoyé depui
 
 L’écran Niveaux de confidentialité définit les niveaux parmi lesquels l’expéditeur choisit en créant un transfert. Chaque niveau impose ses propres règles. Vous pouvez définir de 1 à 10 niveaux, avec exactement un **Niveau par défaut**, appliqué quand l’expéditeur n’en choisit pas. Avec un seul niveau, l’expéditeur ne voit aucun sélecteur, mais les règles du niveau s’appliquent quand même.
 
-![Écran Niveaux de confidentialité avec les règles de chaque niveau](../screenshots/fr/admin-tenant-confidentiality.png)
+![Écran Niveaux de confidentialité : la carte Niveaux avec le premier niveau, son choix Niveau par défaut, sa clé, ses libellés et ses descriptions en français et en anglais](../screenshots/fr/admin-tenant-confidentiality.png)
 
 Pour chaque niveau, renseignez :
 
@@ -285,10 +305,10 @@ Pour chaque niveau, renseignez :
 - **Destinataires internes uniquement** : les destinataires doivent appartenir aux domaines internes de l’entité (voir [Réseau](topic:tenant-network)).
 - **Suppression après le premier téléchargement (imposée)**.
 - **Lien seul autorisé** : autorise (par défaut) ou interdit l’option « lien seul » pour ce niveau, voir « Envoyer en lien seul » (guide du déposant). Elle n’est offerte que si le super administrateur l’a autorisée pour l’entité. Un niveau qui impose la vérification du destinataire ne permet pas le lien seul, les deux options étant incompatibles.
-- **Chiffrement de bout en bout** : **Suivre l’entité** (par défaut), **interdit**, **autorisé** ou **imposé**. Un niveau ne peut que **durcir** le réglage choisi par le super administrateur pour l’entité : si l’entité l’interdit ou l’impose, cela s’applique à tous les niveaux quel que soit votre choix ici ; ce n’est que lorsque l’entité l’autorise qu’un niveau peut l’interdire ou l’imposer. Un fichier chiffré n’est jamais analysé par l’antivirus : n’imposez donc le chiffrement que pour des niveaux dont vous maîtrisez les destinataires. Les transferts chiffrés ainsi portent le badge « chiffré de bout en bout » dans vos listes de transferts.
+- **Chiffrement de bout en bout** : **Hériter de la politique de l’entité** (par défaut), **Interdit**, **Autorisé** ou **Obligatoire**. Un niveau ne peut que **durcir** le réglage choisi par le super administrateur pour l’entité : si l’entité l’interdit ou l’impose, cela s’applique à tous les niveaux quel que soit votre choix ici ; ce n’est que lorsque l’entité l’autorise qu’un niveau peut l’interdire ou l’imposer. Un fichier chiffré n’est jamais analysé par l’antivirus : n’imposez donc le chiffrement que pour des niveaux dont vous maîtrisez les destinataires. Les transferts chiffrés ainsi portent le badge « chiffré de bout en bout » dans vos listes de transferts.
 - **Nombre maximal de téléchargements (plafond)** : facultatif, de 1 à 1000. Il plafonne le nombre de téléchargements que l’expéditeur peut fixer ; si l’expéditeur n’en fixe aucun, le plafond s’applique.
 
-Utilisez les flèches pour réordonner les niveaux, **Ajouter un niveau** pour en créer un et **Enregistrer** pour appliquer. L’écran signale les erreurs niveau par niveau.
+Utilisez **Monter** et **Descendre** pour réordonner les niveaux, **Supprimer** pour en retirer un, **Ajouter un niveau** pour en créer un et **Enregistrer** pour appliquer. L’écran signale les erreurs niveau par niveau.
 
 Un transfert qui enfreint une règle de son niveau est refusé, quel que soit le moyen de création (page web ou jeton d’API), et l’expéditeur est informé de la règle non respectée. Les règles du niveau sont copiées sur chaque transfert à sa création : modifier ou supprimer un niveau ne change jamais les transferts existants. Le niveau d’un transfert est montré aux destinataires dans le mail et sur la page de téléchargement, dans le détail du transfert (voir [Transferts](topic:tenant-transfers)) et dans le [journal d’audit](topic:tenant-audit).
 
@@ -302,7 +322,7 @@ L’écran Messagerie (SMTP) règle le serveur par lequel l’entité envoie tou
 Tant qu’il n’est pas configuré, l’écran affiche **La messagerie n’est pas encore configurée : l’entité ne peut envoyer aucun mail.** et personne ne peut faire vérifier son adresse.
 
 - **Serveur SMTP** : nom d’hôte ou adresse IP, par exemple `smtp.example.com`.
-- **Port** et **Sécurité de la connexion** : **Aucune (relais sur un réseau interne)**, **STARTTLS (port 587 en général)** ou **TLS implicite (port 465 en général)**. Ne choisissez Aucune que pour un relais joignable par le réseau interne du service.
+- **Sécurité de la connexion** et **Port** : **Aucune (relais sur un réseau interne)**, **STARTTLS (port 587 en général)** ou **TLS implicite (port 465 en général)**. Ne choisissez Aucune que pour un relais joignable par le réseau interne du service. Au-dessus du port, le port habituel de la sécurité choisie est rappelé ; si le port diffère, un bouton comme **Utiliser le port 587** le règle.
 - **Nom d’utilisateur** : laissez-le vide pour un relais sans authentification. L’authentification est refusée sans chiffrement, car les identifiants circuleraient en clair.
 - **Mot de passe** : **Conserver le mot de passe enregistré**, **Remplacer le mot de passe** ou **Retirer le mot de passe**. Il est chiffré et n’est jamais réaffiché. Si vous changez le serveur, le port ou le nom d’utilisateur, ressaisissez-le.
 - **Adresse d’expéditeur** : l’adresse « De » des mails, par exemple `transfer@entity-a.example.com`.
@@ -310,11 +330,11 @@ Tant qu’il n’est pas configuré, l’écran affiche **La messagerie n’est 
 
 Cliquez sur **Enregistrer**.
 
-![Écran Messagerie (SMTP) avec la configuration du serveur, le test d’envoi et le contrôle DNS](../screenshots/fr/admin-tenant-smtp.png)
+![Écran Messagerie (SMTP) : la carte Serveur et expéditeur avec le serveur SMTP, la sécurité de la connexion, le port avec son bouton Utiliser le port 25 et l’identifiant](../screenshots/fr/admin-tenant-smtp.png)
 
-**Test d’envoi** : le test utilise la configuration enregistrée, enregistrez donc d’abord. Saisissez une **Adresse de destination** et cliquez sur **Envoyer un mail de test**. Le résultat indique si le serveur a accepté le message ou, sinon, l’étape atteinte (connexion, TLS, authentification…) et le message du serveur. Vous pouvez faire 5 tests par tranche de 10 minutes.
+**Test d’envoi** (carte sous les réglages) : le test utilise la configuration enregistrée, enregistrez donc d’abord. Saisissez une **Adresse de destination** et cliquez sur **Envoyer un mail de test**. Le résultat indique si le serveur a accepté le message ou, sinon, l’étape atteinte (connexion, TLS, authentification…) et le message du serveur. Vous pouvez faire 5 tests par tranche de 10 minutes.
 
-**Contrôle DNS (SPF, DKIM, DMARC)** : sans ces enregistrements DNS sur le domaine de l’adresse d’expéditeur, les mails risquent d’être classés comme indésirables. Les sélecteurs DKIM ne peuvent pas être découverts automatiquement : saisissez-en jusqu’à 5 dans **Sélecteurs DKIM** (par exemple `selector1, selector2` pour Microsoft 365), puis cliquez sur **Contrôler le DNS**. Chaque enregistrement est signalé **Correct**, **À vérifier**, **Absent** ou **Erreur de contrôle**. Le contrôle est indicatif.
+**Contrôle DNS (SPF, DKIM, DMARC)** (dernière carte) : sans ces enregistrements DNS sur le domaine de l’adresse d’expéditeur, les mails risquent d’être classés comme indésirables. Les sélecteurs DKIM ne peuvent pas être découverts automatiquement : saisissez-en jusqu’à 5 dans **Sélecteurs DKIM** (par exemple `selector1, selector2` pour Microsoft 365), puis cliquez sur **Contrôler le DNS**. Chaque enregistrement est signalé **Correct**, **À vérifier**, **Absent** ou **Erreur de contrôle**. Le contrôle est indicatif.
 
 > **À savoir** Avec un relais vers Microsoft 365, DKIM doit être activé dans Microsoft 365 pour le domaine de l’entité, et l’adresse d’expéditeur doit être autorisée dans l’application utilisée par le relais. Demandez à l’exploitant du service de le vérifier.
 
@@ -323,16 +343,16 @@ Cliquez sur **Enregistrer**.
 
 L’écran Modèles de mails permet de personnaliser, pour chaque langue, les mails envoyés par l’entité.
 
-La liste présente chaque modèle dans chaque langue, marqué **Personnalisé** ou **Par défaut**. Un modèle non personnalisé utilise le texte par défaut. Les modèles sont :
+La liste a une ligne par modèle et une colonne par langue, où chaque modèle est marqué **Personnalisé** ou **Par défaut**, avec un lien **Modifier**. Un modèle non personnalisé utilise le texte par défaut. Les modèles sont :
 
 - **Code de vérification**, **Notification de transfert**, **Confirmation d’envoi**, **Accusé de premier téléchargement** ;
 - **Fichier infecté ou retenu**, **Fichier non analysé**, **Invitation externe** ;
-- **Alerte de quota (80 %)**, **Quota atteint**, **Antivirus indisponible** ;
+- **Alerte de quota (80 %)**, **Quota atteint**, **Antivirus indisponible**, **Alerte d’abus**, **Signalement d’abus** ;
 - **Notification de secret** et **Accusé de lecture de secret** (2.1).
 
-![Liste des modèles de mails avec leur état dans chaque langue](../screenshots/fr/admin-tenant-templates.png)
+![Écran Modèles de mails : une ligne par modèle, avec son état (ici Par défaut) et un lien Modifier dans les colonnes English et Français](../screenshots/fr/admin-tenant-templates.png)
 
-Cliquez sur un modèle pour ouvrir l’éditeur. Il comporte trois champs : **Objet**, **Corps HTML** et **Corps texte** (version en texte brut, lue par les messageries qui n’affichent pas le HTML).
+Cliquez sur **Modifier** dans la colonne d’une langue pour ouvrir l’éditeur ; **Retour aux modèles**, en haut à droite, ramène à la liste. Sa carte **Contenu du modèle** comporte trois champs : **Objet**, **Corps HTML** et **Corps texte** (version en texte brut, lue par les messageries qui n’affichent pas le HTML).
 
 - **Variables disponibles** : cliquez sur une variable pour l’insérer à la position du curseur, dans le dernier champ utilisé. Les variables s’écrivent entre doubles accolades, par exemple `{{download_link}}`. Les variables marquées obligatoires doivent figurer dans les deux corps ; une variable absente ou inconnue est signalée.
 - **Transferts chiffrés de bout en bout** (2.0) : les modèles de notification de transfert, de confirmation d’envoi et de rappel d’expiration proposent la variable `{{e2e_notice}}`, l’avis indiquant que la clé est transmise par l’expéditeur par un autre canal et que les fichiers n’ont pas été analysés. Comme pour l’avertissement de réponse, l’avis est ajouté en tête du mail même si votre modèle omet la variable, et les mails d’un tel transfert ne contiennent jamais la clé ni le message.
@@ -340,7 +360,7 @@ Cliquez sur un modèle pour ouvrir l’éditeur. Il comporte trois champs : **Ob
 - **Prévisualiser** affiche le mail avec des données d’exemple, sans ses styles et avec les images remplacées par leur description.
 - **Enregistrer le modèle** l’enregistre ; **Revenir au modèle par défaut** supprime votre personnalisation pour cette langue.
 
-![Éditeur de modèle avec l’objet, les corps HTML et texte et les variables disponibles](../screenshots/fr/admin-tenant-template-editor.png)
+![Éditeur du modèle Notification de transfert en français : le bouton Retour aux modèles dans l’en-tête de page, puis la carte Contenu du modèle avec l’objet, le corps HTML et le début du corps texte](../screenshots/fr/admin-tenant-template-editor.png)
 
 Si le serveur détecte une erreur, il indique le champ, la ligne et la colonne, avec un message rédigé en anglais. Si un modèle personnalisé échoue au moment de l’envoi, le modèle par défaut est utilisé à sa place : le mail part quand même.
 
@@ -349,13 +369,13 @@ Si le serveur détecte une erreur, il indique le champ, la ligne et la colonne, 
 
 L’écran Mentions légales contient les textes affichés sur la page d’informations légales de l’entité.
 
-Il y a deux documents, **Mentions légales** et **Politique de confidentialité**, dans chaque langue, marqués **Rédigé** ou **Non rédigé**.
+Il y a deux documents, **Mentions légales** et **Politique de confidentialité**, un par ligne, avec une colonne par langue où chaque document est marqué **Rédigé** ou **Non rédigé**, avec un lien **Modifier**.
 
-![Liste des documents légaux avec leur état dans chaque langue](../screenshots/fr/admin-tenant-legal.png)
+![Écran Mentions légales : les mentions légales, Rédigé en anglais et en français, et la politique de confidentialité, Non rédigé, chacune avec un lien Modifier par langue](../screenshots/fr/admin-tenant-legal.png)
 
-Cliquez sur un document pour le modifier dans **Texte (Markdown)** : titres avec `#`, listes avec `-`, liens avec `[texte](adresse)` (adresses https et mailto uniquement). Le HTML n’est pas interprété. Cliquez sur **Enregistrer** ; l’**Aperçu** montre le texte enregistré. Enregistrer un texte vide supprime le document, après confirmation.
+Cliquez sur **Modifier** dans la colonne d’une langue pour modifier le document dans **Texte (Markdown)**, dans la carte **Contenu** : titres avec `#`, listes avec `-`, liens avec `[texte](adresse)` (adresses https et mailto uniquement). Le HTML n’est pas interprété. Cliquez sur **Enregistrer** ; la carte **Aperçu** montre le texte enregistré. Enregistrer un texte vide supprime le document, après confirmation. **Retour aux documents**, en haut à droite, ramène à la liste.
 
-![Éditeur de texte légal avec le champ Markdown et l’aperçu](../screenshots/fr/admin-tenant-legal-editor.png)
+![Éditeur des mentions légales en français : le bouton Retour aux documents dans l’en-tête de page, le bouton Utiliser le texte proposé et la carte Contenu avec le champ Markdown](../screenshots/fr/admin-tenant-legal-editor.png)
 
 Les visiteurs voient le document dans leur langue, ou dans la langue par défaut de l’entité s’il n’est pas rédigé dans la leur. Un document absent est signalé comme non publié.
 
@@ -364,7 +384,7 @@ Les visiteurs voient le document dans leur langue, ou dans la langue par défaut
 
 L’aide publique, à l’adresse de l’entité (`/help`), est personnalisée : elle affiche le nom, le logo et les couleurs de l’entité, ainsi que ses règles réelles (taille maximale par transfert, durées disponibles, options activées, niveaux de confidentialité et leurs règles). Les sections qui concernent une option désactivée pour l’entité sont masquées. Rien de secret n’y figure : ni plages IP, ni domaines internes, ni seuils de détection des abus, ni listes de domaines.
 
-Sur l’écran de l’entité, le lien **Ouvrir la documentation de l’entité** ouvre la page imprimable `https://<adresse de l’entité>/help/print`. Imprimez-la ou enregistrez-la en PDF avec votre navigateur pour la diffuser aux utilisateurs. La page porte sa date et le numéro de version de l’application.
+En haut de l’écran [Général](topic:tenant-general) de l’entité, le lien **Ouvrir la documentation utilisateur de l’entité** ouvre, dans un nouvel onglet, la page imprimable `https://<adresse de l’entité>/help/print`. Imprimez-la ou enregistrez-la en PDF avec votre navigateur pour la diffuser aux utilisateurs. La page porte sa date et le numéro de version de l’application.
 
 > **À savoir** Les règles imprimées sont celles du moment : imprimez de nouveau la documentation après avoir modifié une règle de l’entité.
 
@@ -377,26 +397,35 @@ Les écrans d’exploitation permettent de suivre l’activité quotidienne de l
 
 L’écran Transferts liste les transferts de l’entité, pour les suivre, renvoyer leur notification ou les supprimer avant leur expiration.
 
-Filtrez par **Statut**, par **Adresse mail** (adresse exacte de l’expéditeur ou d’un destinataire) ou par **Créés depuis le**, puis cliquez sur **Appliquer** ; **Réinitialiser** efface les filtres. Les colonnes indiquent **Création**, **Expéditeur**, **Destinataires**, **Fichiers et taille**, **Statut**, **Origine**, **Téléchargements** et **Expiration**.
+Filtrez par **Statut**, par **Adresse mail** (adresse exacte de l’expéditeur ou d’un destinataire) ou par **Créés depuis le**, puis cliquez sur **Appliquer** ; **Réinitialiser** efface les filtres. Les colonnes indiquent **Création**, **Expéditeur**, **Destinataires**, **Fichiers et taille**, **Statut** (une pastille), **Origine**, **Téléchargements** et **Expiration**.
 
 - Statuts : **Envoi en cours**, **Analyse en cours**, **Disponible**, **Rejeté**, **Expiré**, **Supprimé**.
 - Origines : **Utilisateur interne**, **Invité externe** (dépôt par une invitation), **Jeton d’API**, **Réponse** (fichiers renvoyés par un destinataire, voir [Réseau](topic:tenant-network)).
 
-![Liste des transferts d’une entité avec les filtres](../screenshots/fr/admin-transfers.png)
+![Écran Transferts : la carte des filtres (Statut, Adresse mail, Créés depuis le, Appliquer, Réinitialiser) et la liste des transferts avec leur date de création, leur expéditeur, leurs destinataires, leurs fichiers et leur taille, le statut Disponible, leur origine, leurs téléchargements et leur expiration](../screenshots/fr/admin-transfers.png)
 
-Ouvrez un transfert pour voir son **Détail du transfert** : statut, dates, premier téléchargement, expéditeur et adresse IP de l’expéditeur, origine, options (dont le **Niveau de confidentialité** et le nombre de téléchargements, affiché sur le maximum autorisé quand l’expéditeur en a fixé un), destinataires, et les fichiers avec leur taille, leur empreinte SHA-256 et le résultat de l’antivirus. Chaque nouveau transfert donne à chaque destinataire un lien personnel : le détail montre donc, pour chaque destinataire, quels fichiers ont été téléchargés et quand (premier et dernier téléchargement), jamais son adresse IP ni son navigateur. Les transferts créés avant la version 1.1 gardent un lien unique partagé et n’ont pas ce suivi. Le contenu des fichiers et les liens de téléchargement ne sont jamais accessibles aux administrateurs.
+Cliquez sur la date de création d’un transfert pour ouvrir son **Détail du transfert** ; **Retour aux transferts**, en haut à droite, ramène à la liste. Le détail est regroupé en cartes :
 
-![Détail d’un transfert avec ses informations, ses destinataires et ses fichiers](../screenshots/fr/admin-transfer-detail.png)
+- **Informations** : statut, dates, premier téléchargement, nombre de téléchargements (affiché sur le maximum autorisé quand l’expéditeur en a fixé un), **Niveau de confidentialité**, expéditeur et adresse IP de l’expéditeur, origine et options, avec le lien **Voir le journal d’audit depuis le jour de ce transfert** ;
+- **Destinataires** : chaque nouveau transfert donne à chaque destinataire un lien personnel, cette carte indique donc si la **Vérification des destinataires** est activée et, pour chaque destinataire, quels fichiers ont été téléchargés et quand (premier et dernier téléchargement), jamais son adresse IP ni son navigateur. Les transferts créés avant la version 1.1 gardent un lien unique partagé et n’ont pas ce suivi ;
+- **Fichiers** : les fichiers avec leur taille, leur type, leur empreinte SHA-256 et le résultat de l’antivirus ;
+- **Preuves** (voir [Preuves de dépôt et de remise](topic:tenant-proofs)) et **Actions**.
+
+Le contenu des fichiers et les liens de téléchargement ne sont jamais accessibles aux administrateurs.
+
+![Détail du transfert : le bouton Retour aux transferts dans l’en-tête de page, la carte Informations (statut, dates, téléchargements, niveau de confidentialité, expéditeur, adresse IP, origine, options et le lien vers le journal d’audit) et le début de la carte Destinataires](../screenshots/fr/admin-transfer-detail.png)
+
+La carte **Actions** propose :
 
 - **Renvoyer la notification** : choisissez les destinataires et cliquez sur **Renvoyer**. Le mail est renvoyé et chaque destinataire reçoit de nouveau son propre lien personnel, 5 fois par heure au plus. La veille de l’expiration d’un transfert, les destinataires qui n’ont pas encore téléchargé reçoivent automatiquement un mail de rappel (pas pour les transferts valables un jour, ni pour les adresses bloquées).
-- **Supprimer le transfert** : saisissez éventuellement un **Motif (facultatif)**, enregistré dans le journal d’audit, puis confirmez. Les fichiers sont effacés définitivement, y compris des sauvegardes, car leurs clés de chiffrement sont détruites. Le lien de téléchargement cesse de fonctionner.
-- Les expéditeurs peuvent aussi supprimer ou prolonger eux-mêmes leurs transferts depuis la page « Mes envois » du site d’envoi (voir le guide du déposant), sans passer par un administrateur. Ces actions sont tracées dans le [journal d’audit](topic:tenant-audit) (`transfer.deleted`, `transfer.extended`, `my_transfers.link_requested`, `my_transfers.signed_in`).
-- **Voir le journal d’audit depuis le jour de ce transfert** ouvre le journal d’audit au jour de sa création.
+- **Supprimer le transfert** : saisissez éventuellement un **Motif (facultatif)**, enregistré dans le journal d’audit, puis confirmez avec **Supprimer**. Les fichiers sont effacés définitivement, y compris des sauvegardes, car leurs clés de chiffrement sont détruites. Le lien de téléchargement cesse de fonctionner.
+
+Les expéditeurs peuvent aussi supprimer ou prolonger eux-mêmes leurs transferts depuis la page « Mes envois » du site d’envoi (voir le guide du déposant), sans passer par un administrateur. Ces actions sont tracées dans le [journal d’audit](topic:tenant-audit) (`transfer.deleted`, `transfer.extended`, `my_transfers.link_requested`, `my_transfers.signed_in`).
 
 <!-- topic: tenant-proofs -->
 ### Preuves de dépôt et de remise
 
-Le détail d’un transfert comporte une section **Preuves**, accessible aux administrateurs délégués, aux super administrateurs et aux auditeurs. Elle propose des fichiers PDF signés par l’instance : la **preuve de dépôt** (écrite à la fin de l’analyse antivirus), la **preuve de remise** (écrite au premier téléchargement complet) et, quand les destinataires ont des liens personnels, une **preuve de remise** par destinataire (écrite à son premier téléchargement complet). Une preuve pas encore écrite est indiquée comme indisponible.
+Le détail d’un transfert comporte une carte **Preuves**, accessible aux administrateurs délégués, aux super administrateurs et aux auditeurs. Elle propose des fichiers PDF signés par l’instance : la **preuve de dépôt** (écrite à la fin de l’analyse antivirus), la **preuve de remise** (écrite au premier téléchargement complet) et, quand les destinataires ont des liens personnels, une **preuve de remise** par destinataire (écrite à son premier téléchargement complet). Une preuve pas encore écrite est indiquée comme indisponible.
 
 Les preuves sont conservées **12 mois après leur émission, même si le transfert a été supprimé** : vous pouvez donc encore en fournir une pour un transfert disparu (le détail du transfert reste accessible pour cela). L’expéditeur télécharge ses propres preuves depuis la page « Mes envois », seulement tant que le transfert existe. Chaque téléchargement est enregistré dans le [journal d’audit](topic:tenant-audit) (`transfer.proof_downloaded`) et limité en fréquence par adresse IP (au-delà, la page demande d’attendre).
 
@@ -409,9 +438,9 @@ L’écran [Données personnelles](topic:tenant-privacy) compte les preuves qui 
 
 L’écran Invitations liste les invitations émises par les utilisateurs internes pour que des personnes externes puissent leur déposer des fichiers.
 
-Les colonnes indiquent l’**Adresse invitée**, **Invitée par**, le **Statut** (**En attente**, **Utilisée**, **Expirée**, **Révoquée**) et les dates de création, d’expiration et de dernière utilisation. Une invitation est valable 12 mois après sa création ou sa dernière utilisation, la date la plus tardive l’emportant.
+Filtrez par **Statut**, puis cliquez sur **Appliquer**. Les colonnes indiquent l’**Adresse invitée**, **Invitée par**, le **Statut** (**En attente**, **Utilisée**, **Expirée**, **Révoquée**) et les dates **Création**, **Expiration** et **Dernière utilisation**. Une invitation est valable 12 mois après sa création ou sa dernière utilisation, la date la plus tardive l’emportant.
 
-![Liste des invitations avec leur statut et leurs dates](../screenshots/fr/admin-invitations.png)
+![Écran Invitations : le filtre Statut et la liste des invitations avec leur adresse invitée, leur émetteur, le statut En attente, leurs dates et le bouton Révoquer](../screenshots/fr/admin-invitations.png)
 
 Cliquez sur **Révoquer** pour arrêter immédiatement une invitation : son lien ne permet plus de déposer, et les dépôts déjà commencés avec elle prennent fin. C’est définitif, mais une nouvelle invitation pourra être envoyée plus tard.
 
@@ -420,29 +449,30 @@ Cliquez sur **Révoquer** pour arrêter immédiatement une invitation : son lien
 
 Un lien de dépôt permanent est une adresse fixe, que vous donnez à des tiers (clients, fournisseurs) pour qu’ils envoient des fichiers à un service de l’entité sans avoir besoin d’une invitation à chaque fois. Les destinataires, la durée et le niveau de confidentialité sont fixés par le lien : le déposant ne les choisit pas.
 
-La liste indique pour chaque lien : **Libellé**, **Destinataires**, **Durée de validité**, **Niveau de confidentialité**, **Statut** (**Actif**, **Expiré**, **Désactivé** ou **Révoqué**), **Fin**, **Dépôts par heure**, **Création** et **Dernière utilisation**. Un lien ni utilisé ni créé depuis 12 mois porte le badge **Inutilisé depuis 12 mois** : vérifiez s’il sert encore, puis désactivez-le, révoquez-le ou donnez-lui une date d’expiration. Un lien révoqué reste listé. Une entité compte au plus 100 liens. Un auditeur peut consulter la liste, jamais le secret.
+La liste indique pour chaque lien : **Libellé**, **Destinataires**, **Durée de validité**, **Niveau** (le niveau de confidentialité), **Fin**, **Dépôts par heure**, **Statut** (**Actif**, **Expiré**, **Désactivé** ou **Révoqué**) et **Dernière utilisation**. Un lien ni utilisé ni créé depuis 12 mois porte le badge **Inutilisé depuis 12 mois** : vérifiez s’il sert encore, puis désactivez-le, révoquez-le ou donnez-lui une date d’expiration. Un lien révoqué reste listé. Une entité compte au plus 100 liens. Un auditeur peut consulter la liste, jamais le secret.
 
-![Liste des liens de dépôt permanents avec leurs destinataires, leur statut et leurs dépôts par heure](../screenshots/fr/admin-drop-links.png)
+![Écran Liens de dépôt : le bouton Créer un lien de dépôt dans l’en-tête de page et deux liens avec leur libellé, leurs destinataires, leur durée de validité, leur niveau, leur fin, leurs dépôts par heure, le statut Actif et leurs boutons Modifier, Désactiver, Renouveler et Révoquer](../screenshots/fr/admin-drop-links.png)
 
-Pour en créer un, cliquez sur **Créer un lien** :
+Pour en créer un, cliquez sur **Créer un lien de dépôt** en haut à droite de l’en-tête de page, puis remplissez les **Paramètres du lien de dépôt** :
 
 1. **Libellé** : le nom du service, par exemple « Pièces comptables fournisseurs ». Il est **affiché publiquement** sur la page d’accueil du lien : n’y mettez rien de confidentiel.
 1. **Destinataires** : de 1 à 20 adresses, toutes d’un domaine de messagerie interne de l’entité (voir [Réseau](topic:tenant-network)). Elles ne sont jamais montrées au déposant.
-1. **Durée de validité** : 1, 7 ou 30 jours, parmi les durées autorisées par le niveau de confidentialité choisi.
+1. **Durée de conservation des dépôts** (la **Durée de validité** de la liste) : 1, 7 ou 30 jours, parmi les durées autorisées par le niveau de confidentialité choisi.
 1. **Niveau de confidentialité** : facultatif ; à défaut, le niveau par défaut de l’entité (voir [Niveaux de confidentialité](topic:tenant-confidentiality)). Ses règles s’appliquent au déposant : si le niveau exige un mot de passe, le déposant le saisit.
 1. **Date d’expiration (facultative)** : un jour à venir. Après la fin de ce jour (heure locale), le lien est refusé aux déposants exactement comme un lien désactivé ; vous pouvez reculer la date ou la retirer ensuite. Un lien expiré est supprimé 12 mois après son expiration, une fois ses transferts supprimés.
 1. **Dépôts par heure** : 20 par défaut (de 1 à 1000). Nombre de transferts acceptés par le lien sur la dernière heure, tous déposants confondus, en plus des quotas des externes. Au-delà, aucun code de vérification n’est envoyé et le déposant est invité à réessayer plus tard.
-1. Cliquez sur **Créer le lien**.
+1. Laissez **Lien activé** coché, puis cliquez sur **Créer le lien**.
 
-L’adresse du lien, de la forme `transfer.entity-a.example.com/drop/ttd_…`, n’est affichée **qu’une seule fois**, à la création et à la rotation. Cliquez sur **Copier le lien** avant de fermer la fenêtre, puis transmettez-le à vos tiers. Seule une empreinte du secret est conservée : il est impossible de le retrouver ensuite.
+L’adresse du lien, de la forme `transfer.entity-a.example.com/drop/ttd_…`, n’est affichée **qu’une seule fois**, à la création et à la rotation. Cliquez sur **Copier le secret** (ou cochez **J’ai conservé ce secret, il ne sera plus affiché**) avant de fermer la fenêtre avec **Fermer**, puis transmettez-le à vos tiers. Seule une empreinte du secret est conservée : il est impossible de le retrouver ensuite. **Retour aux liens de dépôt**, en haut à droite du formulaire, ramène à la liste sans rien créer.
 
 Ce que vit le déposant est décrit dans « Envoyer des fichiers par un lien de dépôt » (guide du déposant). À chaque utilisation, il doit saisir un code reçu par mail. Les quotas des externes, la détection des abus et la liste de blocage s’appliquent comme pour une invitation ; le chiffrement de bout en bout n’est pas proposé par ce moyen.
 
 Les actions de chaque ligne :
 
-- **Modifier** : change le libellé, les destinataires, la durée, le niveau ou l’état **Actif** / **Désactivé**. Un lien désactivé refuse les dépôts jusqu’à sa réactivation. Les transferts déjà déposés ne changent pas.
-- **Renouveler le secret** (rotation) : crée une nouvelle adresse et invalide **immédiatement** l’ancienne. À utiliser si le lien a fuité ; pensez à prévenir vos tiers.
-- **Révoquer** : arrête définitivement le lien. Il reste dans la liste, et il est supprimé 12 mois plus tard s’il n’est référencé par aucun transfert.
+- **Modifier** : change le libellé, les destinataires, la durée, le niveau, la date d’expiration, les dépôts par heure ou **Lien activé**. Les transferts déjà déposés ne changent pas.
+- **Désactiver** (ou **Activer**) : un lien désactivé refuse les dépôts jusqu’à sa réactivation.
+- **Renouveler** (rotation) : après la confirmation **Renouveler le lien**, crée une nouvelle adresse et invalide **immédiatement** l’ancienne. À utiliser si le lien a fuité ; pensez à prévenir vos tiers.
+- **Révoquer** : après la confirmation **Révoquer le lien**, arrête définitivement le lien. Il reste dans la liste, et il est supprimé 12 mois plus tard s’il n’est référencé par aucun transfert.
 
 Une adresse ouverte au public peut être détournée : surveillez le journal de sécurité et les [signalements](topic:tenant-abuse-reports). Un lien inconnu, révoqué ou désactivé affiche toujours la même page « lien introuvable », et chaque essai est enregistré dans le journal de sécurité. Vous ne pouvez pas supprimer un niveau de confidentialité utilisé par un lien actif : modifiez d’abord le lien. L’effacement des données d’une personne (voir [Données personnelles](topic:tenant-privacy)) la retire des destinataires des liens, et désactive un lien qui n’a plus aucun destinataire. Les créations, modifications, rotations et révocations sont enregistrées dans le [journal d’audit](topic:tenant-audit). Les liens se gèrent depuis l’administration uniquement, pas par jeton d’API.
 
@@ -451,9 +481,9 @@ Une adresse ouverte au public peut être détournée : surveillez le journal de 
 
 L’écran Liste de blocage empêche des adresses, des domaines ou des fichiers d’être déposés sur l’entité.
 
-Dans **Ajouter une entrée**, choisissez le **Type** (**Adresse mail**, **Domaine** ou **Empreinte SHA-256**), saisissez la **Valeur**, éventuellement un **Commentaire (facultatif)** pour les autres administrateurs (sans données personnelles inutiles), puis cliquez sur **Ajouter**. Une adresse ou un domaine bloqué ne peut plus déposer ; un fichier dont l’empreinte est bloquée est refusé. Cliquez sur **Retirer** pour lever un blocage.
+Dans **Ajouter une entrée**, choisissez le **Type** (**Adresse mail**, **Domaine** ou **Empreinte SHA-256**), saisissez la **Valeur**, éventuellement un **Commentaire (facultatif)** pour les autres administrateurs (sans données personnelles inutiles), puis cliquez sur **Ajouter**. Une adresse ou un domaine bloqué ne peut plus déposer ; un fichier dont l’empreinte est bloquée est refusé. En dessous, la liste des entrées peut être filtrée par **Type** ; cliquez sur **Retirer** sur une ligne pour lever un blocage.
 
-![Écran Liste de blocage avec le formulaire d’ajout et la liste des entrées](../screenshots/fr/admin-blocklist.png)
+![Écran Liste de blocage : la carte Ajouter une entrée avec le type, la valeur, le commentaire et le bouton Ajouter, au-dessus du filtre Type de la liste des entrées](../screenshots/fr/admin-blocklist.png)
 
 Pour bloquer un fichier, copiez son empreinte depuis le détail du transfert (voir [Transferts](topic:tenant-transfers)). Les entrées de la liste de blocage sont volontairement conservées après un effacement de données personnelles, pour ne pas débloquer un abus.
 
@@ -462,11 +492,11 @@ Pour bloquer un fichier, copiez son empreinte depuis le détail du transfert (vo
 
 Les jetons d’API permettent à des scripts et à des logiciels tiers de déposer des fichiers par l’API de TransTeira, sans qu’une personne fasse vérifier son adresse.
 
-La liste indique pour chaque jeton : **Nom**, **Préfixe**, **Plages IP autorisées**, **Expéditeurs autorisés**, **Création**, **Dernière utilisation**, **Expiration** et **Statut**.
+La liste indique pour chaque jeton : **Nom**, **Préfixe**, **Plages IP autorisées**, **Expéditeurs autorisés**, **Secrets express**, **Création**, **Dernière utilisation**, **Expiration** et **Statut**, avec ses boutons **Modifier** et **Révoquer**.
 
-![Liste des jetons d’API d’une entité](../screenshots/fr/admin-tokens.png)
+![Écran Jetons d’API : le bouton Créer un jeton dans l’en-tête de page, le lien vers la documentation de l’API, et un jeton avec son nom, son préfixe, ses plages IP et expéditeurs autorisés, les secrets express, ses dates, le statut Actif et ses boutons Modifier et Révoquer](../screenshots/fr/admin-tokens.png)
 
-Pour en créer un, cliquez sur **Créer un jeton** :
+Pour en créer un, cliquez sur **Créer un jeton** en haut à droite de l’en-tête de page, puis remplissez les **Paramètres du jeton** (**Retour aux jetons d’API** ramène à la liste) :
 
 1. **Nom** : l’usage du jeton, par exemple « Export nocturne de l’ERP ».
 2. **Plages IP autorisées** : les adresses depuis lesquelles le script se connecte, vues derrière le reverse proxy, par exemple `192.0.2.10/32` (même notation que sur l’écran [Réseau](topic:tenant-network)). **Autoriser toute adresse** est possible mais déconseillé.
@@ -476,7 +506,7 @@ Pour en créer un, cliquez sur **Créer un jeton** :
 
 Le secret du jeton n’est affiché **qu’une seule fois**. Cliquez sur **Copier le secret**, cochez **J’ai conservé ce secret, il ne sera plus affiché**, puis **Fermer**. Transmettez-le à la personne responsable du script par un canal de confiance, jamais en clair par mail.
 
-![Secret d’un nouveau jeton d’API affiché une seule fois, avec le bouton de copie et la case de confirmation](../screenshots/fr/admin-token-secret.png)
+![Fenêtre affichée une seule fois au-dessus du formulaire du jeton : le secret du nouveau jeton d’API (masqué ici), le bouton Copier le secret, la case de confirmation et le bouton Fermer](../screenshots/fr/admin-token-secret.png)
 
 **Modifier** change le nom, les plages et les expéditeurs (pas l’expiration : créez plutôt un nouveau jeton). **Révoquer** refuse dès maintenant toute requête faite avec le jeton ; c’est définitif, et les transferts déjà créés restent disponibles pour leurs destinataires. Pour écrire un script, consultez le guide d’intégration `docs/api/integration.md` dans le dépôt TransTeira et cliquez sur **Ouvrir la documentation de l’API**.
 
@@ -489,9 +519,9 @@ Les webhooks envoient les alertes de l’entité vers un canal Microsoft Teams o
 
 La liste indique, pour chaque webhook, son **Nom et adresse** (seulement le schéma et l’hôte de l’adresse : l’adresse complète est conservée chiffrée et n’est plus jamais affichée), son **Type**, ses **Événements**, son **État** et son **Dernier envoi** (remis ou en échec, le statut HTTP ou la cause, la durée et la date). Une entité peut avoir 20 webhooks au plus.
 
-![Liste des webhooks d’une entité avec leur état et leur dernier envoi](../screenshots/fr/admin-webhooks.png)
+![Écran Webhooks d’une entité : le bouton Ajouter un webhook dans l’en-tête de page, la note qui indique si les alertes incluent des adresses, et deux webhooks avec leur type, leurs événements, l’état Activé, leur dernier envoi et leurs boutons Tester, Modifier, Nouveau secret et Supprimer](../screenshots/fr/admin-webhooks.png)
 
-Pour en ajouter un, cliquez sur **Ajouter un webhook** :
+Sous le titre, une note indique si les alertes de l’entité incluent des adresses, avec un lien pour le modifier dans l’écran [Général](topic:tenant-general). Pour ajouter un webhook, cliquez sur **Ajouter un webhook** en haut à droite de l’en-tête de page :
 
 1. **Nom** : ce qu’est le destinataire, par exemple « Canal de l’équipe sécurité ».
 2. **Type** : **Microsoft Teams** ou **Slack** pour le webhook entrant d’un canal (un message mis en forme), **JSON générique** pour tout autre destinataire (un document JSON signé avec un secret).
@@ -517,11 +547,11 @@ Les alertes ne contiennent jamais de nom de fichier, de lien vers un transfert n
 <!-- topic: tenant-secrets -->
 ### Secrets à usage unique
 
-Les secrets à usage unique permettent de transmettre un mot de passe, une clé ou un code, chiffrés dans le navigateur de l’auteur : vous ne voyez **jamais leur contenu**, ni leur lien, ni leur phrase de passe. Deux écrans leur sont consacrés dans le menu de l’entité.
+Les secrets à usage unique permettent de transmettre un mot de passe, une clé ou un code, chiffrés dans le navigateur de l’auteur : vous ne voyez **jamais leur contenu**, ni leur lien, ni leur phrase de passe. Deux écrans du bloc de l’entité dans la barre latérale leur sont consacrés : **Réglages des secrets** (groupe **Configuration**) et **Secrets à usage unique** (groupe **Exploitation**).
 
 > **Attention** Depuis la 2.1, les secrets à usage unique sont **activés par défaut dans chaque entité, y compris celles qui existaient avant la mise à jour**, avec les fichiers joints (10 Mio) et l’envoi par mail autorisés. Un fichier joint est chiffré dans le navigateur et jamais analysé par l’antivirus, et les mails partent sous le domaine de votre entité. Passez en revue les réglages ci-dessous après la mise à jour et désactivez ce dont votre entité n’a pas besoin. Vous pouvez modifier chaque réglage, **Activer les secrets à usage unique** compris, tout comme le super administrateur.
 
-L’écran **Réglages des secrets** (**Secrets à usage unique**) définit les règles :
+La carte **Secrets à usage unique** de l’écran **Réglages des secrets** définit les règles :
 
 - **Activer les secrets à usage unique** : désactiver le module refuse les nouveaux secrets ; ceux qui existent restent lisibles jusqu’à leur fin.
 - **Durées proposées** (au moins une) et **Durée par défaut**, qui doit faire partie des durées proposées.
@@ -535,11 +565,11 @@ Les réglages par défaut d’une entité (nouvelle, ou existante avant la 2.1) 
 
 **Limites et stockage.** Un auteur (une adresse ou un jeton d’API) peut avoir 50 secrets ouverts (**En attente** ou **Actif**) et créer 200 secrets sur 24 heures glissantes ; le texte est limité à 10 000 caractères. Un secret **En attente** est un secret dont la création n’a pas été terminée : il est purgé au bout d’1 heure. Tant qu’il existe, un fichier joint compte dans le quota de stockage de l’entité et dans **Stockage utilisé** : un secret dont le fichier dépasserait le quota est refusé et déclenche les alertes de quota habituelles. Les secrets sont aussi refusés pendant la maintenance ou tant que l’entité est en cours de configuration. Dans la [détection des abus](topic:tenant-abuse), chaque secret compte pour un transfert de son auteur dans le nombre quotidien de transferts (jamais dans le volume).
 
-![Écran des réglages des secrets avec l’activation, les durées, le fichier joint et l’envoi par mail](../screenshots/fr/admin-secret-settings.png)
+![Écran Réglages des secrets : la carte Secrets à usage unique avec Activer les secrets à usage unique, les durées proposées, la durée par défaut, Autoriser un fichier joint avec sa taille maximale, et Autoriser l’envoi par mail](../screenshots/fr/admin-secret-settings.png)
 
-L’écran **Secrets à usage unique** liste les secrets de l’entité, du plus récent au plus ancien : **Création**, **Auteur**, **Remise**, **Fichier**, **État**, **Expiration** et **Lecture**. Filtrez par **État** ou par **Adresse de l’auteur** (adresse exacte). Pour un secret **En attente** ou **Actif**, **Supprimer** le détruit aussitôt, de façon définitive : son lien répond alors qu’il a été supprimé par son expéditeur ou par un administrateur, et aucun accusé de lecture n’est envoyé. Supprimer un secret déjà terminé ne fait rien. Les créations, lectures et suppressions sont inscrites dans le [journal d’audit](topic:tenant-audit) (groupe d’actions **Secrets à usage unique**), avec l’administrateur comme acteur pour une suppression. Un secret terminé (**Lu**, **Expiré**, **Supprimé** ou **Verrouillé**) reste dans la liste 30 jours sans aucun contenu, puis disparaît. Les auteurs peuvent aussi lister et supprimer leurs propres secrets dans **Mes secrets** de la page Mes transferts, ce qui permet de corriger vite une erreur de destinataire.
+L’écran **Secrets à usage unique** commence par la carte **Retrouver un secret depuis son lien** (voir plus bas), puis liste les secrets de l’entité, du plus récent au plus ancien : **Création**, **Auteur**, **Remise**, **Fichier**, **État**, **Expiration** et **Lecture**. Filtrez par **État** ou par **Adresse de l’auteur** (adresse exacte), puis cliquez sur **Appliquer**. Pour un secret **En attente** ou **Actif**, **Supprimer** le détruit aussitôt, de façon définitive : son lien répond alors qu’il a été supprimé par son expéditeur ou par un administrateur, et aucun accusé de lecture n’est envoyé. Supprimer un secret déjà terminé ne fait rien. Les créations, lectures et suppressions sont inscrites dans le [journal d’audit](topic:tenant-audit) (groupe d’actions **Secrets à usage unique**), avec l’administrateur comme acteur pour une suppression. Un secret terminé (**Lu**, **Expiré**, **Supprimé** ou **Verrouillé**) reste dans la liste 30 jours sans aucun contenu, puis disparaît. Les auteurs peuvent aussi lister et supprimer leurs propres secrets dans **Mes secrets** de la page Mes transferts, ce qui permet de corriger vite une erreur de destinataire.
 
-![Liste des secrets à usage unique avec les filtres, l’état, l’expiration et le bouton Supprimer](../screenshots/fr/admin-secrets.png)
+![Écran Secrets à usage unique : la fin de la carte Retrouver un secret depuis son lien, les filtres État et Adresse de l’auteur, et la liste des secrets avec leur auteur, leur remise, leur fichier, l’état Actif ou Lu et le bouton Supprimer des secrets encore actifs](../screenshots/fr/admin-secrets.png)
 
 ### Secrets express (administration)
 
@@ -547,37 +577,37 @@ Un **secret express** est un texte d’au plus 10 000 caractères que **toute pe
 
 > **Attention** Le service est **désactivé par défaut**, dans les nouvelles entités comme dans les existantes. Une fois activé, n’importe qui sur Internet peut stocker un texte sur votre serveur au nom de votre entité, et vous ne pouvez ni le lire ni le modérer. Il peut être détourné pour transmettre des contenus illicites ou des identifiants, ou pour de l’hameçonnage sous votre domaine. Activez-le en connaissance de cause.
 
-Dans la section **Secrets express (anonymes)** de l’écran **Réglages des secrets** :
+Dans la section **Secrets express (anonymes)** de l’écran **Réglages des secrets**, à la fin de la carte **Secrets à usage unique** :
 
 - **Autoriser les secrets express anonymes** : désactivé par défaut. Tant qu’il est activé, un rappel vous demande de compléter d’abord les [mentions légales](topic:tenant-legal) de l’entité : un contact pour les signalements d’abus, et une politique de confidentialité qui précise que les adresses IP des auteurs sont conservées 12 mois dans le journal d’audit.
 - **Secrets par heure et par adresse cliente** : de 1 à 1 000, 10 par défaut. Au-delà, la création est refusée jusqu’à la fin de l’heure.
 - **Secrets par heure et par jeton d’API** : de 1 à 10 000, 100 par défaut.
 - **Secrets express en attente simultanément** : de 1 à 100 000, 1 000 par défaut. Une fois la limite atteinte, les créations anonymes sont refusées jusqu’à ce que des secrets soient lus ou expirent.
 
-![Écran Réglages des secrets, section des secrets express : l’interrupteur, les trois limites et la purge d’urgence](../screenshots/fr/admin-express-settings.png)
+![Écran Réglages des secrets, section Secrets express (anonymes) : Autoriser les secrets express anonymes coché, le rappel de compléter les mentions légales avec son lien, les trois limites et le bouton Enregistrer](../screenshots/fr/admin-express-settings.png)
 
 Les durées sont fixes (1 heure, 1 jour, 7 jours), quelles que soient celles que vous proposez pour les secrets à usage unique. Un secret express n’a ni fichier, ni phrase de passe, ni envoi par mail, ni accusé de lecture. Le mode maintenance et la mise en service de l’entité refusent les créations comme pour les transferts. Chaque modification d’un réglage est inscrite dans le [journal d’audit](topic:tenant-audit) (**Réglages des secrets modifiés**).
 
 **Désactiver le service rend aussi les secrets express anonymes illisibles.** Leurs destinataires voient que le secret est temporairement indisponible. **Rien n’est consommé**, et les liens refonctionnent si vous réactivez le service avant leur expiration ; un secret qui expire entre-temps est perdu. C’est voulu : c’est le moyen d’arrêter aussitôt une vague d’abus. Les secrets express créés avec un jeton d’API restent lisibles quand vous désactivez le mode anonyme. L’exploitant peut aussi fermer le service pour toute l’instance, voir le guide du super administrateur.
 
-**Retrouver un secret depuis son lien.** Sur l’écran **Secrets à usage unique**, **Retrouver un secret depuis son lien** permet de coller le lien auquel renvoie un signalement (ou que vous donne un destinataire) : l’écran affiche l’identifiant, le type (**Secret express** ou **Secret à usage unique**), l’état, l’auteur, les dates et, pour un secret encore vivant, un bouton **Supprimer**. Votre navigateur extrait du lien l’identifiant du secret (`tts_` suivi de 43 lettres et chiffres) et n’envoie que lui : la clé, qui suit le `#`, ne quitte jamais votre navigateur, même depuis un lien réécrit par un filtre de messagerie (une adresse *Safe Links*, par exemple, où le `#` est encodé en `%23`), et l’identifiant envoyé n’est ni conservé ni journalisé : vous voyez des **métadonnées, jamais le contenu**. Vous pouvez aussi coller l’identifiant seul. Si le lien ne correspond à aucun secret de votre entité, vous obtenez **Aucun secret de cette entité ne correspond à ce lien**. Dans le tableau, les secrets express portent un badge **Express**, et l’auteur d’un secret anonyme est **Anonyme (secret express)**, sans adresse. Chaque recherche est inscrite dans le journal d’audit (**Secret recherché à partir d’un lien**).
+**Retrouver un secret depuis son lien.** Sur l’écran **Secrets à usage unique**, la carte **Retrouver un secret depuis son lien** permet de coller dans **Lien du secret** le lien auquel renvoie un signalement (ou que vous donne un destinataire), puis de cliquer sur **Retrouver le secret** : la carte **Secret trouvé** affiche l’identifiant, le type (**Secret express** ou **Secret à usage unique**), l’état, l’auteur, les dates et, pour un secret encore vivant, un bouton **Supprimer**. Votre navigateur extrait du lien l’identifiant du secret (`tts_` suivi de 43 lettres et chiffres) et n’envoie que lui : la clé, qui suit le `#`, ne quitte jamais votre navigateur, même depuis un lien réécrit par un filtre de messagerie (une adresse *Safe Links*, par exemple, où le `#` est encodé en `%23`), et l’identifiant envoyé n’est ni conservé ni journalisé : vous voyez des **métadonnées, jamais le contenu**. Vous pouvez aussi coller l’identifiant seul. Si le lien ne correspond à aucun secret de votre entité, vous obtenez **Aucun secret de cette entité ne correspond à ce lien**. Dans le tableau, les secrets express portent un badge **Express**, et l’auteur d’un secret anonyme est **Anonyme (secret express)**, sans adresse. Chaque recherche est inscrite dans le journal d’audit (**Secret recherché à partir d’un lien**).
 
-![Secret retrouvé depuis son lien : identifiant, type Secret express, état, dates et bouton Supprimer](../screenshots/fr/admin-secret-lookup.png)
+![Écran Secrets à usage unique : la carte Retrouver un secret depuis son lien, puis la carte Secret trouvé avec l’identifiant, le type Secret express, l’état Actif, l’auteur anonyme, les dates et le bouton Supprimer](../screenshots/fr/admin-secret-lookup.png)
 
-**Purge d’urgence.** En bas de l’écran **Réglages des secrets**, **Supprimer tous les secrets express anonymes actifs** détruit, après confirmation, tous les secrets express anonymes encore en attente de lecture, par exemple après un détournement. Le nombre de secrets supprimés est affiché et inscrit dans le journal d’audit (**Secrets express anonymes supprimés en masse**). Les secrets express créés avec un jeton d’API, les secrets à usage unique et les secrets déjà terminés ne sont pas touchés. La purge ne désactive pas le service : décochez d’abord **Autoriser les secrets express anonymes** pour arrêter les nouvelles créations.
+**Purge d’urgence.** Dans la carte **Purge d’urgence**, en bas de l’écran **Réglages des secrets**, **Supprimer tous les secrets express anonymes actifs** détruit, après la confirmation **Tout supprimer**, tous les secrets express anonymes encore en attente de lecture, par exemple après un détournement. Le nombre de secrets supprimés est affiché et inscrit dans le journal d’audit (**Secrets express anonymes supprimés en masse**). Les secrets express créés avec un jeton d’API, les secrets à usage unique et les secrets déjà terminés ne sont pas touchés. La purge ne désactive pas le service : décochez d’abord **Autoriser les secrets express anonymes** pour arrêter les nouvelles créations.
 
 **Jetons d’API.** Un jeton ne peut créer des secrets express que si vous cochez **Autorisé à créer des secrets express** à sa création, ou dans **Modifier**. C’est désactivé par défaut : un jeton ordinaire n’en crée aucun. Un jeton autorisé fonctionne **même quand le mode anonyme est désactivé**, avec sa propre limite par jeton (voir plus haut). La colonne **Secrets express** de la liste des jetons indique **Autorisé** ou **Non**. Chaque création est inscrite dans le journal d’audit avec le jeton utilisé.
 
-**Signalements.** Le lecteur d’un secret express peut utiliser **Signaler un abus** (voir [Signalements](topic:tenant-abuse-reports)). La colonne **Concerne** de l’écran des signalements indique **Secret express** et son identifiant (**Transfert** et son identifiant pour un transfert). Un signalement ne contient jamais le texte ni la clé : pour examiner le secret, collez le lien signalé dans **Retrouver un secret depuis son lien** si vous l’avez, puis supprimez-le ou purgez. Le lire le consommerait. Clôturez ensuite le signalement.
+**Signalements.** Le lecteur d’un secret express peut utiliser **Signaler un abus** (voir [Signalements d’abus](topic:tenant-abuse-reports)). La colonne **Concerne** de l’écran Signalements d’abus indique **Secret express** et son identifiant (**Transfert** et son identifiant pour un transfert). Un signalement ne contient jamais le texte ni la clé : pour examiner le secret, collez le lien signalé dans **Retrouver un secret depuis son lien** si vous l’avez, puis supprimez-le ou purgez. Le lire le consommerait. Clôturez ensuite le signalement.
 
 <!-- topic: tenant-audit -->
 ### Journal d’audit
 
 L’écran Journal d’audit présente les actions enregistrées pour l’entité au cours des 12 derniers mois : dépôts, téléchargements, invitations, actions des administrateurs, etc.
 
-Filtrez par **Action** (regroupées par thème), par **Acteur** (adresse mail exacte ou identifiant d’administrateur) et par période avec **Du** et **Au**. Les colonnes indiquent la **Date**, l’**Acteur**, l’**Action**, l’**Objet**, l’**Adresse IP** et les **Détails** (cliquez sur **Afficher les détails**). Lorsque l’objet est un transfert, un lien ouvre son détail.
+Filtrez par **Action** (regroupées par thème), par **Acteur** (adresse mail exacte ou identifiant d’administrateur) et par période avec **Du** et **Au**, puis cliquez sur **Appliquer**. Les colonnes indiquent la **Date**, l’**Acteur**, l’**Action**, l’**Objet**, l’**Adresse IP** et les **Détails** (cliquez sur **Afficher les détails**). Lorsque l’objet est un transfert, un lien ouvre son détail.
 
-![Journal d’audit d’une entité avec les filtres et la liste des événements](../screenshots/fr/admin-audit.png)
+![Écran Journal d’audit : la carte des filtres (Action, Acteur, Du, Au, Appliquer, Réinitialiser) et la liste des événements avec leur date, leur acteur, leur action et son code, leur objet, leur adresse IP et Afficher les détails](../screenshots/fr/admin-audit.png)
 
 Une adresse effacée à la demande de la personne concernée apparaît sous la forme d’un pseudonyme commençant par `erased-`.
 
@@ -590,7 +620,7 @@ L’écran Journal de sécurité présente les événements de sécurité de l�
 
 Filtrez par **Type d’événement** (un type de la liste, ou **Autre type** et le code du type, par exemple `rate_limited`) et par période avec **Du** et **Au**, puis cliquez sur **Appliquer** ; **Réinitialiser** efface les filtres. Les colonnes indiquent la **Date**, le **Type** (avec son code technique en dessous), le **Motif**, l’**Adresse IP** et les **Occurrences**. Les événements identiques (même type, même motif, même adresse) survenus en environ une minute sont regroupés sur une ligne : le nombre d’occurrences est affiché, avec la date du dernier. Cliquez sur **Charger plus** pour voir les événements plus anciens.
 
-![Journal de sécurité d’une entité avec les filtres et la liste des événements](../screenshots/fr/admin-security-log.png)
+![Écran Journal de sécurité : la carte des filtres (Type d’événement, Du, Au, Appliquer, Réinitialiser) et la liste des événements avec leur date, leur type et son code technique, leur motif, leur adresse IP et leurs occurrences](../screenshots/fr/admin-security-log.png)
 
 Les types que vous pouvez rencontrer sont **Code de vérification erroné**, **Mot de passe de transfert erroné**, **Jeton d’API invalide**, **Dépôt refusé** (motif `ip` pour une adresse hors des plages, `domain`, `blocklist` ou `invitation`), **Limitation de débit dépassée**, **Lien d’accès invalide**, **Lien de dépôt invalide**, **Échec de l’authentification unique**, **Lien de secret inconnu** et **Preuve de secret incorrecte**. Les événements de limitation de débit peuvent aussi concerner les liens de secrets (portées `secret_link` et `secret_link_ip`). Un événement **Preuve de secret incorrecte** porte un motif : `key` (la partie clé du lien est fausse, non comptée contre le secret) ou `passphrase` (bonne clé, mauvaise phrase de passe). De nombreux événements `passphrase` signalent que quelqu’un qui détient un lien de secret essaie d’en deviner la phrase de passe : après 5 preuves de phrase de passe erronées, le secret est verrouillé et détruit. Une rafale d’événements venant d’une même adresse (nombreux codes erronés, nombreux dépôts refusés) signale en général une tentative d’essais successifs : vous pouvez ajouter l’expéditeur à la [Liste de blocage](topic:tenant-blocklist) s’il s’agit d’un dépôt, et l’exploitant peut bannir l’adresse avec l’outil de prévention d’intrusion. Les événements qui n’appartiennent à aucune entité (adresse inconnue, connexion d’administrateur, jeton de provisionnement) ne sont visibles que du super administrateur, dans le journal de sécurité global. La signification de chaque événement est documentée dans `docs/operations/security-log.md` dans le dépôt TransTeira. Les événements sont conservés 12 mois.
 
@@ -599,24 +629,24 @@ Les types que vous pouvez rencontrer sont **Code de vérification erroné**, **M
 
 L’écran Statistiques présente l’activité de l’entité sur une période.
 
-Choisissez la **Période** : **7 derniers jours**, **30 derniers jours** ou **12 derniers mois**. Les **Chiffres clés** donnent les **Transferts déposés**, le **Volume déposé**, les **Téléchargements**, le **Volume téléchargé**, les **Secrets à usage unique créés** et les **Virus détectés** ; le stockage occupé est aussi affiché, avec des graphiques par jour ou par mois. Chaque graphique dispose d’un bouton **Afficher le tableau des données** pour une version lisible. Les chiffres sont indicatifs : les compteurs sont mis à jour environ toutes les 30 secondes. **Secrets à usage unique créés** compte les secrets créés sur la période, quel que soit leur sort ensuite (inachevés compris) ; il démarre à la mise à jour vers la 2.1.
+Choisissez la **Période** : **7 derniers jours**, **30 derniers jours** ou **12 derniers mois**. Les tuiles des **Chiffres clés** donnent les **Transferts déposés**, le **Volume déposé**, les **Téléchargements**, le **Volume téléchargé**, les **Secrets à usage unique créés** et les **Virus détectés**. Sur 7 ou 30 jours, chaque tuile ajoute une tendance par rapport aux 7 ou 30 jours précédents (par exemple **+18 % par rapport aux 30 jours précédents** ou **Stable par rapport aux 30 jours précédents**), un texte neutre, jamais coloré ; sur 12 mois, il n’y a pas de tendance, car les compteurs journaliers ne sont pas conservés assez longtemps. La carte **Stockage** montre le stockage occupé (actuel) avec son niveau, et la carte **Activité** les graphiques par jour ou par mois. Chaque graphique dispose d’un bouton **Afficher le tableau des données** pour une version lisible. Les chiffres sont indicatifs : les compteurs sont mis à jour environ toutes les 30 secondes. **Secrets à usage unique créés** compte les secrets créés sur la période, quel que soit leur sort ensuite (inachevés compris) ; il démarre à la mise à jour vers la 2.1.
 
-![Statistiques d’une entité avec les chiffres clés, le stockage et les graphiques](../screenshots/fr/admin-stats.png)
+![Écran Statistiques : la période, les six tuiles des Chiffres clés avec leur tendance par rapport aux 30 jours précédents, et le début de la carte Stockage](../screenshots/fr/admin-stats.png)
 
 Le quota de stockage est fixé par le super administrateur. Lorsque l’entité atteint 80 % de son quota, les administrateurs délégués reçoivent un mail d’alerte ; à 100 %, ils en reçoivent un autre et les nouveaux dépôts, et les secrets avec fichier joint, sont refusés jusqu’à ce que de l’espace soit libéré par expiration ou suppression. Le stockage utilisé inclut les fichiers des secrets à usage unique tant qu’ils existent. Chaque alerte n’est envoyée qu’une fois par franchissement du seuil.
 
 <!-- topic: tenant-abuse -->
 ### Détection des abus
 
-L’écran Détection des abus règle les seuils qui alertent sur une fuite de données interne ou sur un détournement du service par des externes. Tous les seuils sont propres à l’entité ; une valeur vide ou nulle désactive le seuil.
+L’écran Détection des abus règle les seuils qui alertent sur une fuite de données interne ou sur un détournement du service par des externes. Tous les seuils sont propres à l’entité, dans la carte **Seuils de détection** ; chaque règle a sa case **Activer la règle** : décochez-la pour désactiver la règle.
 
-![L’écran Détection des abus : limites par expéditeur avec leur case d’activation, blocage en cas de dépassement, comportements inhabituels, heures de bureau, invitations et quotas des externes](../screenshots/fr/admin-tenant-abuse.png)
+![Écran Détection des abus : la carte Seuils de détection avec le groupe Limites par expéditeur (une case Activer la règle par règle, Bloquer au lieu d’alerter seulement) et le début du groupe Comportements inhabituels](../screenshots/fr/admin-tenant-abuse.png)
 
 - **Limites par expéditeur** : volume maximal par jour, nombre maximal de transferts par jour, nombre maximal de destinataires par envoi. Elles s’appliquent aux expéditeurs **internes** uniquement (dans le réseau, depuis l’extérieur et par jeton d’API) ; les invités externes ne sont soumis qu’aux quotas des externes. Les compteurs du jour comptent chaque transfert créé (ou prolongé) ce jour-là, quel que soit son état ultérieur, brouillons annulés compris. Un jour est un jour calendaire du **fuseau horaire** réglé sur l’écran. Une prolongation depuis « Mes envois » compte dans le volume et les transferts du jour de la prolongation (alerte seulement).
-- **Blocage en cas de dépassement** : désactivé par défaut. Activé, l’envoi qui dépasserait une limite est refusé et l’expéditeur est prévenu ; sinon, seule une alerte est émise.
-- **Comportements inhabituels** (alerte seulement, pour les expéditeurs internes, y compris depuis l’extérieur) : volume supérieur à un **facteur** multiplié par la moyenne journalière des 30 jours précédents (il faut un nombre minimal de jours d’activité), gros envoi vers un destinataire hors des domaines internes à partir d’une taille donnée, envoi hors des **heures de bureau** (fuseau, heure de début et de fin, jours de la semaine).
-- **Invitations** : nombre maximal d’invitations par interne et par heure glissante (20 par défaut). Au-delà, l’invitation est refusée et une alerte est émise.
-- **Quotas des externes** : volume et nombre de dépôts par jour et par adresse externe, bloquants si le blocage est activé.
+- **Bloquer au lieu d’alerter seulement** : désactivé par défaut. Activé, l’envoi qui dépasserait une limite est refusé et l’expéditeur est prévenu ; sinon, seule une alerte est émise.
+- **Comportements inhabituels** (alerte seulement, pour les expéditeurs internes, y compris depuis l’extérieur) : volume supérieur à un **facteur** multiplié par la moyenne journalière des 30 jours précédents (il faut un nombre minimal de jours d’activité), gros envoi vers un destinataire hors des domaines internes à partir d’une taille donnée, envoi hors des **heures de bureau** (groupe **Fuseau horaire et heures de bureau** : **Alerter en dehors des heures de bureau**, fuseau, heure de début et de fin, jours travaillés).
+- **Invitations et personnes externes** : **Invitations par utilisateur interne et par heure**, une heure glissante (20 par défaut). Au-delà, l’invitation est refusée et une alerte est émise.
+- Quotas des externes, dans le même groupe : **Volume externe maximal par adresse et par jour** et **Dépôts externes maximaux par adresse et par jour**, bloquants si le blocage est activé.
 
 Les secrets à usage unique d’un expéditeur interne comptent dans le nombre quotidien de transferts (le nombre seulement, jamais le volume), pour l’alerte uniquement : ils ne bloquent jamais. Un secret encore **En attente** n’est pas compté.
 
@@ -625,15 +655,15 @@ Une alerte est émise au plus une fois par expéditeur, par règle et par jour. 
 > **À savoir** Information des personnes (RGPD) : ces contrôles ont pour seule finalité la sécurité. Ils sont calculés à la demande à partir des transferts existants, sans profil d’utilisateur enregistré ; les alertes sont conservées 12 mois dans le journal d’audit, et les données de dédoublonnage sont purgées après 2 jours. Informez vos utilisateurs de l’existence de ces contrôles.
 
 <!-- topic: tenant-abuse-reports -->
-### Signalements
+### Signalements d’abus
 
-L’écran Signalements liste les signalements faits par des destinataires avec le bouton **Signaler un abus** de la page de téléchargement.
+L’écran Signalements d’abus liste les signalements faits par des destinataires avec le bouton **Signaler un abus** de la page de téléchargement.
 
-![L’écran Signalements : filtre par état et liste des signalements avec leur date, leur catégorie, le transfert concerné et le signalant](../screenshots/fr/admin-abuse-reports.png)
+![Écran Signalements d’abus : le filtre Statut et un signalement avec sa date, son motif, ce qu’il concerne, son auteur, le statut Ouvert et le bouton Détails](../screenshots/fr/admin-abuse-reports.png)
 
-Chaque ligne indique la date, la catégorie (**Logiciel malveillant**, **Hameçonnage**, **Contenu illégal**, **Courrier indésirable**, **Expéditeur inconnu**, **Autre**), le message du signalant (affiché comme du texte), le transfert concerné et le signalant : son adresse si le destinataire avait validé son adresse sur ce navigateur, sinon « via le lien du destinataire n° n, non vérifié ».
+Filtrez par **Statut** (**Ouvert** ou **Clos**), puis cliquez sur **Appliquer**. Chaque ligne indique la **Date**, le **Motif** (**Virus ou logiciel malveillant**, **Hameçonnage (fausse page de connexion, arnaque)**, **Contenu illégal**, **Courrier indésirable**, **Expéditeur inconnu ou inattendu**, **Autre motif**), ce qu’il **Concerne** (le transfert, ou un secret express, avec son identifiant), **Signalé par** (l’adresse du destinataire s’il l’avait validée sur ce navigateur, sinon « Via le lien du destinataire n° n, non vérifié ») et le **Statut**. Cliquez sur **Détails** pour ouvrir le signalement et lire le message du signalant, affiché comme du simple texte.
 
-Un signalement ne déclenche **aucune action automatique** : examinez le transfert (voir [Transferts](topic:tenant-transfers)), supprimez-le ou bloquez l’expéditeur si nécessaire (voir [Liste de blocage](topic:tenant-blocklist)), puis cliquez sur **Clore** en ajoutant une note. Vous pouvez **Rouvrir** un signalement clos. Les ouvertures, clôtures et réouvertures sont inscrites dans le [journal d’audit](topic:tenant-audit). Les signalements sont conservés 12 mois ; l’effacement des données d’une adresse pseudonymise le signalant et l’expéditeur concernés (voir [Données personnelles (RGPD)](topic:tenant-privacy)).
+Un signalement ne déclenche **aucune action automatique** : examinez le transfert (voir [Transferts](topic:tenant-transfers)), supprimez-le ou bloquez l’expéditeur si nécessaire (voir [Liste de blocage](topic:tenant-blocklist)), puis, dans le détail, cliquez sur **Clore le signalement**, éventuellement avec une **Note de clôture (facultative)**. Vous pouvez **Rouvrir le signalement** une fois clos. Les ouvertures, clôtures et réouvertures sont inscrites dans le [journal d’audit](topic:tenant-audit). Les signalements sont conservés 12 mois ; l’effacement des données d’une adresse pseudonymise le signalant et l’expéditeur concernés (voir [Données personnelles (RGPD)](topic:tenant-privacy)).
 
 Les nouveaux signalements sont envoyés par mail aux administrateurs délégués de l’entité (aux super admins s’il n’y en a aucun) et par webhook (`abuse.reported`).
 
@@ -642,9 +672,9 @@ Les nouveaux signalements sont envoyés par mail aux administrateurs délégués
 
 L’écran Données personnelles répond aux demandes des personnes qui veulent connaître ou effacer les données liées à leur adresse mail dans l’entité (exercice des droits, RGPD).
 
-Dans **Recherche par adresse mail**, saisissez l’**Adresse mail** et cliquez sur **Rechercher**. La section **Données trouvées dans cette entité** résume ce qui y est lié : adresse vérifiée, transferts envoyés et reçus, secrets à usage unique créés ou reçus, invitations, preuves de dépôt et de remise, entrées du journal d’audit.
+Dans la carte **Recherche par adresse mail**, saisissez l’**Adresse mail** et cliquez sur **Rechercher**. La carte **Données trouvées dans cette entité** résume ce qui y est lié : adresse vérifiée, transferts envoyés et reçus, secrets à usage unique créés ou reçus, invitations, preuves de dépôt et de remise, entrées du journal d’audit.
 
-![Recherche de données personnelles avec le résumé des données trouvées pour une adresse](../screenshots/fr/admin-privacy.png)
+![Écran Données personnelles : la note indiquant que seule cette entité est concernée, la carte Recherche par adresse mail et la carte Données trouvées dans cette entité avec les nombres trouvés pour une adresse](../screenshots/fr/admin-privacy.png)
 
 Cliquez sur **Effacer toutes les données** pour les effacer. L’écran détaille l’effet :
 

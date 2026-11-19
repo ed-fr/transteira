@@ -9,13 +9,14 @@
   // proposal filled with the tenant configuration into the editor (after a confirmation when the
   // editor is not empty) and shows its review notice; nothing is saved until the usual save. The
   // placeholders "[À compléter : …]" left in the text are counted to warn before saving (the
-  // server decides whether the setup item is done). FormSection guards the unsaved changes. The tenant sub-navigation is
-  // rendered by App.svelte.
+  // server decides whether the setup item is done). FormSection guards the unsaved changes.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { describeError } from '../../../shared/api/problem';
   import type { components } from '../../../shared/api/schema';
   import {
     Alert,
     Button,
+    HelpIcon,
     LegalContent,
     Spinner,
     TextArea,
@@ -25,6 +26,9 @@
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
+  import ActionLink from '../../components/ActionLink.svelte';
+  import Card from '../../components/Card.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
   import {
@@ -60,7 +64,7 @@
     document: documentName as LegalDocumentName,
     language: lang as Language,
   });
-  const listHref = $derived(nav.href(`/tenants/${encodeURIComponent(tenantId)}/legal`));
+  const listPath = $derived(`/tenants/${encodeURIComponent(tenantId)}/legal`);
   const documentKey = $derived(`adminTenants.legal.document.${documentName}`);
   const title = $derived(
     t('adminTenants.legal.editor.title', {
@@ -194,8 +198,14 @@
   }
 </script>
 
-<p><a href={listHref} use:nav.link>{t('adminTenants.legal.editor.back')}</a></p>
-<h1 tabindex="-1">{title}</h1>
+<PageHeader {title}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-legal" {title} {nav} />
+  {/snippet}
+  {#snippet actions()}
+    <ActionLink to={listPath} {nav} variant="secondary">{t('adminTenants.legal.editor.back')}</ActionLink>
+  {/snippet}
+</PageHeader>
 
 {#if view.kind === 'loading'}
   <Spinner label={t('admin.common.loading')} />
@@ -205,7 +215,7 @@
   {#if doc?.updatedAt && !isBlank(saved)}
     <p>{t('admin.common.lastUpdated', { date: formatDate(doc.updatedAt) })}</p>
   {/if}
-  <div class="tt-legal-proposal">
+  <Card>
     {#if setupStates.stateOf(tenantId) === 'setup'}
       <p>{t('setup.legalProposal.hint')}</p>
     {/if}
@@ -220,7 +230,7 @@
     {#if proposalError !== ''}
       <Alert severity="error">{proposalError}</Alert>
     {/if}
-  </div>
+  </Card>
   {#if proposalNotice !== ''}
     <Alert severity="warning" live={false} title={t('setup.legalProposal.noticeTitle')}>
       <p>{proposalNotice}</p>
@@ -255,8 +265,7 @@
     />
   </FormSection>
 
-  <section class="tt-legal-preview" aria-labelledby={previewHeadingId}>
-    <h2 id={previewHeadingId}>{t('adminTenants.legal.editor.preview')}</h2>
+  <Card title={t('adminTenants.legal.editor.preview')} headingId={previewHeadingId}>
     {#if doc?.html}
       <p class="tt-legal-preview__note">{t('adminTenants.legal.editor.previewNote')}</p>
       {#key doc.html}
@@ -271,7 +280,7 @@
     {:else}
       <p>{t('adminTenants.legal.editor.previewEmpty')}</p>
     {/if}
-  </section>
+  </Card>
 
   <ConfirmDialog
     bind:open={proposalOpen}
@@ -292,10 +301,6 @@
 {/if}
 
 <style>
-  .tt-legal-proposal {
-    margin-bottom: var(--tt-space-4);
-  }
-
   .tt-legal-preview__note {
     color: var(--tt-muted);
   }

@@ -1,4 +1,4 @@
-// Maintenance banner of the administration (AdminLayout): shown to every admin while the
+// Maintenance banner of the administration (AdminShell): shown to every admin while the
 // maintenance mode is in effect, with its start date, the mention "forced by the environment"
 // when TT_MAINTENANCE imposes it, and a link to the maintenance screen for the super admin. The
 // maintenance message itself is meant for the public pages and is not repeated here.

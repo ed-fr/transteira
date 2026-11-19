@@ -5,13 +5,15 @@
   // token, the old URL stops working) and revoke a link; the auditor only reads the list (no
   // button, no creation link). The token and the URL of a link are never available here: only the
   // creation and the rotation answer with them, shown once in SecretOnceModal.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, HelpIcon, announce } from '../../../shared/components';
   import { formatDate, i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
+  import ActionLink from '../../components/ActionLink.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import DataTable from '../../components/DataTable.svelte';
   import SecretOnceModal from '../../components/SecretOnceModal.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -278,19 +280,22 @@
   {/if}
 {/snippet}
 
-<div class="tt-title-row">
-  <h1 tabindex="-1" bind:this={heading}>{t('adminOps.dropLinks.title')}</h1>
-  <HelpIcon topic="tenant-drop-links" title={t('adminOps.dropLinks.title')} {nav} />
-</div>
-<p>{t(readOnly ? 'adminOps.dropLinks.introReadOnly' : 'adminOps.dropLinks.intro')}</p>
-
-{#if !readOnly}
-  <p>
-    <a href={nav.href(`${tenantPath(tenantId, 'dropLinks')}/new`)} use:nav.link
-      >{t('opsDropLinks.list.create')}</a
-    >
-  </p>
-{/if}
+<PageHeader
+  title={t('adminOps.dropLinks.title')}
+  description={t(readOnly ? 'adminOps.dropLinks.introReadOnly' : 'adminOps.dropLinks.intro')}
+  bind:element={heading}
+>
+  {#snippet help()}
+    <HelpIcon topic="tenant-drop-links" title={t('adminOps.dropLinks.title')} {nav} />
+  {/snippet}
+  {#snippet actions()}
+    {#if !readOnly}
+      <ActionLink to={`${tenantPath(tenantId, 'dropLinks')}/new`} {nav} icon="plus">
+        {t('opsDropLinks.list.create')}
+      </ActionLink>
+    {/if}
+  {/snippet}
+</PageHeader>
 
 {#if actionError !== ''}
   <Alert severity="error">{actionError}</Alert>

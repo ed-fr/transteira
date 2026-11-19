@@ -3,7 +3,7 @@
   // abuse, quotas) sent to Teams, Slack or a generic JSON receiver. The screen is WebhookManager
   // with the tenant scope, plus a notice telling whether the payloads carry the addresses
   // concerned (tenant setting webhookIncludeAddresses, changed on the General screen).
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { untrack } from 'svelte';
   import { t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';

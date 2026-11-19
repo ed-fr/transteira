@@ -1,6 +1,6 @@
 # Delegated administrator guide
 
-As a delegated administrator, you configure and operate the entities attached to your account: their branding, network rules, mail server, email templates and legal texts, and you follow their transfers, invitations, one-time secrets, blocklist, API tokens, webhooks, audit log, statistics and personal data requests. Everything happens in the administration, at the address given by your organisation (for example `admin.transfer.example.com/admin/`). The **Help** link at the bottom of each screen opens the matching section of this guide.
+As a delegated administrator, you configure and operate the entities attached to your account: their branding, network rules, mail server, email templates and legal texts, and you follow their transfers, invitations, one-time secrets, blocklist, API tokens, webhooks, audit log, statistics and personal data requests. Everything happens in the administration, at the address given by your organisation (for example `admin.transfer.example.com/admin/`). The help button (**?**) next to the title of each screen, and the **Help** link at the bottom of the page, open the matching section of this guide.
 
 <!-- topic: admin-roles -->
 ## Roles
@@ -47,7 +47,7 @@ This second step must be completed within 5 minutes. If you reload the page, you
 
 To protect against password guessing, 5 failed attempts for the same username from the same network address within 15 minutes lock the sign-in for 15 minutes; the page shows the remaining time. Wrong second-factor codes are counted the same way.
 
-Your session ends after 30 minutes of inactivity, and in any case after 12 hours (default values, set by the operator). To leave earlier, click **Sign out** in the main navigation.
+Your session ends after 30 minutes of inactivity, and in any case after 12 hours (default values, set by the operator). To leave earlier, click **Sign out** at the bottom of the sidebar.
 
 > **Note** Lost your password or your authentication device? The sign-in page reminds you: **Lost your password or authentication device? Ask a super administrator to reset your credentials.** The super administrator then hands you a new activation link.
 
@@ -64,7 +64,7 @@ On **Configure two-factor authentication**:
 2. Scan the QR code. If you cannot, type the **Setup key** in the app by hand; **Copy the key** copies it.
 3. Type the 6-digit code shown by the app in **Confirmation code**, then click **Enable two-factor authentication**.
 
-![Two-factor configuration with the three steps, the setup key and the confirmation code field](../screenshots/en/admin-account-totp.png)
+![Configure two-factor authentication card of My account, with the three steps, the QR code, the setup key, the confirmation code field and the Enable two-factor authentication button](../screenshots/en/admin-account-totp.png)
 
 If the code is refused, check that the clock of your device is right: the codes depend on the time.
 
@@ -85,21 +85,35 @@ Each code works only once. Configuring a new device generates new codes and the 
 <!-- topic: admin -->
 ## Home page
 
-The home page gives you an overview of the entities you administer.
+The home page gives you an overview of the entities you administer. At the top, under the **Home** title, a greeting line (**Hello**, your username, then **Overview of** followed by your entity, or the number of your entities) and, on the right, the **Search** field and its button, described in [Search](topic:admin-search).
 
-Each entity has a card with:
+The **Key figures of the last 30 days** are tiles, added up over your entities:
 
-- **Transfers (30 days)** and **Volume uploaded (30 days)**;
-- **Storage used**, a meter of the space occupied compared with the quota, with its level: **OK**, **Nearly full** from 80 %, **Full** at 100 %;
-- quick links to the transfers, the audit log and the statistics of the entity.
+- **Transfers (30 days)**, **Volume exchanged (30 days)** (the volume deposited) and **Viruses blocked (30 days)**, each with a trend compared with the previous 30 days (for example **+12% vs the previous 30 days**, **Unchanged vs the previous 30 days** or **No activity in the previous 30 days**). The trend is only a text, never coloured: an increase is neither good nor bad;
+- **Storage used**: the share of the quota of your entities in use, a meter with a mark at the 80 % alert threshold, and the space used out of the quota followed by **alert at 80%**. From 80 % the tile also shows **Nearly full**, and **Full** at 100 %.
 
-![Home page of a delegated administrator with the card of one entity](../screenshots/en/admin-home-delegate.png)
+Under the tiles, the **Entities** card lists your entities (ten at most; **See all** opens the full list): the colour swatch, the name and the address of each entity, its **Status** pill, its storage meter (with **Nearly full** or **Full** only when it applies) and a **Configure** link. The **Shortcuts** card gives, for each entity, the links **Transfers of**, **Audit log of** and **Statistics of** followed by its name.
 
-If a card cannot load its figures, click **Try again**.
+![Home page of a delegated administrator: the sidebar with the block of Entity A, the Home title with its help button, the greeting, the search field, the two-factor recommendation, the Transfers, Volume exchanged, Viruses blocked and Storage used tiles, the Entities card and the Shortcuts card](../screenshots/en/admin-home-delegate.png)
 
-If two-factor authentication is not enabled on your account, a banner recommends it, with the link **Enable it from My account**. If no entity is attached to your account yet, the page says so: ask a super administrator to attach you to one.
+If the figures cannot be loaded, click **Try again**.
 
-The main navigation, at the top, contains **Home**, **Entities**, **My account** and **Sign out**. The footer holds the **Help** link and the **Language** selector, remembered in this browser.
+If two-factor authentication is not enabled on your account, a banner recommends it, with the link **Enable it from My account**. If one of your entities is still being set up, a **Setup to complete** warning offers **Start the setup of** followed by its name (see [Setup wizard](topic:tenant-setup)). If no entity is attached to your account yet, the page says so: ask a super administrator to attach you to one.
+
+The administration has a **sidebar** on the left (on a small screen, the **Menu** button at the top opens it, and it closes again once you choose a page). The main navigation contains **Home**, **Entities** and **My account**. Under **Entities**, the block of the open entity (always shown when you administer a single entity) shows its name and its groups **Configuration** and **Operations**, which you can fold and unfold (see [Entity navigation](topic:tenant-nav)). At the bottom of the sidebar, **Signed in as** followed by your username, your **Role** and the **Sign out** button. The footer, under the page, holds the **Help** link, the **Language** selector (remembered in this browser), the **Dark theme** box and the version.
+
+Every screen starts with a page header: its title, the help button (**?**), sometimes a short description and, on the right, the main actions of the screen (for example **Create a token** or **Back to the transfers**). Below, the content is grouped in cards; on a narrow screen, a wide table scrolls sideways inside its card.
+
+<!-- topic: admin-search -->
+### Search
+
+The **Search** field of the home page, and the **Search** screen it opens, find a transfer in every entity you administer, without opening each entity.
+
+1. Type either a transfer identifier (`trf_` followed by 26 letters and digits) or the **complete** address of a sender or of a recipient, then click **Search**.
+2. With an identifier, the transfer opens directly. With an address, the **Results** card lists the transfers found, most recent first: **Entity**, **Transfer** (the link opens its details), **Sender**, **Recipients**, **Created** and **Status**.
+3. When there are more transfers than shown, the notice **Only the most recent transfers are shown.** appears with a link **All transfers of this address in** followed by the entity: it opens the list of transfers of that entity, filtered by this address.
+
+Limits: the search is by exact address only (no part of an address, no domain), and at most 30 searches per minute are accepted: beyond, the screen tells you when to try again. The query is never put in the address bar of the browser, nor stored: it disappears when you sign out. Entities you do not administer are never searched.
 
 <!-- topic: account -->
 ## My account
@@ -112,28 +126,28 @@ My account gathers your profile, your password and your second factor.
 - **Change authentication device**: click **Configure a new device**, enter your current password, then follow the steps described in [Two-factor authentication](topic:admin-totp) (if it is not enabled yet, the button is **Enable two-factor authentication**). The previous app stops working, new [recovery codes](topic:admin-recovery-codes) replace the old ones, and your other sessions are closed.
 - **Disable two-factor authentication**: possible only when it is not mandatory for your account. Otherwise the request is refused with **Two-factor authentication is required for your account: it cannot be disabled.**
 
-![My account screen with the profile, the password change and the two-factor sections](../screenshots/en/admin-account.png)
+![My account screen with the Profile card and the Change password card, followed by the Two-factor authentication card](../screenshots/en/admin-account.png)
 
 <!-- topic: tenants -->
 ## Entities
 
 The **Entities** page lists the entities you administer, each with its own address, branding and configuration.
 
-The columns show the **Name**, the **Address (FQDN)** of its public pages, the **Status**, the **Storage used** and the **Default language**. Click the name, or **Configure** followed by the name, to open an entity. If only one entity is attached to your account, this page takes you straight to it.
+The columns show the **Name** (after the colour swatch of the entity), the **Address (FQDN)** of its public pages, the **Status** pill (**Active**, **Being set up** or **Deletion in progress**), the **Storage used** (a meter with the space used out of the quota; **Nearly full** from 80 % or **Full** at 100 % appears next to it only then) and the **Default language**. Click the name, or the **Configure** link followed by the name at the end of the row, to open an entity. If only one entity is attached to your account, this page takes you straight to it.
 
-![List of entities with their address, status, storage used and default language](../screenshots/en/admin-tenants.png)
+![List of entities: for each entity, its colour swatch and name, its address, the Active status pill, its storage meter, its default language and the Configure link](../screenshots/en/admin-tenants.png)
 
 Creating and deleting entities is reserved to the super administrator: these actions are not offered to you.
 
 <!-- topic: tenant-nav -->
 ### Entity navigation
 
-Once an entity is open, a navigation bar shows its name and two groups of screens.
+Once an entity is open, its block in the sidebar, under **Entities**, shows its name and two groups of screens. Click the name of a group to fold or unfold it; the group of the current screen is always unfolded when you arrive on it. With a single entity, the block is always shown.
 
 - **Configuration**: **Setup**, **General**, **Branding**, **Network**, **Recipient domains**, **Abuse detection**, **Confidentiality levels**, **Secrets settings**, **Mail (SMTP)**, **Single sign-on**, **Email templates**, **Legal information**.
-- **Operations**: **Transfers**, **Invitations**, **Drop links**, **One-time secrets**, **Blocklist**, **Abuse reports**, **API tokens**, **Webhooks**, **Audit log**, **Security log**, **Statistics**, **Personal data**.
+- **Operations**: **Transfers**, **Invitations**, **Blocklist**, **Abuse reports**, **API tokens**, **Drop links**, **One-time secrets**, **Webhooks**, **Audit log**, **Security log**, **Statistics**, **Personal data**.
 
-The filters of the lists are kept in the page address, so you can bookmark a filtered view or share it with another administrator of the entity. Long lists show their first rows; click **Load more** to see the next ones. If you leave a form with unsaved changes, the administration asks for confirmation first.
+The lists have their filters in a card above the table: choose them, then click **Apply**; **Reset** clears them. The filters are kept in the page address, so you can bookmark a filtered view or share it with another administrator of the entity. Long lists show their first rows; click **Load more** to see the next ones. If you leave a form with unsaved changes, the administration asks for confirmation first.
 
 ## Configuring an entity
 
@@ -144,7 +158,7 @@ The configuration screens set how the public pages of the entity look and behave
 
 A new entity starts in the **Being set up** state. The Setup wizard lists what remains to be configured before the entity is opened to the public.
 
-It appears in two places: on the [Home page](topic:admin), a **Setup to complete** warning offers **Start the setup of** followed by the name of the entity; and in the navigation of the entity, which shows the **Being set up** badge and a **Setup** link. Until the entity is opened, the public sees only the message "Service being set up" and every deposit, download and invitation is refused.
+It appears in two places: on the [Home page](topic:admin), a **Setup to complete** warning offers **Start the setup of** followed by the name of the entity; and in the entity block of the sidebar, which shows the **Being set up** badge under the name of the entity and a **Setup** link. Until the entity is opened, the public sees only the message "Service being set up" and every deposit, download and invitation is refused.
 
 The **Setup steps** list is computed from the real configuration of the entity; each step shows **Done** or **To do**, and **Required** or **Optional**.
 
@@ -154,7 +168,7 @@ The **Setup steps** list is computed from the real configuration of the entity; 
 - **Legal notice** and **Privacy policy** (required): written in the default language of the entity, with no `[To complete: …]` (or `[À compléter : …]`) marker left. See [Legal information](topic:tenant-legal).
 - **Mail templates** (optional): tick **I reviewed the mail templates** once you have reviewed or adapted them (see [Email templates](topic:tenant-templates)); this is recorded when the setup is finished.
 
-Each step has a **Configure** link to the matching screen. On that screen, **Back to setup** takes you back to the list. A step changes to **Done** as soon as the configuration satisfies it, so you can come back to the list in any order.
+Each step has a **Configure** link to the matching screen. On that screen, the **Back to setup** link, above the title, takes you back to the list. A step changes to **Done** as soon as the configuration satisfies it, so you can come back to the list in any order.
 
 In the editor of a legal document, **Use the proposed text** fills the editor with a text prepared from the configuration of the entity (name, address, transfer durations, retention periods, cookies, antivirus). If the editor already contains text, TransTeira asks before replacing it. Nothing is saved until you click **Save**. The proposal is a starting point, not legal advice: have it reviewed by your data protection officer or a lawyer. Every piece of information that TransTeira cannot know is marked `[To complete: …]` (in French `[À compléter : …]`); the editor counts the markers that remain, and the step is **Done** only when none is left in the default language.
 
@@ -176,22 +190,28 @@ On an entity, the **Single sign-on** screen shows the configuration in read-only
 
 The General screen shows the identity of the entity and lets you set its language and its size per transfer.
 
-At the top, the status of the entity and the line **Storage used** give the occupied space compared with the quota. The name, the address (FQDN), the storage quota and the ceiling of the size per transfer are shown for information: as the screen reminds you, **A delegated administrator can only change the default language and the maximum size per transfer. The other settings are managed by the super administrator.**
+At the top, a card gives the status pill of the entity, the line **Storage used** (the occupied space compared with the quota) and the link **Open the entity’s user documentation** (see [Entity user documentation](topic:tenant-docs)). Below, the name, the address (FQDN), the storage quota and the ceiling of the size per transfer are shown for information: as the note above them reminds you, **A delegated administrator can only change the default language and the maximum size per transfer. The other settings are managed by the super administrator.**
 
-![General screen with the storage used, the read-only settings and the editable fields](../screenshots/en/admin-tenant-general.png)
+![General screen: the card with the Active status, the storage used and the link to the user documentation, the note on the settings reserved to the super administrator, the read-only settings and the Entity settings card](../screenshots/en/admin-tenant-general.png)
+
+The **Entity settings** card holds the two settings you can change:
 
 - **Default language**: used on the public pages when the language of the visitor's browser is not available, and for the emails.
 - **Maximum size per transfer**: total of the files of one transfer. You can choose any value up to the ceiling set by the super administrator, itself at most 20 GB. Lower it if your users should not send very large transfers.
-- **Antivirus analysis** (read-only): shows whether files of the entity are analysed. Only the super administrator can change it. When it is off, every file deposited is delivered **without analysis**, flagged "not analysed: antivirus disabled": senders are told by email and recipients are warned on the download page. The blocklist by fingerprint and the abuse detection still apply. When the operator disabled the antivirus for the whole service, an information note says that no file is analysed, whatever this setting. Turning it off or on is recorded in the [audit log](topic:tenant-audit).
 
 Click **Save** to apply.
 
-The **Webhooks** section below sets the content of the alerts sent to the [webhooks](topic:tenant-webhooks) of the entity. **Include addresses in webhooks** adds the addresses of the sender and of the recipients concerned. Addresses are personal data that leave TransTeira with each alert: tick it only if the receivers need them and are trusted. It is off by default; click **Save the webhook setting** under the box to apply.
+Further down, read-only cards show settings that only the super administrator can change:
+
+- **Antivirus analysis**: shows whether files of the entity are analysed. When it is off, every file deposited is delivered **without analysis**, flagged "not analysed: antivirus disabled": senders are told by email and recipients are warned on the download page. The blocklist by fingerprint and the abuse detection still apply. When the operator disabled the antivirus for the whole service, an information note says that no file is analysed, whatever this setting. Turning it off or on is recorded in the [audit log](topic:tenant-audit).
+- **Link-only transfers** and **End-to-end encryption**: whether the entity allows them (see the confidentiality levels, which can only tighten them).
+
+The **Webhooks** card, under the Entity settings, sets the content of the alerts sent to the [webhooks](topic:tenant-webhooks) of the entity. **Include addresses in webhooks** adds the addresses of the sender and of the recipients concerned. Addresses are personal data that leave TransTeira with each alert: tick it only if the receivers need them and are trusted. It is off by default; click **Save the webhook setting** under the box to apply.
 
 <!-- topic: tenant-export -->
 ### Exporting the configuration
 
-The **Exporting the configuration** section at the bottom of the General screen downloads the settings of the entity as a JSON file. The super administrator uses it to create another entity by duplicating this one.
+The **Exporting the configuration** card of the General screen, under the Webhooks card, downloads the settings of the entity as a JSON file. The super administrator uses it to create another entity by duplicating this one.
 
 The file contains the general settings (without the storage quota), the colours and the background preset, the network ranges and domains, the recipient domain rules, the confidentiality levels, the abuse thresholds, the customised email templates only, the legal texts, the blocklist, the SMTP server, port, security and sender address, the one-time secrets settings (enabled, offered durations, default duration, attached file and its size limit, delivery by email and passphrase), and the webhooks by name, type and events only. Tick **Include the logo and the background image** to add the two image files.
 
@@ -199,7 +219,7 @@ The file never contains the SMTP user name and password, the webhook addresses a
 
 Click **Download the configuration** to download the file. Each export is recorded in the [audit log](topic:tenant-audit) (`tenant.exported`).
 
-![Exporting the configuration section of the General screen, with the personal data notice, the Include the logo and the background image checkbox and the Download the configuration link](../screenshots/en/admin-tenant-export.png)
+![Exporting the configuration card of the General screen, with the personal data notice, the Include the logo and the background image checkbox and the Download the configuration link, followed by the Antivirus analysis and Link-only transfers cards as a super administrator sees them](../screenshots/en/admin-tenant-export.png)
 
 > **Warning** The file holds personal data: the addresses of the blocklist and the contacts written in the legal texts. Keep it like any confidential document, do not send it by plain email and delete it once the new entity is created.
 
@@ -212,7 +232,7 @@ The Branding screen sets the logo, the colors and the background image of the pu
 
 The **Contrast** section checks each pair of colors used by the interface. The ratio must reach at least 4.5:1 (level AA) for texts to stay readable. A pair marked **Insufficient** is a warning: you can still save, but fix it to meet the accessibility requirements (RGAA). The check covers both themes: the **Primary color on dark background** and **Accent color on dark background** pairs are informational and never trigger the warning. When a color is not readable enough on the dark background, links and focus indicators use the accessible default colors of the dark theme instead, and the accent color stays purely decorative. The **Preview of the public page** shows the light and the dark themes side by side before you save.
 
-![Branding screen with the colors, the contrast check and the preview of the public page](../screenshots/en/admin-tenant-branding.png)
+![Branding screen: the Colors card with the primary and accent colors, their contrast ratios on light and dark backgrounds marked AAA, AA or Insufficient, and the start of the Contrast section](../screenshots/en/admin-tenant-branding.png)
 
 **Background library**: under the background image, choose one of the images supplied with TransTeira and click **Apply**. A background image you upload yourself takes precedence: the library choice applies only once your image has been deleted, and the screen says so.
 
@@ -236,15 +256,15 @@ A user is internal when **both** conditions are met: their IP address belongs to
 - **Internal IP address ranges**: one range per line in CIDR notation, for example `192.0.2.0/24` or `2001:db8::/32`.
 - **Internal email domains**: one domain per line, for example `entity-a.example.com`.
 
-![Network screen with the internal IP ranges and the internal email domains](../screenshots/en/admin-tenant-network.png)
+![Network screen: the Internal ranges and domains card with the internal IP address ranges, the internal email domains, the number of entries of each list and the Save button](../screenshots/en/admin-tenant-network.png)
 
 Errors are reported line by line, sometimes with a suggested correction you can apply. Repeated lines are ignored, and the server normalizes the values it saves (the lists shown after saving are the saved ones). Click **Save**.
 
 If the entity being set up was created by importing a configuration, an **Imported ranges and domains to confirm** warning appears above the lists: check them, then click **Confirm**. Saving the lists also confirms them.
 
-**Allow deposits from outside for verified internal users**: off by default. When on, an address of an internal domain **already verified from the internal network** can deposit outside the ranges, without an invitation, with a code at every deposit (see the depositor guide, section "Depositing from outside"). Invitations remain reserved to the internal network, and these deposits are flagged in the [audit log](topic:tenant-audit) and counted by the [abuse detection](topic:tenant-abuse). A compromised mailbox would then allow deposits from the Internet: turn the option on only after assessment. The option itself is public in the entity configuration. When it is on, a code request from outside for an address that is not eligible (another domain, never verified from the internal network, inactive, unknown) gets the same answer as an eligible address, with no email sent: the attempt counts in the code limits and every code is refused at confirmation. If a user reports that no code arrives from outside, check their eligibility. With the option off, outsiders get the generic refusal. Blocklisted addresses are still refused.
+**Allow deposits from outside for already verified internal users** (card **Deposit from outside**): off by default. When on, an address of an internal domain **already verified from the internal network** can deposit outside the ranges, without an invitation, with a code at every deposit (see the depositor guide, section "Depositing from outside"). Invitations remain reserved to the internal network, and these deposits are flagged in the [audit log](topic:tenant-audit) and counted by the [abuse detection](topic:tenant-abuse). A compromised mailbox would then allow deposits from the Internet: turn the option on only after assessment. The option itself is public in the entity configuration. When it is on, a code request from outside for an address that is not eligible (another domain, never verified from the internal network, inactive, unknown) gets the same answer as an eligible address, with no email sent: the attempt counts in the code limits and every code is refused at confirmation. If a user reports that no code arrives from outside, check their eligibility. With the option off, outsiders get the generic refusal. Blocklisted addresses are still refused.
 
-**Allow recipients to reply to a transfer** (section **Reply to a transfer**): off by default. When on, a recipient who opens their personal link sees a **Reply** button and can send files back to the original sender without an invitation (see the recipient guide, section "Reply to a transfer"). It only concerns transfers sent by an internal user or an API token, never those of an external guest nor a reply, and never the old shared links from before version 1.1. The recipient of the reply is always the original sender. The replier must confirm their address with a code for every reply, even if the sender had not asked for verification. The reply is subject to everything that applies to external people: external quotas (see [Abuse detection](topic:tenant-abuse)), size limit per transfer, entity storage quota, antivirus, blocklist (replier and original sender) and confidentiality levels. It must finish before the original transfer expires, which is rechecked at creation and at finalization; turning the option off stops new replies at once, and maintenance mode refuses them. The main risk is phishing: a forwarded link or a compromised mailbox lets someone deposit files with an internal user. That is why the internal recipient sees, in the mail and on the download page, a warning that this is an external reply with a verified address. In the [audit log](topic:tenant-audit), a reply produces `transfer.created` with origin `reply` and then `transfer.reply_created`; a refusal linked to the original sender is recorded as `transfer.recipient_refused`. Refusal of a replier by the blocklist appears in the security log (`deposit_refused`, reason `blocklist`). In the transfer list, these transfers have the origin **Reply**.
+**Allow recipients to reply to a transfer** (card **Reply to a transfer**): off by default. When on, a recipient who opens their personal link sees a **Reply** button and can send files back to the original sender without an invitation (see the recipient guide, section "Reply to a transfer"). It only concerns transfers sent by an internal user or an API token, never those of an external guest nor a reply, and never the old shared links from before version 1.1. The recipient of the reply is always the original sender. The replier must confirm their address with a code for every reply, even if the sender had not asked for verification. The reply is subject to everything that applies to external people: external quotas (see [Abuse detection](topic:tenant-abuse)), size limit per transfer, entity storage quota, antivirus, blocklist (replier and original sender) and confidentiality levels. It must finish before the original transfer expires, which is rechecked at creation and at finalization; turning the option off stops new replies at once, and maintenance mode refuses them. The main risk is phishing: a forwarded link or a compromised mailbox lets someone deposit files with an internal user. That is why the internal recipient sees, in the mail and on the download page, a warning that this is an external reply with a verified address. In the [audit log](topic:tenant-audit), a reply produces `transfer.created` with origin `reply` and then `transfer.reply_created`; a refusal linked to the original sender is recorded as `transfer.recipient_refused`. Refusal of a replier by the blocklist appears in the security log (`deposit_refused`, reason `blocklist`). In the transfer list, these transfers have the origin **Reply**.
 
 Watch the warnings:
 
@@ -258,7 +278,7 @@ TransTeira sees the address of the client as transmitted by the reverse proxy. I
 
 The Recipient domains screen limits the email domains senders may address, for example to prevent files from leaving for consumer webmail.
 
-![Recipient domains screen with the allowed and denied domain lists](../screenshots/en/admin-tenant-recipient-rules.png)
+![Recipient domains screen: the Recipient rules card with an empty list of allowed domains and a list of denied domains](../screenshots/en/admin-tenant-recipient-rules.png)
 
 - **Allowed domains**: one domain per line. When this list is not empty, recipients can only belong to these domains.
 - **Denied domains**: one domain per line. A denied domain is always refused.
@@ -272,7 +292,7 @@ The rules apply to every new transfer, whether it is sent from the web page or w
 
 The Confidentiality levels screen defines the levels senders choose from when they create a transfer. Each level imposes its own rules. You can define from 1 to 10 levels, with exactly one **Default level**, which applies when the sender does not choose one. With a single level, the sender sees no selector, but its rules still apply.
 
-![Confidentiality levels screen with the rules of each level](../screenshots/en/admin-tenant-confidentiality.png)
+![Confidentiality levels screen: the Levels card with the first level, its Default level choice, its key, its labels and its descriptions in French and in English](../screenshots/en/admin-tenant-confidentiality.png)
 
 For each level, fill in:
 
@@ -285,10 +305,10 @@ For each level, fill in:
 - **Internal recipients only**: recipients must belong to the internal domains of the entity (see [Network](topic:tenant-network)).
 - **Delete after the first download (forced)**.
 - **Link-only allowed**: allows (the default) or forbids the "link only" option for this level, see “Sending with a link only” (depositor guide). It is offered only if the super admin has allowed it for the entity. A level that requires recipient verification does not allow link-only, as the two options are incompatible.
-- **End-to-end encryption**: **Follow the entity** (the default), **forbidden**, **allowed** or **required**. A level can only **tighten** the setting the super admin chose for the entity: if the entity forbids or requires it, that applies to every level whatever you choose here; only when the entity allows it can a level forbid or require it. An encrypted file is never analysed by the antivirus, so require it only for levels whose recipients you control. Transfers encrypted this way show the badge "end-to-end encrypted" in your transfer lists.
+- **End-to-end encryption**: **Inherit the policy of the entity** (the default), **Forbidden**, **Allowed** or **Required**. A level can only **tighten** the setting the super admin chose for the entity: if the entity forbids or requires it, that applies to every level whatever you choose here; only when the entity allows it can a level forbid or require it. An encrypted file is never analysed by the antivirus, so require it only for levels whose recipients you control. Transfers encrypted this way show the badge "end-to-end encrypted" in your transfer lists.
 - **Maximum number of downloads (cap)**: optional, from 1 to 1000. It caps the number of downloads the sender can set; if the sender sets none, the cap applies.
 
-Use the arrows to reorder the levels, **Add a level** to create one, and **Save** to apply. The screen reports errors level by level.
+Use **Move up** and **Move down** to reorder the levels, **Remove** to delete one, **Add a level** to create one, and **Save** to apply. The screen reports errors level by level.
 
 A transfer that breaks a rule of its level is refused, whatever the way it is created (web page or API token), and the sender is told which rule is not met. The rules of the level are copied onto each transfer when it is created: editing or deleting a level never changes the transfers that already exist. The level of a transfer is shown to the recipients in the email and on the download page, in the transfer details (see [Transfers](topic:tenant-transfers)) and in the [audit log](topic:tenant-audit).
 
@@ -302,7 +322,7 @@ The Mail (SMTP) screen sets the server through which the entity sends all its em
 Until it is configured, the screen shows **Mail is not configured yet: the entity cannot send any email.** and nobody can verify their address.
 
 - **SMTP server**: host name or IP address, for example `smtp.example.com`.
-- **Port** and **Connection security**: **None (relay on an internal network)**, **STARTTLS (usually port 587)** or **Implicit TLS (usually port 465)**. Choose None only for a relay reachable through the internal network of the service.
+- **Connection security** and **Port**: **None (relay on an internal network)**, **STARTTLS (usually port 587)** or **Implicit TLS (usually port 465)**. Choose None only for a relay reachable through the internal network of the service. Above the port, the usual port of the chosen security is reminded; when the port differs, a button such as **Use port 587** sets it.
 - **Username**: leave it empty for a relay without authentication. Authentication is refused without encryption, since the credentials would travel in clear.
 - **Password**: **Keep the saved password**, **Replace the password** or **Remove the password**. It is encrypted and never shown again. If you change the server, the port or the username, enter it again.
 - **Sender address**: the "From" address of the emails, for example `transfer@entity-a.example.com`.
@@ -310,11 +330,11 @@ Until it is configured, the screen shows **Mail is not configured yet: the entit
 
 Click **Save**.
 
-![Mail (SMTP) screen with the server settings, the test email and the DNS check](../screenshots/en/admin-tenant-smtp.png)
+![Mail (SMTP) screen: the Server and sender card with the SMTP server, the connection security, the port with its Use port 25 button and the username](../screenshots/en/admin-tenant-smtp.png)
 
-**Test email**: the test uses the saved settings, so save first. Type a **Recipient address** and click **Send a test email**. The result tells you whether the server accepted the message or, if not, the stage reached (connection, TLS, authentication…) and the server message. You can send 5 tests per 10 minutes.
+**Test email** (card below the settings): the test uses the saved settings, so save first. Type a **Recipient address** and click **Send a test email**. The result tells you whether the server accepted the message or, if not, the stage reached (connection, TLS, authentication…) and the server message. You can send 5 tests per 10 minutes.
 
-**DNS check (SPF, DKIM, DMARC)**: without these DNS records on the domain of the sender address, emails may be classified as spam. DKIM selectors cannot be discovered automatically: type up to 5 in **DKIM selectors** (for example `selector1, selector2` for Microsoft 365), then click **Check the DNS**. Each record is reported as **Correct**, **To be checked**, **Missing** or **Check failed**. The check is indicative.
+**DNS check (SPF, DKIM, DMARC)** (last card): without these DNS records on the domain of the sender address, emails may be classified as spam. DKIM selectors cannot be discovered automatically: type up to 5 in **DKIM selectors** (for example `selector1, selector2` for Microsoft 365), then click **Check the DNS**. Each record is reported as **Correct**, **To be checked**, **Missing** or **Check failed**. The check is indicative.
 
 > **Note** With a relay to Microsoft 365, DKIM must be enabled in Microsoft 365 for the domain of the entity, and the sender address must be allowed in the application used by the relay. Ask the operator of the service to check it.
 
@@ -323,16 +343,16 @@ Click **Save**.
 
 The Email templates screen lets you customise, for each language, the emails sent by the entity.
 
-The list shows each template in each language, marked **Customized** or **Default**. A template that is not customised uses the default text. The templates are:
+The list has one row per template and one column per language, where each template is marked **Customized** or **Default**, with an **Edit** link. A template that is not customised uses the default text. The templates are:
 
 - **Verification code**, **Transfer notification**, **Transfer confirmation**, **First download receipt**;
 - **Infected or withheld file**, **File not scanned**, **External invitation**;
-- **Quota alert (80%)**, **Quota reached**, **Antivirus unavailable**;
+- **Quota alert (80%)**, **Quota reached**, **Antivirus unavailable**, **Abuse alert**, **Abuse report**;
 - **Secret notification** and **Secret read receipt** (2.1).
 
-![List of the email templates with their state in each language](../screenshots/en/admin-tenant-templates.png)
+![Email templates screen: one row per template, with its state (Default here) and an Edit link in the English and French columns](../screenshots/en/admin-tenant-templates.png)
 
-Click a template to open the editor. It has three fields: **Subject**, **HTML body** and **Text body** (plain text version, read by mail clients that do not display HTML).
+Click **Edit** in the column of a language to open the editor; **Back to the templates**, at the top right, returns to the list. Its **Content of the template** card has three fields: **Subject**, **HTML body** and **Text body** (plain text version, read by mail clients that do not display HTML).
 
 - **Available variables**: click a variable to insert it at the cursor, in the last field used. Variables are written between double braces, for example `{{download_link}}`. Variables marked required must appear in both bodies; a missing or unknown variable is flagged.
 - **End-to-end encrypted transfers** (2.0): the transfer, confirmation and expiry reminder templates offer the variable `{{e2e_notice}}`, the notice saying that the key comes from the sender through another channel and that the files were not analysed. As for the reply warning, the notice is added at the top of the email even if your template omits the variable, and the mails of such a transfer never contain the key nor the message.
@@ -340,7 +360,7 @@ Click a template to open the editor. It has three fields: **Subject**, **HTML bo
 - **Preview** shows the email with sample data, without its styles and with images replaced by their description.
 - **Save the template** saves it; **Restore the default template** deletes your customisation for this language.
 
-![Template editor with the subject, the HTML and text bodies and the available variables](../screenshots/en/admin-tenant-template-editor.png)
+![Editor of the Transfer notification template in English: the Back to the templates button in the page header, then the Content of the template card with the subject, the HTML body and the start of the text body](../screenshots/en/admin-tenant-template-editor.png)
 
 If the server finds an error, it gives the field, the line and the column, with a message in English. If a customised template ever fails when an email is sent, the default template is used instead, so the email still goes out.
 
@@ -349,13 +369,13 @@ If the server finds an error, it gives the field, the line and the column, with 
 
 The Legal information screen holds the texts shown on the legal information page of the entity.
 
-There are two documents, **Legal notice** and **Privacy policy**, in each language, marked **Written** or **Not written**.
+There are two documents, **Legal notice** and **Privacy policy**, one per row, with one column per language where each document is marked **Written** or **Not written**, with an **Edit** link.
 
-![List of the legal documents with their state in each language](../screenshots/en/admin-tenant-legal.png)
+![Legal information screen: the legal notice, Written in English and in French, and the privacy policy, Not written, each with an Edit link per language](../screenshots/en/admin-tenant-legal.png)
 
-Click a document to edit it in **Text (Markdown)**: headings with `#`, lists with `-`, links with `[text](address)` (https and mailto addresses only). HTML is not interpreted. Click **Save**; the **Preview** shows the saved text. Saving an empty text deletes the document, after confirmation.
+Click **Edit** in the column of a language to edit the document in **Text (Markdown)**, in the **Content** card: headings with `#`, lists with `-`, links with `[text](address)` (https and mailto addresses only). HTML is not interpreted. Click **Save**; the **Preview** card shows the saved text. Saving an empty text deletes the document, after confirmation. **Back to the documents**, at the top right, returns to the list.
 
-![Legal text editor with the Markdown field and the preview](../screenshots/en/admin-tenant-legal-editor.png)
+![Editor of the legal notice in English: the Back to the documents button in the page header, the Use the proposed text button and the Content card with the Markdown field](../screenshots/en/admin-tenant-legal-editor.png)
 
 Visitors see the document in their language, or in the default language of the entity if it is not written in theirs. A missing document is announced as not published.
 
@@ -364,7 +384,7 @@ Visitors see the document in their language, or in the default language of the e
 
 The public help, on the entity address (`/help`), is customised: it shows the entity name, logo and colours, and its real rules (maximum size per transfer, available durations, enabled options, confidentiality levels and their rules). Sections about an option that is disabled for the entity are hidden. Nothing secret is shown: no IP ranges, no internal domains, no abuse detection thresholds, no domain lists.
 
-On the entity screen, the link **Open the entity's user documentation** opens the printable page `https://<entity address>/help/print`. Print it or save it as PDF with your browser to distribute it to users. The page carries its date and the application version.
+At the top of the [General](topic:tenant-general) screen of the entity, the link **Open the entity’s user documentation** opens, in a new tab, the printable page `https://<entity address>/help/print`. Print it or save it as PDF with your browser to distribute it to users. The page carries its date and the application version.
 
 > **Note** The printed rules are those of the moment: print the documentation again after changing a rule of the entity.
 
@@ -377,26 +397,35 @@ The operations screens let you follow the daily activity of the entity and act o
 
 The Transfers screen lists the transfers of the entity, to follow them, resend their notification or delete them before they expire.
 
-Filter by **Status**, by **Email address** (exact address of the sender or of a recipient) or by **Created from**, then click **Apply**; **Reset** clears the filters. The columns show **Created**, **Sender**, **Recipients**, **Files and size**, **Status**, **Origin**, **Downloads** and **Expires**.
+Filter by **Status**, by **Email address** (exact address of the sender or of a recipient) or by **Created from**, then click **Apply**; **Reset** clears the filters. The columns show **Created**, **Sender**, **Recipients**, **Files and size**, **Status** (a pill), **Origin**, **Downloads** and **Expires**.
 
 - Statuses: **Uploading**, **Being scanned**, **Available**, **Rejected**, **Expired**, **Deleted**.
 - Origins: **Internal user**, **External guest** (deposit through an invitation), **API token**, **Reply** (files sent back by a recipient, see [Network](topic:tenant-network)).
 
-![List of the transfers of an entity with the filters](../screenshots/en/admin-transfers.png)
+![Transfers screen: the filters card (Status, Email address, Created from, Apply, Reset) and the list of transfers with their creation date, sender, recipients, files and size, Available status, origin, downloads and expiry](../screenshots/en/admin-transfers.png)
 
-Open a transfer to see its **Transfer details**: status, dates, first download, sender and sender IP address, origin, options (including the **Confidentiality level** and the number of downloads, shown as the count out of the maximum allowed when the sender set one), recipients, and the files with their size, SHA-256 fingerprint and antivirus result. Every new transfer gives each recipient a personal link, so the details also show, for each recipient, which files were downloaded and when (first and last download), never the recipient's IP address or browser. Transfers created before version 1.1 keep a single shared link and show no per-recipient tracking. File contents and download links are never available to administrators.
+Click the creation date of a transfer to open its **Transfer details**; **Back to the transfers**, at the top right, returns to the list. The details are grouped in cards:
 
-![Transfer details with its information, recipients and files](../screenshots/en/admin-transfer-detail.png)
+- **Information**: status, dates, first download, number of downloads (shown as the count out of the maximum allowed when the sender set one), **Confidentiality level**, sender and sender IP address, origin and options, with the link **View the audit log from the day of this transfer**;
+- **Recipients**: every new transfer gives each recipient a personal link, so this card shows whether **Recipient verification** is on and, for each recipient, which files were downloaded and when (first and last download), never the recipient's IP address or browser. Transfers created before version 1.1 keep a single shared link and show no per-recipient tracking;
+- **Files**: the files with their size, type, SHA-256 fingerprint and antivirus result;
+- **Proofs** (see [Proofs of deposit and delivery](topic:tenant-proofs)) and **Actions**.
+
+File contents and download links are never available to administrators.
+
+![Transfer details: the Back to the transfers button in the page header, the Information card (status, dates, downloads, confidentiality level, sender, IP address, origin, options and the link to the audit log) and the start of the Recipients card](../screenshots/en/admin-transfer-detail.png)
+
+The **Actions** card offers:
 
 - **Resend the notification**: choose the recipients and click **Resend**. The email is sent again and each recipient receives their own personal link again, at most 5 times per hour. The day before a transfer expires, recipients who have not downloaded yet automatically receive a reminder email (not for transfers valid one day, nor for blocked addresses).
-- **Delete the transfer**: optionally type a **Reason (optional)**, recorded in the audit log, then confirm. The files are erased for good, including from backups, since their encryption keys are destroyed. The download link stops working.
-- Senders can also delete or extend their own transfers themselves from the "My transfers" page of the sending site (see the depositor guide), without an administrator. These actions are recorded in the [audit log](topic:tenant-audit) (`transfer.deleted`, `transfer.extended`, `my_transfers.link_requested`, `my_transfers.signed_in`).
-- **View the audit log from the day of this transfer** opens the audit log at the creation day.
+- **Delete the transfer**: optionally type a **Reason (optional)**, recorded in the audit log, then confirm with **Delete**. The files are erased for good, including from backups, since their encryption keys are destroyed. The download link stops working.
+
+Senders can also delete or extend their own transfers themselves from the "My transfers" page of the sending site (see the depositor guide), without an administrator. These actions are recorded in the [audit log](topic:tenant-audit) (`transfer.deleted`, `transfer.extended`, `my_transfers.link_requested`, `my_transfers.signed_in`).
 
 <!-- topic: tenant-proofs -->
 ### Proofs of deposit and delivery
 
-The details of a transfer have a **Proofs** section, available to delegated administrators, super administrators and auditors. It offers PDF files signed by the instance: the **proof of deposit** (written at the end of the antivirus analysis), the **proof of delivery** (written at the first complete download) and, when recipients have personal links, one **proof of delivery** per recipient (written at that person's first complete download). A proof not written yet is shown as unavailable.
+The details of a transfer have a **Proofs** card, available to delegated administrators, super administrators and auditors. It offers PDF files signed by the instance: the **proof of deposit** (written at the end of the antivirus analysis), the **proof of delivery** (written at the first complete download) and, when recipients have personal links, one **proof of delivery** per recipient (written at that person's first complete download). A proof not written yet is shown as unavailable.
 
 Proofs are kept **12 months after they were issued, even if the transfer was deleted**, so you can still provide one for a transfer that is gone (the transfer details remain reachable for that). The sender downloads their own proofs from the "My transfers" page, only while the transfer exists. Each download is recorded in the [audit log](topic:tenant-audit) (`transfer.proof_downloaded`) and limited in rate per IP address (beyond, the page asks you to wait).
 
@@ -409,9 +438,9 @@ The [Personal data](topic:tenant-privacy) screen counts the proofs naming an add
 
 The Invitations screen lists the invitations sent by internal users so that external people can deposit files for them.
 
-The columns show the **Invited address**, **Invited by**, the **Status** (**Pending**, **Used**, **Expired**, **Revoked**), and the creation, expiry and last use dates. An invitation is valid 12 months after its creation or its last use, whichever is later.
+Filter by **Status**, then click **Apply**. The columns show the **Invited address**, **Invited by**, the **Status** (**Pending**, **Used**, **Expired**, **Revoked**), and the **Created**, **Expires** and **Last used** dates. An invitation is valid 12 months after its creation or its last use, whichever is later.
 
-![List of the invitations with their status and dates](../screenshots/en/admin-invitations.png)
+![Invitations screen: the Status filter and the list of invitations with their invited address, inviter, Pending status, dates and Revoke button](../screenshots/en/admin-invitations.png)
 
 Click **Revoke** to stop an invitation immediately: its link no longer allows a deposit, and deposits already started with it end. This is final, but a new invitation can be sent later.
 
@@ -420,29 +449,30 @@ Click **Revoke** to stop an invitation immediately: its link no longer allows a 
 
 A permanent drop link is a fixed address you give to third parties (customers, suppliers) so that they can send files to a service of the entity without needing a new invitation each time. The recipients, the duration and the confidentiality level are fixed by the link: the depositor does not choose them.
 
-The list shows for each link: **Label**, **Recipients**, **Validity**, **Confidentiality level**, **Status** (**Active**, **Expired**, **Disabled** or **Revoked**), **Ends**, **Deposits per hour**, **Created** and **Last used**. A link neither used nor created for 12 months carries an **Unused for 12 months** badge: check whether it is still needed, then disable it, revoke it or give it an expiry date. A revoked link stays listed. An entity holds at most 100 links. An auditor can read the list, never the secret.
+The list shows for each link: **Label**, **Recipients**, **Validity**, **Level** (the confidentiality level), **Ends**, **Deposits per hour**, **Status** (**Active**, **Expired**, **Disabled** or **Revoked**) and **Last used**. A link neither used nor created for 12 months carries an **Unused for 12 months** badge: check whether it is still needed, then disable it, revoke it or give it an expiry date. A revoked link stays listed. An entity holds at most 100 links. An auditor can read the list, never the secret.
 
-![List of the permanent drop links with their recipients, status and deposits per hour](../screenshots/en/admin-drop-links.png)
+![Drop links screen: the Create a drop link button in the page header and two links with their label, recipients, validity, level, end, deposits per hour, Active status and their Edit, Disable, Rotate and Revoke buttons](../screenshots/en/admin-drop-links.png)
 
-To create one, click **Create a link**:
+To create one, click **Create a drop link** at the top right of the page header, then fill in the **Drop link settings**:
 
 1. **Label**: the name of the service, for example "Supplier accounting documents". It is **shown publicly** on the landing page of the link: put nothing confidential in it.
 1. **Recipients**: 1 to 20 addresses, all in an internal mail domain of the entity (see [Network](topic:tenant-network)). They are never shown to the depositor.
-1. **Validity**: 1, 7 or 30 days, among the durations allowed by the chosen confidentiality level.
+1. **How long deposits are kept** (the **Validity** of the list): 1, 7 or 30 days, among the durations allowed by the chosen confidentiality level.
 1. **Confidentiality level**: optional; otherwise the default level of the entity (see [Confidentiality levels](topic:tenant-confidentiality)). Its rules apply to the depositor: if the level requires a password, the depositor types one.
 1. **Expiry date (optional)**: a day to come. After the end of that day (your local time), the link is refused to depositors exactly like a disabled one; you can push the date back or remove it later. An expired link is deleted 12 months after its expiry, once its transfers are deleted.
 1. **Deposits per hour**: 20 by default (1 to 1000). Transfers accepted through the link over the last hour, all depositors together, on top of the quotas of external users. Beyond it, no verification code is sent and the depositor is asked to try again later.
-1. Click **Create the link**.
+1. Leave **Link enabled** ticked, then click **Create the link**.
 
-The address of the link, of the form `transfer.entity-a.example.com/drop/ttd_…`, is shown **only once**, at creation and at rotation. Click **Copy the link** before closing the window, then pass it to your third parties. Only a fingerprint of the secret is kept: it cannot be retrieved afterwards.
+The address of the link, of the form `transfer.entity-a.example.com/drop/ttd_…`, is shown **only once**, at creation and at rotation. Click **Copy the secret** (or tick **I have stored this secret, it will not be shown again**) before closing the window with **Close**, then pass it to your third parties. Only a fingerprint of the secret is kept: it cannot be retrieved afterwards. **Back to the drop links**, at the top right of the form, returns to the list without creating anything.
 
 What the depositor goes through is described in “Sending files through a drop link” (depositor guide). At every use, they must type a code received by email. The quotas of external users, abuse detection and the blocklist apply as for an invitation; end-to-end encryption is not offered through this means.
 
 The actions of each row:
 
-- **Edit**: changes the label, the recipients, the duration, the level or the **Active** / **Disabled** state. A disabled link refuses deposits until it is enabled again. Transfers already deposited do not change.
-- **Rotate the secret**: creates a new address and invalidates the old one **immediately**. Use it if the link leaked; remember to warn your third parties.
-- **Revoke**: stops the link for good. It stays in the list, and it is deleted 12 months later if no transfer refers to it.
+- **Edit**: changes the label, the recipients, the duration, the level, the expiry date, the deposits per hour or **Link enabled**. Transfers already deposited do not change.
+- **Disable** (or **Enable**): a disabled link refuses deposits until it is enabled again.
+- **Rotate**: after the confirmation **Rotate the link**, creates a new address and invalidates the old one **immediately**. Use it if the link leaked; remember to warn your third parties.
+- **Revoke**: after the confirmation **Revoke the link**, stops the link for good. It stays in the list, and it is deleted 12 months later if no transfer refers to it.
 
 An address open to the public can be misused: watch the security log and the [reports](topic:tenant-abuse-reports). An unknown, revoked or disabled link always shows the same "link not found" page, and each attempt is written to the security log. You cannot delete a confidentiality level used by an active link: edit the link first. Erasing the data of a person (see [Personal data](topic:tenant-privacy)) removes them from the recipients of the links, and disables a link left without any recipient. Creations, changes, rotations and revocations are recorded in the [audit log](topic:tenant-audit). Links are managed from the administration only, not with an API token.
 
@@ -451,9 +481,9 @@ An address open to the public can be misused: watch the security log and the [re
 
 The Blocklist screen stops addresses, domains or files from being deposited on the entity.
 
-In **Add an entry**, choose the **Kind** (**Email address**, **Domain** or **SHA-256 digest**), type the **Value**, optionally a **Comment (optional)** for the other administrators (without unnecessary personal data), then click **Add**. A blocked address or domain can no longer deposit; a file whose fingerprint is blocked is refused. Click **Remove** to lift a block.
+In **Add an entry**, choose the **Kind** (**Email address**, **Domain** or **SHA-256 digest**), type the **Value**, optionally a **Comment (optional)** for the other administrators (without unnecessary personal data), then click **Add**. A blocked address or domain can no longer deposit; a file whose fingerprint is blocked is refused. Below, the list of entries can be filtered by **Kind**; click **Remove** on a row to lift a block.
 
-![Blocklist screen with the form to add an entry and the list of entries](../screenshots/en/admin-blocklist.png)
+![Blocklist screen: the Add an entry card with the kind, the value, the comment and the Add button, above the Kind filter of the list of entries](../screenshots/en/admin-blocklist.png)
 
 To block a file, copy its fingerprint from the transfer details (see [Transfers](topic:tenant-transfers)). Blocklist entries are kept on purpose after a personal data erasure, so that an abuser is not unblocked.
 
@@ -462,11 +492,11 @@ To block a file, copy its fingerprint from the transfer details (see [Transfers]
 
 API tokens let scripts and third-party software deposit files through the API of TransTeira, without a person verifying an address.
 
-The list shows the **Name**, **Prefix**, **Allowed IP ranges**, **Allowed senders**, **Created**, **Last used**, **Expires** and **Status** of each token.
+The list shows the **Name**, **Prefix**, **Allowed IP ranges**, **Allowed senders**, **Express secrets**, **Created**, **Last used**, **Expires** and **Status** of each token, with its **Edit** and **Revoke** buttons.
 
-![List of the API tokens of an entity](../screenshots/en/admin-tokens.png)
+![API tokens screen: the Create a token button in the page header, the link to the API documentation, and a token with its name, prefix, allowed IP ranges and senders, express secrets, dates, Active status and its Edit and Revoke buttons](../screenshots/en/admin-tokens.png)
 
-To create one, click **Create a token**:
+To create one, click **Create a token** at the top right of the page header, then fill in the **Token settings** (**Back to the API tokens** returns to the list):
 
 1. **Name**: what the token is for, for example "Nightly ERP export".
 2. **Allowed IP ranges**: the addresses the script connects from, as seen behind the reverse proxy, for example `192.0.2.10/32` (same notation as on the [Network](topic:tenant-network) screen). **Allow any address** is possible but discouraged.
@@ -476,7 +506,7 @@ To create one, click **Create a token**:
 
 The secret of the token is shown **only once**. Click **Copy the secret**, tick **I have stored this secret, it will not be shown again**, then **Close**. Give it to the person in charge of the script through a channel you trust, never in clear text by email.
 
-![Secret of a new API token shown once, with the copy button and the confirmation box](../screenshots/en/admin-token-secret.png)
+![Window shown once over the token form: the secret of the new API token (masked here), the Copy the secret button, the confirmation box and the Close button](../screenshots/en/admin-token-secret.png)
 
 **Edit** changes the name, the ranges and the senders (not the expiry: create a new token instead). **Revoke** refuses every request made with the token from now on; this is final, and transfers already created stay available to their recipients. To write a script, see the integration guide `docs/api/integration.md` in the TransTeira repository and click **Open the API documentation**.
 
@@ -489,9 +519,9 @@ Webhooks send the alerts of the entity to a Microsoft Teams or Slack channel, or
 
 The list shows, for each webhook, its **Name and address** (only the scheme and the host of the address: the full address is stored encrypted and never shown again), its **Kind**, its **Events**, its **Status** and its **Last delivery** (delivered or failed, the HTTP status or the cause, the duration and the date). An entity can have at most 20 webhooks.
 
-![List of the webhooks of an entity with their status and last delivery](../screenshots/en/admin-webhooks.png)
+![Webhooks screen of an entity: the Add a webhook button in the page header, the note saying whether the alerts include addresses, and two webhooks with their kind, events, Enabled status, last delivery and their Test, Edit, New secret and Delete buttons](../screenshots/en/admin-webhooks.png)
 
-To add one, click **Add a webhook**:
+Under the title, a note says whether the alerts of the entity include addresses, with a link to change it on the [General](topic:tenant-general) screen. To add a webhook, click **Add a webhook** at the top right of the page header:
 
 1. **Name**: what the receiver is, for example "Security team channel".
 2. **Kind**: **Microsoft Teams** or **Slack** for the incoming webhook of a channel (a formatted message), **Generic JSON** for any other receiver (a JSON document signed with a secret).
@@ -517,11 +547,11 @@ The alerts never contain a file name, a link to a transfer or a password. They c
 <!-- topic: tenant-secrets -->
 ### One-time secrets
 
-One-time secrets let people pass on a password, a key or a code, encrypted in the author's browser: you **never see their content**, link or passphrase. Two screens in the entity menu deal with them.
+One-time secrets let people pass on a password, a key or a code, encrypted in the author's browser: you **never see their content**, link or passphrase. Two screens of the entity block of the sidebar deal with them: **Secrets settings** (group **Configuration**) and **One-time secrets** (group **Operations**).
 
 > **Warning** Since 2.1, one-time secrets are **enabled by default in every entity, including the entities that existed before the upgrade**, with file attachments (10 MiB) and delivery by email allowed. An attached file is encrypted in the browser and never scanned by the antivirus, and the emails are sent under the domain of your entity. Review the settings below after the upgrade and turn off what your entity does not need. You can change every setting, **Enable one-time secrets** included, and so can the super administrator.
 
-The **Secrets settings** screen (**One-time secrets**) sets the rules:
+The **One-time secrets** card of the **Secrets settings** screen sets the rules:
 
 - **Enable one-time secrets**: disabling the module refuses new secrets; existing ones stay readable until they end.
 - **Offered durations** (at least one) and **Default duration**, which must be one of the offered durations.
@@ -535,11 +565,11 @@ The default settings of an entity (a new one, or one that existed before 2.1) ar
 
 **Limits and storage.** An author (an address or an API token) can have 50 open secrets (**Pending** or **Active**) and create 200 secrets in a rolling 24 hours; text is limited to 10 000 characters. A **Pending** secret is one whose creation was not finished: it is purged after 1 hour. While it exists, an attached file counts in the storage quota of the entity and in **Storage used**: a secret whose file would exceed the quota is refused and raises the usual quota alerts. Secrets are also refused while the entity is in maintenance or still being set up. In the [abuse detection](topic:tenant-abuse), each secret counts as one transfer of its author for the daily number of transfers (never for the volume).
 
-![Secrets settings screen with the switch, the durations, the attached file and delivery by e-mail](../screenshots/en/admin-secret-settings.png)
+![Secrets settings screen: the One-time secrets card with Enable one-time secrets, the offered durations, the default duration, Allow an attached file with its maximum size, and Allow delivery by e-mail](../screenshots/en/admin-secret-settings.png)
 
-The **One-time secrets** screen lists the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State**, **Expiry** and **Read**. Filter by **State** or by **Author address** (exact address). For a **Pending** or **Active** secret, **Delete** destroys it at once, for good: its link then answers that it was deleted by its sender or by an administrator, and no read receipt is sent. Deleting a secret that already ended does nothing. Creations, reads and deletions are recorded in the [audit log](topic:tenant-audit) (**One-time secrets** group of actions), with the administrator as actor for a deletion. An ended secret (**Read**, **Expired**, **Deleted** or **Locked**) stays in the list for 30 days without any content, then disappears. Authors can also list and delete their own secrets in **My secrets** of the My transfers page, which is the quick way to fix a mistake of recipient.
+The **One-time secrets** screen starts with the **Find a secret from its link** card (see below), then lists the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State**, **Expiry** and **Read**. Filter by **State** or by **Author address** (exact address), then click **Apply**. For a **Pending** or **Active** secret, **Delete** destroys it at once, for good: its link then answers that it was deleted by its sender or by an administrator, and no read receipt is sent. Deleting a secret that already ended does nothing. Creations, reads and deletions are recorded in the [audit log](topic:tenant-audit) (**One-time secrets** group of actions), with the administrator as actor for a deletion. An ended secret (**Read**, **Expired**, **Deleted** or **Locked**) stays in the list for 30 days without any content, then disappears. Authors can also list and delete their own secrets in **My secrets** of the My transfers page, which is the quick way to fix a mistake of recipient.
 
-![List of one-time secrets with the filters, the state, the expiry and the Delete button](../screenshots/en/admin-secrets.png)
+![One-time secrets screen: the end of the Find a secret from its link card, the State and Author address filters, and the list of secrets with their author, delivery, file, Active or Read state and the Delete button of the live ones](../screenshots/en/admin-secrets.png)
 
 ### Express secrets (administration)
 
@@ -547,37 +577,37 @@ An **express secret** is a text of at most 10,000 characters that **anybody who 
 
 > **Warning** The service is **off by default**, in new entities and in existing ones. Once on, anyone on the Internet can store a text on your server under the name of your entity, and you cannot read or moderate it. It can be misused to pass on illegal content or credentials, or for phishing under your domain. Turn it on knowingly.
 
-In the **Express secrets (anonymous)** section of the **Secrets settings** screen:
+In the **Express secrets (anonymous)** section of the **Secrets settings** screen, at the end of the **One-time secrets** card:
 
 - **Allow anonymous express secrets**: off by default. While it is on, a reminder asks you to complete the [legal information](topic:tenant-legal) of the entity first: a contact for abuse reports, and a privacy policy that says the IP addresses of the authors are kept 12 months in the audit log.
 - **Secrets per hour and per client address**: from 1 to 1,000, default 10. Above it, the creation is refused until the hour has passed.
 - **Secrets per hour and per API token**: from 1 to 10,000, default 100.
 - **Express secrets waiting at the same time**: from 1 to 100,000, default 1,000. Once reached, anonymous creations are refused until some are read or expire.
 
-![Secrets settings screen, express secrets section: the switch, the three limits and the emergency purge](../screenshots/en/admin-express-settings.png)
+![Secrets settings screen, Express secrets (anonymous) section: Allow anonymous express secrets ticked, the reminder to complete the legal texts with its link, the three limits and the Save button](../screenshots/en/admin-express-settings.png)
 
 The durations are fixed (1 hour, 1 day, 7 days), whatever you offer for the one-time secrets. An express secret has no file, passphrase, email delivery or read receipt. Maintenance mode and the setup of the entity refuse creations as for transfers. Each change of a setting is recorded in the [audit log](topic:tenant-audit) (**Secrets settings updated**).
 
 **Turning the service off also makes the anonymous express secrets unreadable.** Their recipients see that the secret is temporarily unavailable. **Nothing is consumed**, and the links work again if you turn the service back on before they expire; a secret that expires meanwhile is lost. This is deliberate: it is the way to stop a wave of abuse at once. Express secrets created with an API token stay readable when you turn off the anonymous mode. The operator can also close the service for the whole instance, see the super administrator guide.
 
-**Finding a secret from its link.** On the **One-time secrets** screen, **Find a secret from its link** lets you paste the link a report points to (or a recipient gives you): the screen shows the identifier, the type (**Express secret** or **One-time secret**), the state, the creator, the dates and, for a secret that is still live, a **Delete** button. Your browser extracts the identifier of the secret from the link (`tts_` followed by 43 letters and digits) and sends only that: the key, which follows the `#`, never leaves your browser, even from a link rewritten by a mail filter (a *Safe Links* address, for example, where the `#` is encoded as `%23`), and the identifier sent is neither stored nor logged: you see **metadata, never the content**. You can also paste the identifier alone. If the link does not match a secret of your entity, you get **No secret of this entity matches this link**. In the table, express secrets carry an **Express** badge, and the creator of an anonymous one is **Anonymous (express secret)**, with no address. Every lookup is recorded in the audit log (**Secret looked up from a link**).
+**Finding a secret from its link.** On the **One-time secrets** screen, the **Find a secret from its link** card lets you paste in **Secret link** the link a report points to (or a recipient gives you), then click **Find the secret**: the **Secret found** card shows the identifier, the type (**Express secret** or **One-time secret**), the state, the creator, the dates and, for a secret that is still live, a **Delete** button. Your browser extracts the identifier of the secret from the link (`tts_` followed by 43 letters and digits) and sends only that: the key, which follows the `#`, never leaves your browser, even from a link rewritten by a mail filter (a *Safe Links* address, for example, where the `#` is encoded as `%23`), and the identifier sent is neither stored nor logged: you see **metadata, never the content**. You can also paste the identifier alone. If the link does not match a secret of your entity, you get **No secret of this entity matches this link**. In the table, express secrets carry an **Express** badge, and the creator of an anonymous one is **Anonymous (express secret)**, with no address. Every lookup is recorded in the audit log (**Secret looked up from a link**).
 
-![Secret found from its link: identifier, Express secret type, state, dates and Delete button](../screenshots/en/admin-secret-lookup.png)
+![One-time secrets screen: the Find a secret from its link card, then the Secret found card with the identifier, the Express secret type, the Active state, the anonymous author, the dates and the Delete button](../screenshots/en/admin-secret-lookup.png)
 
-**Emergency purge.** At the bottom of the **Secrets settings** screen, **Delete all live anonymous express secrets** destroys, after a confirmation, every anonymous express secret still waiting to be read, for example after a misuse. The number of deleted secrets is shown, and recorded in the audit log (**Anonymous express secrets purged**). Express secrets created with an API token, one-time secrets and secrets that already ended are not touched. The purge does not turn the service off: untick **Allow anonymous express secrets** first to stop new creations.
+**Emergency purge.** In the **Emergency purge** card, at the bottom of the **Secrets settings** screen, **Delete all live anonymous express secrets** destroys, after the confirmation **Delete them all**, every anonymous express secret still waiting to be read, for example after a misuse. The number of deleted secrets is shown, and recorded in the audit log (**Anonymous express secrets purged**). Express secrets created with an API token, one-time secrets and secrets that already ended are not touched. The purge does not turn the service off: untick **Allow anonymous express secrets** first to stop new creations.
 
 **API tokens.** A token can create express secrets only if you tick **Allowed to create express secrets** when you create it, or in **Edit**. It is off by default: an ordinary token cannot create any. A token allowed to do it works **even when the anonymous mode is off**, and with its own limit per token (see above). The **Express secrets** column of the token list shows **Allowed** or **No**. Each creation is recorded in the audit log with the token used.
 
-**Reports.** The reader of an express secret can use **Report an abuse** (see [Reports](topic:tenant-abuse-reports)). The **Concerns** column of the Reports screen says **Express secret** and its identifier (**Transfer** and its identifier for a transfer). A report never contains the text or the key: to examine the secret, paste the reported link in **Find a secret from its link** if you have it, then delete it or purge. Reading it would consume it. Then close the report.
+**Reports.** The reader of an express secret can use **Report an abuse** (see [Abuse reports](topic:tenant-abuse-reports)). The **Concerns** column of the Abuse reports screen says **Express secret** and its identifier (**Transfer** and its identifier for a transfer). A report never contains the text or the key: to examine the secret, paste the reported link in **Find a secret from its link** if you have it, then delete it or purge. Reading it would consume it. Then close the report.
 
 <!-- topic: tenant-audit -->
 ### Audit log
 
 The Audit log screen shows the actions recorded for the entity over the last 12 months: deposits, downloads, invitations, administrator actions and more.
 
-Filter by **Action** (grouped by theme), by **Actor** (exact email address or administrator username), and by period with **From** and **To**. The columns show the **Date**, **Actor**, **Action**, **Object**, **IP address** and **Details** (click **Show the details**). When the object is a transfer, a link opens its details.
+Filter by **Action** (grouped by theme), by **Actor** (exact email address or administrator username), and by period with **From** and **To**, then click **Apply**. The columns show the **Date**, **Actor**, **Action**, **Object**, **IP address** and **Details** (click **Show the details**). When the object is a transfer, a link opens its details.
 
-![Audit log of an entity with the filters and the list of events](../screenshots/en/admin-audit.png)
+![Audit log screen: the filters card (Action, Actor, From, To, Apply, Reset) and the list of events with their date, actor, action and its code, object, IP address and Show the details](../screenshots/en/admin-audit.png)
 
 An address erased at the request of the person concerned appears as a pseudonym starting with `erased-`.
 
@@ -590,7 +620,7 @@ The Security log screen shows the security events of the entity over the last 12
 
 Filter by **Event type** (a type in the list, or **Other type** and the code of the type, for example `rate_limited`) and by period with **From** and **To**, then click **Apply**; **Reset** clears the filters. The columns show the **Date**, the **Type** (with its technical code under it), the **Reason**, the **IP address** and the **Occurrences**. Identical events (same type, reason and address) seen within about a minute are grouped in one row: the number of occurrences is shown, with the date of the last one. Click **Load more** to see older events.
 
-![Security log of an entity with the filters and the list of events](../screenshots/en/admin-security-log.png)
+![Security log screen: the filters card (Event type, From, To, Apply, Reset) and the list of events with their date, type and technical code, reason, IP address and occurrences](../screenshots/en/admin-security-log.png)
 
 The types you can meet are **Wrong verification code**, **Wrong transfer password**, **Invalid API token**, **Deposit refused** (reason `ip` for an address outside the ranges, `domain`, `blocklist` or `invitation`), **Rate limit exceeded**, **Invalid access link**, **Invalid drop link**, **Failed single sign-on**, **Unknown secret link** and **Wrong secret proof**. The rate limit events can also concern the links of secrets (scopes `secret_link` and `secret_link_ip`). A **Wrong secret proof** event carries a reason: `key` (the key part of the link is wrong, not counted against the secret) or `passphrase` (right key, wrong passphrase). Many `passphrase` events mean that someone holding a secret link is guessing its passphrase: after 5 wrong passphrase proofs the secret is locked and destroyed. A burst of events from one address (many wrong codes, many refused deposits) usually means a guessing attempt: you can add the sender to the [Blocklist](topic:tenant-blocklist) if it is a deposit, and the operator can ban the address with the intrusion prevention tool. Events that belong to no entity (unknown address, administrator sign-in, provisioning token) are only visible to the super administrator, in the global security log. The meaning of every event is documented in `docs/operations/security-log.md` in the TransTeira repository. Events are kept 12 months.
 
@@ -599,24 +629,24 @@ The types you can meet are **Wrong verification code**, **Wrong transfer passwor
 
 The Statistics screen shows the activity of the entity over a period.
 
-Choose the **Period**: **Last 7 days**, **Last 30 days** or **Last 12 months**. The **Key figures** give the **Transfers deposited**, **Volume deposited**, **Downloads**, **Volume downloaded**, **One-time secrets created** and **Virus detections**; the storage used is shown too, with charts per day or per month. Each chart has a **Show the data table** button for a readable version. The figures are indicative: the counters are updated about every 30 seconds. **One-time secrets created** counts the secrets created in the period, whatever became of them afterwards (unfinished ones included); it starts at the upgrade to 2.1.
+Choose the **Period**: **Last 7 days**, **Last 30 days** or **Last 12 months**. The **Key figures** tiles give the **Transfers deposited**, **Volume deposited**, **Downloads**, **Volume downloaded**, **One-time secrets created** and **Virus detections**. Over 7 or 30 days, each tile adds a trend compared with the previous 7 or 30 days (for example **+18% vs the previous 30 days** or **Unchanged vs the previous 30 days**), a neutral text, never coloured; over 12 months there is no trend, since the daily counters are not kept long enough. The **Storage** card shows the storage used (current) with its level, and the **Activity** card the charts per day or per month. Each chart has a **Show the data table** button for a readable version. The figures are indicative: the counters are updated about every 30 seconds. **One-time secrets created** counts the secrets created in the period, whatever became of them afterwards (unfinished ones included); it starts at the upgrade to 2.1.
 
-![Statistics of an entity with the key figures, the storage and the charts](../screenshots/en/admin-stats.png)
+![Statistics screen: the period, the six Key figures tiles with their trend compared with the previous 30 days, and the start of the Storage card](../screenshots/en/admin-stats.png)
 
 The storage quota is set by the super administrator. When the entity reaches 80 % of its quota, the delegated administrators receive an alert email; when it reaches 100 %, they receive another one and new deposits, and secrets with an attached file, are refused until space is freed by expiry or deletion. The storage used includes the files of the one-time secrets while they exist. Each alert is sent once per crossing of the threshold.
 
 <!-- topic: tenant-abuse -->
 ### Abuse detection
 
-The Abuse detection screen sets the thresholds that raise an alert on an internal data leak or on a misuse of the service by external people. All thresholds belong to the entity; an empty or zero value turns the threshold off.
+The Abuse detection screen sets the thresholds that raise an alert on an internal data leak or on a misuse of the service by external people. All thresholds belong to the entity, in the **Detection thresholds** card; each rule has its **Enable the rule** box: untick it to turn the rule off.
 
-![The Abuse detection screen: per-sender limits with their enable box, blocking on exceed, unusual behaviour, office hours, invitations and external quotas](../screenshots/en/admin-tenant-abuse.png)
+![Abuse detection screen: the Detection thresholds card with the Limits per sender group (an Enable the rule box for each rule, Block instead of only alerting) and the start of the Unusual behaviour group](../screenshots/en/admin-tenant-abuse.png)
 
-- **Per-sender limits**: maximum volume per day, maximum number of transfers per day, maximum number of recipients per transfer. They apply to **internal** senders only (inside the network, from outside and by API token); invited externals are governed only by the external quotas. The daily counters count every transfer created (or extended) that day whatever its later status, cancelled drafts included. A day is a calendar day of the **time zone** set on the screen. An extension from "My transfers" counts in the volume and the transfers of the day of the extension (alert only).
-- **Block when exceeded**: off by default. When on, a transfer that would exceed a limit is refused and the sender is told; otherwise only an alert is raised.
-- **Unusual behaviour** (alert only, for internal senders, including from outside): a volume above a **factor** times the daily average of the previous 30 days (a minimum number of active days is needed), a large transfer to a recipient outside the internal domains from a given size, a transfer outside **office hours** (time zone, start and end time, days of the week).
-- **Invitations**: maximum number of invitations per internal user per rolling hour (20 by default). Beyond it, the invitation is refused and an alert is raised.
-- **External quotas**: volume and number of deposits per day and per external address, blocking if blocking is on.
+- **Limits per sender**: maximum volume per day, maximum number of transfers per day, maximum number of recipients per transfer. They apply to **internal** senders only (inside the network, from outside and by API token); invited externals are governed only by the external quotas. The daily counters count every transfer created (or extended) that day whatever its later status, cancelled drafts included. A day is a calendar day of the **time zone** set on the screen. An extension from "My transfers" counts in the volume and the transfers of the day of the extension (alert only).
+- **Block instead of only alerting**: off by default. When on, a transfer that would exceed a limit is refused and the sender is told; otherwise only an alert is raised.
+- **Unusual behaviour** (alert only, for internal senders, including from outside): a volume above a **factor** times the daily average of the previous 30 days (a minimum number of active days is needed), a large transfer to a recipient outside the internal domains from a given size, a transfer outside **office hours** (group **Time zone and office hours**: **Alert outside office hours**, time zone, start and end time, working days).
+- **Invitations and external people**: **Invitations per internal user per hour**, a rolling hour (20 by default). Beyond it, the invitation is refused and an alert is raised.
+- External quotas, in the same group: **Maximum external volume per address per day** and **Maximum external deposits per address per day**, blocking if blocking is on.
 
 The one-time secrets of an internal sender count in the daily number of transfers (the number only, never the volume), for the alert only: they never block. A secret still **Pending** is not counted.
 
@@ -625,15 +655,15 @@ An alert is raised at most once per sender, per rule and per day. For a refusal 
 > **Note** Information of the people (GDPR): these checks have security as their only purpose. They are computed on demand from the existing transfers, with no stored user profile; alerts are kept for 12 months in the audit log, and the de-duplication data is purged after 2 days. Tell your users that these checks exist.
 
 <!-- topic: tenant-abuse-reports -->
-### Reports
+### Abuse reports
 
-The Reports screen lists the reports made by recipients with the **Report an abuse** button of the download page.
+The Abuse reports screen lists the reports made by recipients with the **Report an abuse** button of the download page.
 
-![The Reports screen: status filter and list of reports with their date, category, transfer and reporter](../screenshots/en/admin-abuse-reports.png)
+![Abuse reports screen: the Status filter and a report with its date, reason, what it concerns, who reported it, its Open status and the Details button](../screenshots/en/admin-abuse-reports.png)
 
-Each row shows the date, the category (**Malware**, **Phishing**, **Illegal content**, **Spam**, **Unknown sender**, **Other**), the reporter's message (shown as text), the transfer concerned and the reporter: their address if the recipient had validated their address on this browser, otherwise "via the link of recipient #n, unverified".
+Filter by **Status** (**Open** or **Closed**), then click **Apply**. Each row shows the **Date**, the **Reason** (**Virus or malicious software**, **Phishing (fake login page, scam)**, **Illegal content**, **Spam**, **Unknown or unexpected sender**, **Other reason**), what it **Concerns** (the transfer, or an express secret, with its identifier), **Reported by** (the address of the recipient if they had validated it on this browser, otherwise "Through the link of recipient no. n, not verified") and the **Status**. Click **Details** to open the report and read the message of the reporter, shown as plain text.
 
-A report triggers **no automatic action**: examine the transfer (see [Transfers](topic:tenant-transfers)), delete it or block the sender if needed (see [Blocklist](topic:tenant-blocklist)), then click **Close** and add a note. You can **Reopen** a closed report. Openings, closings and reopenings are written to the [audit log](topic:tenant-audit). Reports are kept for 12 months; the erasure of the data of an address pseudonymises the reporter and the sender concerned (see [Personal data (GDPR)](topic:tenant-privacy)).
+A report triggers **no automatic action**: examine the transfer (see [Transfers](topic:tenant-transfers)), delete it or block the sender if needed (see [Blocklist](topic:tenant-blocklist)), then, in the details, click **Close the report**, optionally with a **Closing note (optional)**. You can **Reopen the report** once it is closed. Openings, closings and reopenings are written to the [audit log](topic:tenant-audit). Reports are kept for 12 months; the erasure of the data of an address pseudonymises the reporter and the sender concerned (see [Personal data (GDPR)](topic:tenant-privacy)).
 
 New reports are sent by email to the delegated administrators of the entity (to the super admins if there are none) and by webhook (`abuse.reported`).
 
@@ -642,9 +672,9 @@ New reports are sent by email to the delegated administrators of the entity (to 
 
 The Personal data screen answers the requests of people who want to know or erase the data linked to their email address in the entity (data subject rights, GDPR).
 
-In **Search by email address**, type the **Email address** and click **Search**. The section **Data found in this entity** summarises what is linked to it: verified address record, transfers sent and received, one-time secrets created or received, invitations, proofs of deposit and delivery, audit log entries.
+In the **Search by email address** card, type the **Email address** and click **Search**. The **Data found in this entity** card summarises what is linked to it: verified address record, transfers sent and received, one-time secrets created or received, invitations, proofs of deposit and delivery, audit log entries.
 
-![Personal data search with the summary of the data found for an address](../screenshots/en/admin-privacy.png)
+![Personal data screen: the note that only this entity is searched, the Search by email address card and the Data found in this entity card with the counts found for an address](../screenshots/en/admin-privacy.png)
 
 Click **Erase all data** to erase it. The screen details the effect:
 

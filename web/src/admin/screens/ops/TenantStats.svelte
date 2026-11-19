@@ -4,15 +4,18 @@
   // their equivalent tables) of the transfers and the volume deposited per day or per month.
   import { untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, RadioGroup, Spinner } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, RadioGroup, Spinner } from '../../../shared/components';
   import { formatNumber, i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import BarChart from '../../components/BarChart.svelte';
+  import Card from '../../components/Card.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import QuotaMeter from '../../components/QuotaMeter.svelte';
   import StatCard from '../../components/StatCard.svelte';
   import { formatBytes as formatBinaryBytes } from '../../forms/bytes';
   import type { AdminScreenProps } from '../types';
   import {
+    cardTrends,
     chartTexts,
     loadTenantStats,
     parsePeriod,
@@ -38,6 +41,11 @@
 
   const cards = $derived(
     stats === undefined ? [] : statsCards(stats, { number: formatCount, bytes: formatBytes }, t),
+  );
+  const trends = $derived(
+    stats === undefined
+      ? {}
+      : cardTrends(stats, t, (ratio) => formatNumber(ratio, { style: 'percent', maximumFractionDigits: 0 })),
   );
   const texts = $derived(chartTexts(stats?.period ?? period, t));
   const transferSeries = $derived(stats === undefined ? [] : seriesFor(stats, 'transfers', locale.current));
@@ -78,18 +86,22 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('adminOps.stats.title')}</h1>
-<p>{t('adminOps.stats.intro')}</p>
+<PageHeader title={t('adminOps.stats.title')} description={t('adminOps.stats.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-stats" title={t('adminOps.stats.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
-<RadioGroup
-  legend={t('opsStats.period')}
-  options={periodOptions(t)}
-  bind:value={selected}
-  inline
-  onchange={choose}
-/>
-
-<p class="tt-stats__note">{t('opsStats.indicative')}</p>
+<Card padding="sm">
+  <RadioGroup
+    legend={t('opsStats.period')}
+    options={periodOptions(t)}
+    bind:value={selected}
+    inline
+    onchange={choose}
+  />
+  <p class="tt-stats__note">{t('opsStats.indicative')}</p>
+</Card>
 
 {#if error !== ''}
   <Alert severity="error">
@@ -105,38 +117,41 @@
     <h2>{t('opsStats.figures')}</h2>
     <div class="tt-stats__cards">
       {#each cards as card (card.id)}
-        <StatCard label={card.label} value={card.value} variant={card.variant} />
+        <StatCard label={card.label} value={card.value} variant={card.variant} trend={trends[card.id]} />
       {/each}
     </div>
 
-    <h2>{t('opsStats.storage')}</h2>
-    <QuotaMeter
-      label={t('opsStats.storageLabel')}
-      used={stats.storageUsedBytes}
-      quota={stats.storageQuotaBytes}
-      {formatBytes}
-    />
+    <Card title={t('opsStats.storage')}>
+      <QuotaMeter
+        label={t('opsStats.storageLabel')}
+        used={stats.storageUsedBytes}
+        quota={stats.storageQuotaBytes}
+        {formatBytes}
+      />
+    </Card>
 
-    <h2>{t('opsStats.activity')}</h2>
-    <BarChart
-      title={texts.transfersTitle}
-      series={transferSeries}
-      formatValue={formatCount}
-      labelHeader={texts.labelHeader}
-      valueHeader={t('opsStats.charts.transfersHeader')}
-    />
-    <BarChart
-      title={texts.volumeTitle}
-      series={volumeSeries}
-      formatValue={formatBytes}
-      labelHeader={texts.labelHeader}
-      valueHeader={t('opsStats.charts.volumeHeader')}
-    />
+    <Card title={t('opsStats.activity')}>
+      <BarChart
+        title={texts.transfersTitle}
+        series={transferSeries}
+        formatValue={formatCount}
+        labelHeader={texts.labelHeader}
+        valueHeader={t('opsStats.charts.transfersHeader')}
+      />
+      <BarChart
+        title={texts.volumeTitle}
+        series={volumeSeries}
+        formatValue={formatBytes}
+        labelHeader={texts.labelHeader}
+        valueHeader={t('opsStats.charts.volumeHeader')}
+      />
+    </Card>
   </div>
 {/if}
 
 <style>
   .tt-stats__note {
+    margin: var(--tt-space-2) 0 0;
     color: var(--tt-muted);
     font-size: var(--tt-font-size-sm);
   }

@@ -101,7 +101,17 @@ describe('byteErrorKey', () => {
 });
 
 describe('status badge', () => {
-  const variants: StatusVariant[] = ['ok', 'warning', 'missing', 'error', 'AA', 'AAA', 'fail', 'info'];
+  const variants: StatusVariant[] = [
+    'ok',
+    'warning',
+    'missing',
+    'error',
+    'AA',
+    'AAA',
+    'fail',
+    'info',
+    'neutral',
+  ];
 
   it('gives each variant an icon', () => {
     expect(variants.map(statusIcon)).toEqual([
@@ -113,6 +123,7 @@ describe('status badge', () => {
       'check',
       'cross',
       'info',
+      'dot',
     ]);
   });
 

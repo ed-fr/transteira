@@ -71,6 +71,21 @@
 </section>
 
 <style>
+  .tt-template-preview {
+    min-width: 0;
+    margin-bottom: var(--tt-space-4);
+    padding: var(--tt-space-5);
+    border: var(--tt-border-width) solid var(--tt-separator);
+    border-radius: var(--tt-radius-lg);
+    background: var(--tt-surface);
+  }
+
+  @media (forced-colors: active) {
+    .tt-template-preview {
+      border-color: CanvasText;
+    }
+  }
+
   .tt-template-preview__note {
     color: var(--tt-muted);
   }

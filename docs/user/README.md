@@ -2,13 +2,13 @@
 
 One guide per profile, in English and in French. The integrated help of TransTeira is generated
 from these files: the same text is shown in the application under `/help` (entity hosts) and
-`/admin/help` (admin host), opened at the right section by the **Help** button in the header and the **Help** link at the
-bottom of each screen and by the "?" icon next to the title of the complex screens.
+`/admin/help` (admin host), opened at the right section by the **Help** button in the header of the public pages, by the
+**Help** link at the bottom of each screen and, in the administration, by the "?" button next to the title of each screen.
 
 Un guide par profil, en anglais et en français. L’aide intégrée de TransTeira est générée à partir
 de ces fichiers : le même texte est affiché dans l’application sous `/help` (adresses des entités)
-et `/admin/help` (adresse d’administration), ouvert à la bonne section par le bouton **Aide** de l’en-tête et le lien **Aide** en bas
-de chaque écran et par l’icône « ? » à côté du titre des écrans complexes.
+et `/admin/help` (adresse d’administration), ouvert à la bonne section par le bouton **Aide** de l’en-tête des pages publiques,
+par le lien **Aide** en bas de chaque écran et, dans l’administration, par le bouton « ? » à côté du titre de chaque écran.
 
 ## English
 

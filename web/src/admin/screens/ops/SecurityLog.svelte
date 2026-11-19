@@ -6,9 +6,10 @@
   // e-mail address; events without tenant are not part of it.
   import { untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, TextField } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, TextField } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
   import SecurityEventsTable from '../../components/SecurityEventsTable.svelte';
   import SelectField from '../../components/SelectField.svelte';
@@ -121,8 +122,11 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('adminOps.security.title')}</h1>
-<p>{t('adminOps.security.intro')}</p>
+<PageHeader title={t('adminOps.security.title')} description={t('adminOps.security.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-security-log" title={t('adminOps.security.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 <FilterBar
   label={t('opsSecurity.filters.label')}

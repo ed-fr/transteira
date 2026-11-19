@@ -1,6 +1,8 @@
-// Pure helpers of the admin application shell (App.svelte, AdminLayout, TenantNav, SystemNav):
-// initial language (plan D5), aria-current of the navigation links, links of the tenant and
-// system sub-navigations and the redirect decided by the navigation guard.
+// Pure helpers of the admin application shell (App.svelte, AdminShell, Sidebar and its tenant and
+// system blocks): initial language (plan D5), aria-current of the navigation links, links of the
+// tenant and system navigations, the model of the sidebar (CLAUDE.md section 13.2) and the
+// redirect decided by the navigation guard.
+import type { IconName } from '../shared/components/icons';
 import type { AccessDecision } from './auth/guard';
 import type { AdminMe } from './auth/machine';
 
@@ -116,7 +118,7 @@ export const AUDITOR_TENANT_SECTIONS = [
   'stats',
 ] as const satisfies readonly TenantSection[];
 
-/** A group of the tenant sub-navigation ("consultation": the single group of an auditor). */
+/** A group of the tenant navigation ("consultation": the single group of an auditor). */
 export type TenantSectionGroup = 'configuration' | 'operations' | 'consultation';
 
 /** Role of an admin (AdminMe.role), undefined while the profile is not known. */
@@ -127,7 +129,7 @@ export function isAuditor(role: NavRole): boolean {
   return role === 'auditor';
 }
 
-/** Groups of the tenant sub-navigation, in order, with their sections and heading key. */
+/** Groups of the tenant navigation, in order, with their sections and heading key. */
 export const TENANT_SECTION_GROUPS: readonly {
   group: TenantSectionGroup;
   labelKey: string;
@@ -137,7 +139,7 @@ export const TENANT_SECTION_GROUPS: readonly {
   { group: 'operations', labelKey: 'adminOps.nav.groupOperations', sections: TENANT_OPS_SECTIONS },
 ];
 
-/** A link of the tenant sub-navigation. */
+/** A link of the tenant navigation. */
 export interface TenantLink {
   section: TenantSection;
   /** Group of the section. */
@@ -148,7 +150,7 @@ export interface TenantLink {
   labelKey: string;
 }
 
-/** A titled group of links of the tenant sub-navigation. */
+/** A titled group of links of the tenant navigation. */
 export interface TenantLinkGroup {
   group: TenantSectionGroup;
   /** Translation key of the group heading. */
@@ -181,7 +183,7 @@ export function sectionGroup(section: TenantSection): TenantSectionGroup {
 }
 
 /**
- * Links of the tenant sub-navigation, in order. An auditor only gets the sections it may open
+ * Links of the tenant navigation, in order. An auditor only gets the sections it may open
  * (AUDITOR_TENANT_SECTIONS), all in the "consultation" group, and its general view is labelled
  * "Summary" (it is read-only).
  */
@@ -206,7 +208,7 @@ function navLabelKey(section: TenantSection): string {
   return `${sectionGroup(section) === 'operations' ? 'adminOps' : 'adminTenants'}.nav.${section}`;
 }
 
-/** Links of the tenant sub-navigation, by group (TenantNav renders one titled list each). */
+/** Links of the tenant navigation, by group (the sidebar renders one titled list each). */
 export function tenantLinkGroups(tenantId: string, role?: NavRole): TenantLinkGroup[] {
   const links = tenantLinks(tenantId, role);
   if (isAuditor(role)) {
@@ -219,11 +221,18 @@ export function tenantLinkGroups(tenantId: string, role?: NavRole): TenantLinkGr
   }));
 }
 
+/** Entry of the main navigation. */
+export type MainEntryId = 'home' | 'tenants' | 'admins' | 'system' | 'account';
+
 /** A link of the main navigation. */
 export interface MainLink {
+  /** Entry of the navigation. */
+  id: MainEntryId;
   path: string;
   /** Translation key of the link text (admin.nav.*). */
   key: string;
+  /** Decorative icon of the sidebar link (Icon.svelte). */
+  icon: IconName;
 }
 
 /**
@@ -232,14 +241,14 @@ export interface MainLink {
  */
 export function mainLinks(role: NavRole): MainLink[] {
   const items: MainLink[] = [
-    { path: '/', key: 'admin.nav.home' },
-    { path: '/tenants', key: 'admin.nav.tenants' },
+    { id: 'home', path: '/', key: 'admin.nav.home', icon: 'home' },
+    { id: 'tenants', path: '/tenants', key: 'admin.nav.tenants', icon: 'grid' },
   ];
   if (role === 'super_admin') {
-    items.push({ path: '/admins', key: 'admin.nav.admins' });
-    items.push({ path: systemPath('overview'), key: 'admin.nav.system' });
+    items.push({ id: 'admins', path: '/admins', key: 'admin.nav.admins', icon: 'users' });
+    items.push({ id: 'system', path: systemPath('overview'), key: 'admin.nav.system', icon: 'settings' });
   }
-  items.push({ path: '/account', key: 'admin.nav.account' });
+  items.push({ id: 'account', path: '/account', key: 'admin.nav.account', icon: 'user' });
   return items;
 }
 
@@ -258,7 +267,7 @@ export const SYSTEM_SECTIONS = [
 /** A section of the system administration. */
 export type SystemSection = (typeof SYSTEM_SECTIONS)[number];
 
-/** A link of the system sub-navigation. */
+/** A link of the system navigation. */
 export interface SystemLink {
   section: SystemSection;
   /** Application path, for example "/system/maintenance". */
@@ -285,7 +294,7 @@ export function systemPath(section: SystemSection): string {
   return `/system${SYSTEM_SEGMENTS[section]}`;
 }
 
-/** Links of the system sub-navigation, in order. */
+/** Links of the system navigation, in order. */
 export function systemLinks(): SystemLink[] {
   return SYSTEM_SECTIONS.map((section) => ({
     section,
@@ -304,6 +313,218 @@ export function tenantNameOf(me: AdminMe | undefined, tenantId: string | undefin
 }
 
 /**
+ * Reports whether a screen is shown in the signed-in frame of AdminShell (sidebar, then the
+ * screen on the muted page background, its content in cards) rather than inside the card of
+ * PageLayout (setup, sign-in, activation, and a visitor not signed in on a screen any visitor can
+ * open: help, not found). The condition of AdminShell, for the screens App.svelte renders.
+ */
+export function inAdminFrame(session: {
+  readonly state: { readonly kind: string };
+  readonly me: AdminMe | undefined;
+}): boolean {
+  return session.state.kind === 'authenticated' && session.me !== undefined;
+}
+
+// ---- Sidebar (CLAUDE.md section 13.2) -----------------------------------------------------------
+
+/** A link of the sidebar with its aria-current for the page shown. */
+export interface SidebarLink {
+  path: string;
+  /** Translation key of the link text. */
+  labelKey: string;
+  current: AriaCurrent;
+}
+
+/** A group of the tenant block: a disclosure button over a list of links. */
+export interface SidebarGroup {
+  group: TenantSectionGroup;
+  /** Translation key of the group heading (text of its disclosure button). */
+  labelKey: string;
+  links: (SidebarLink & { section: TenantSection })[];
+  /** The group holds the link of the page shown (or of its parent section). */
+  holdsCurrent: boolean;
+}
+
+/** Tenant block of the sidebar, nested under the "Entities" entry. */
+export interface SidebarTenantBlock {
+  tenantId: string;
+  /** Name of the tenant (from the profile). */
+  name: string;
+  /** Shown on every page because the admin has a single tenant (pinnedTenantId). */
+  pinned: boolean;
+  groups: SidebarGroup[];
+}
+
+/** System block of the sidebar (super admin), nested under the "System" entry. */
+export interface SidebarSystemBlock {
+  links: (SidebarLink & { section: SystemSection })[];
+}
+
+/** An entry of the main navigation of the sidebar, with its nested block if any. */
+export interface SidebarEntry extends MainLink {
+  /**
+   * aria-current of the entry: navCurrent of its path, except that an entry whose nested block
+   * holds the exact page ("page") is marked "true" (the system overview is "/system" too).
+   */
+  current: AriaCurrent;
+  /** Tenant block, only on the "tenants" entry. */
+  tenant?: SidebarTenantBlock;
+  /** System block, only on the "system" entry. */
+  system?: SidebarSystemBlock;
+}
+
+/** Model of the sidebar navigation. */
+export interface SidebarModel {
+  entries: SidebarEntry[];
+}
+
+/**
+ * Tenant whose block the sidebar shows on every page: the single tenant of an admin who has
+ * exactly one (any role), otherwise undefined.
+ */
+export function pinnedTenantId(me: AdminMe | undefined): string | undefined {
+  return me !== undefined && me.tenants.length === 1 ? me.tenants[0]?.id : undefined;
+}
+
+/**
+ * Model of the sidebar for the page shown:
+ * - the main entries (mainLinks of the role) with their icon and aria-current;
+ * - under "Entities", the block of the tenant of the page (tenantId, the :id of a tenant route),
+ *   only when that tenant is in the scope of the admin (me.tenants), otherwise the block of the
+ *   pinned tenant (pinnedTenantId); its groups are those of tenantLinkGroups (Configuration and
+ *   Operations, or the single Consultation group of an auditor);
+ * - under "System", the system block on the system pages (inSystem) of a super admin.
+ * Without a profile, the main entries of an unknown role and no block.
+ */
+export function sidebarModel(
+  me: AdminMe | undefined,
+  path: string,
+  tenantId: string | undefined,
+  inSystem: boolean,
+): SidebarModel {
+  const role = me?.role;
+  const tenant = tenantBlock(me, path, tenantId);
+  const system = inSystem && role === 'super_admin' ? systemBlock(path) : undefined;
+  const entries = mainLinks(role).map((link): SidebarEntry => {
+    const nested = link.id === 'tenants' ? tenant : link.id === 'system' ? system : undefined;
+    const entry: SidebarEntry = {
+      ...link,
+      current: entryCurrent(navCurrent(path, link.path), nested !== undefined && holdsPage(nested)),
+    };
+    if (link.id === 'tenants' && tenant !== undefined) {
+      entry.tenant = tenant;
+    }
+    if (link.id === 'system' && system !== undefined) {
+      entry.system = system;
+    }
+    return entry;
+  });
+  return { entries };
+}
+
+function entryCurrent(current: AriaCurrent, nestedPage: boolean): AriaCurrent {
+  return current === 'page' && nestedPage ? 'true' : current;
+}
+
+function holdsPage(block: SidebarTenantBlock | SidebarSystemBlock): boolean {
+  const links = 'groups' in block ? block.groups.flatMap((g) => g.links) : block.links;
+  return links.some((link) => link.current === 'page');
+}
+
+function tenantBlock(
+  me: AdminMe | undefined,
+  path: string,
+  tenantId: string | undefined,
+): SidebarTenantBlock | undefined {
+  if (me === undefined) {
+    return undefined;
+  }
+  const pinned = pinnedTenantId(me);
+  const inScope = tenantId !== undefined && me.tenants.some((t) => t.id === tenantId);
+  const id = inScope ? tenantId : pinned;
+  const name = tenantNameOf(me, id);
+  if (id === undefined || name === undefined) {
+    return undefined;
+  }
+  const groups = tenantLinkGroups(id, me.role).map((group): SidebarGroup => {
+    const links = group.links.map((link) => ({
+      section: link.section,
+      path: link.path,
+      labelKey: link.labelKey,
+      current: navCurrent(path, link.path),
+    }));
+    return {
+      group: group.group,
+      labelKey: group.labelKey,
+      links,
+      holdsCurrent: links.some((link) => link.current !== undefined),
+    };
+  });
+  return { tenantId: id, name, pinned: id === pinned, groups };
+}
+
+function systemBlock(path: string): SidebarSystemBlock {
+  return {
+    links: systemLinks().map((link) => ({
+      section: link.section,
+      path: link.path,
+      labelKey: link.labelKey,
+      current: navCurrent(path, link.path, link.exact),
+    })),
+  };
+}
+
+/**
+ * Collapsed groups of the tenant block. The groups are open by default; the state lives in the
+ * memory of the sidebar only, never in a browser storage (plan deviation 9, i18n.spec.ts).
+ */
+export type CollapsedGroups = ReadonlySet<TenantSectionGroup>;
+
+/** Reports whether a group is open. */
+export function isGroupOpen(collapsed: CollapsedGroups, group: TenantSectionGroup): boolean {
+  return !collapsed.has(group);
+}
+
+/** Opens a collapsed group, collapses an open one (a new set). */
+export function toggleGroup(collapsed: CollapsedGroups, group: TenantSectionGroup): CollapsedGroups {
+  const next = new Set(collapsed);
+  if (!next.delete(group)) {
+    next.add(group);
+  }
+  return next;
+}
+
+/**
+ * Opens the groups that hold the page shown (called on each navigation): the group of the
+ * current page is always open when the page is reached; the admin may still collapse it then.
+ * Returns the same set when nothing changes.
+ */
+export function revealCurrentGroups(
+  collapsed: CollapsedGroups,
+  groups: readonly Pick<SidebarGroup, 'group' | 'holdsCurrent'>[],
+): CollapsedGroups {
+  const hidden = groups.filter((g) => g.holdsCurrent && collapsed.has(g.group));
+  if (hidden.length === 0) {
+    return collapsed;
+  }
+  const next = new Set(collapsed);
+  for (const g of hidden) {
+    next.delete(g.group);
+  }
+  return next;
+}
+
+/**
+ * Whether a key closes the menu of narrow screens (the sidebar "Menu" button): Escape, while the
+ * menu is open and the focus is in the sidebar, on its "Menu" button (just opened with the
+ * keyboard) or in its panel. Escape pressed elsewhere (e.g. in a dialog of the screen) is left to
+ * that element.
+ */
+export function closesSidebarMenu(key: string, open: boolean, focusInSidebar: boolean): boolean {
+  return key === 'Escape' && open && focusInSidebar;
+}
+
+/**
  * Path to navigate to (history replace) for a guard decision, or undefined when nothing has to
  * change: not a redirect, or a redirect to the page already shown (never loops).
  */
@@ -316,7 +537,7 @@ export function redirectTarget(decision: AccessDecision, current: string): strin
 
 /**
  * Translation key of a role name (admin.role.<role>, or "unknown" for a future or missing role).
- * The single definition, used by the layout, the account page and the admin accounts screens.
+ * The single definition, used by the sidebar, the account page and the admin accounts screens.
  */
 export function roleKey(role: string | undefined): string {
   return role === 'super_admin' || role === 'delegated_admin' || role === 'auditor'

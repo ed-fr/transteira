@@ -15,11 +15,12 @@
   import { onMount, tick, untrack } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Checkbox, Spinner, TextField, announce } from '../../../shared/components';
+  import { Alert, Checkbox, HelpIcon, Spinner, TextField, announce } from '../../../shared/components';
   import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import ActivationLinkPanel from '../../components/ActivationLinkPanel.svelte';
   import ByteSizeField from '../../components/ByteSizeField.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
   import InvitationFields from '../../components/InvitationFields.svelte';
@@ -82,6 +83,12 @@
   let delegated = $state(emptyDelegatedForm());
   let config = $state.raw<TenantConfigExport | undefined>(undefined);
   let sourceTenant = $state.raw<Tenant | undefined>(undefined);
+  // Title of the screen (h1 and help icon): import, or duplication of the source tenant.
+  const pageTitle = $derived(
+    sourceTenant === undefined
+      ? t('adminTenants.import.title')
+      : t('adminTenants.import.titleDuplicate', { name: sourceTenant.name }),
+  );
   // Loading of the source tenant (duplication only).
   let loading = $state(source !== undefined);
   let loadError = $state('');
@@ -242,11 +249,11 @@
   }
 </script>
 
-<h1 tabindex="-1">
-  {sourceTenant === undefined
-    ? t('adminTenants.import.title')
-    : t('adminTenants.import.titleDuplicate', { name: sourceTenant.name })}
-</h1>
+<PageHeader title={pageTitle}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-create" title={pageTitle} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if result !== undefined}
   <Alert severity="success">{t('adminTenants.create.created', { name: result.tenant.name })}</Alert>
@@ -273,14 +280,13 @@
     <p>{loadError}</p>
   </Alert>
 {:else}
-  <p>
-    {sourceTenant === undefined
-      ? t('adminTenants.import.intro')
-      : t('adminTenants.import.introDuplicate', { name: sourceTenant.name })}
-  </p>
   <FormSection
     title={t('adminTenants.import.legend')}
+    intro={sourceTenant === undefined
+      ? t('adminTenants.import.intro')
+      : t('adminTenants.import.introDuplicate', { name: sourceTenant.name })}
     as="fieldset"
+    card
     {dirty}
     addGuard={(guard) => nav.addGuard(guard)}
     {validate}

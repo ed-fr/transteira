@@ -114,7 +114,9 @@ test.describe('tenant webhooks', () => {
       await page.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/webhooks`);
       await expect(page.getByRole('heading', { name: 'Webhooks', level: 1 })).toBeVisible();
       await expect(
-        page.getByRole('navigation').getByRole('link', { name: 'Webhooks', exact: true }),
+        page
+          .getByRole('navigation', { name: `Configuration of the entity ${state.tenants.a.name}` })
+          .getByRole('link', { name: 'Webhooks', exact: true }),
       ).toHaveAttribute('aria-current', 'page');
       await checkA11y(page);
 

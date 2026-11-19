@@ -45,7 +45,8 @@
     "aa": "AA",
     "aaa": "AAA",
     "fail": "Insufficient",
-    "info": "Information"
+    "info": "Information",
+    "neutral": "Inactive"
   },
   "lineList": {
     "count": {
@@ -115,5 +116,11 @@
       "title": "The secret has not been stored.",
       "text": "It will not be shown again. Do you really want to leave this page?"
     }
+  },
+  "trend": {
+    "up": "+{percent} vs the previous {days} days",
+    "down": "−{percent} vs the previous {days} days",
+    "flat": "Unchanged vs the previous {days} days",
+    "new": "No activity in the previous {days} days"
   }
 }

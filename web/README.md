@@ -95,24 +95,38 @@ the screens on the path only, so a screen is **not** remounted when only the que
 changes: derive the filters with `$derived(parseFilters(SPEC, nav.current.search))`, reload in an
 `$effect` when they change, and apply new filters with
 `nav.navigate(pathWithFilters(nav.current.path, SPEC, next))`. Never put a secret or a value typed
-for the data subject rights in the query string (T-168).
+for the data subject rights in the query string (T-168). Likewise, the query of the transfer search
+(`/search`, possibly an address) lives in the in-memory store `searchQuery` of
+`src/admin/search.svelte.ts` (`set`, `consume`, `clear`), never in the URL nor a browser storage
+(T-412).
 
 ## Admin components
 
-Besides the layout, data table, confirmation dialog, form sections and status badges, the admin
-application has the following components in `src/admin/components/`, each with its logic in a
-tested `.ts` module:
+The frame of a signed-in admin (CLAUDE.md section 13.2) is `AdminShell`: the dark `Sidebar` (the
+banner landmark: logo, "Menu" button under 60rem, main navigation from `sidebarModel()` in
+`shell.ts` with the tenant block `SidebarTenantBlock` nested under "Entities" and the system block
+`SidebarSystemBlock` under "System", user block with "Sign out"), then the main column (main
+landmark with the banners and the screen, slim footer). Its layout is in `src/styles/admin.css`,
+loaded by the admin entry only, and the sidebar palette in the `.tt-admin-sidebar` block of
+`tokens.css`. A screen starts with `PageHeader` (h1, help icon snippet, actions snippet) and lays
+out its content in cards: `Card` (titled section, actions, `flush` for a table), `DataTable`
+(itself a card unless `variant="plain"`), `FormSection` and `FilterBar`. `ActionLink` is a link
+styled as a button (44 px), `StatCard` a KPI tile with an optional trend (`trend.ts`, neutral
+text) and content (a `Gauge`: native `<meter>` with an optional threshold marker positioned by SVG
+attributes, `gauge.ts`), `TenantSwatch` the decorative colour of a tenant (`swatch.ts`: exactly
+`#RRGGBB`, rendered as an SVG `fill` attribute only, never `style=`), `StatusBadge` a status pill
+(text and icon, never colour alone). Besides these, the confirmation dialog and the following
+components are in `src/admin/components/`, each with its logic in a tested `.ts` module:
 
 | Component                           | Purpose                                                                                                                                                                                                                                                                                                                       |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SelectField` (`select.ts`)         | labelled native `<select>`, flat options or option groups, hint and error                                                                                                                                                                                                                                                     |
 | `FilterBar` (`filterBar.ts`)        | filter form of a list: apply and reset buttons, busy state, result text announced after apply or reset                                                                                                                                                                                                                        |
-| `StatCard`                          | key figure (label, value, optional hint and variant)                                                                                                                                                                                                                                                                          |
+| `StatCard` (`trend.ts`)             | KPI tile: label, value, optional neutral trend against the previous period, content (e.g. a gauge), hint and variant                                                                                                                                                                                                          |
 | `QuotaMeter` (`quota.ts`)           | storage used against the quota: native `<meter>`, written text and badge (warning from 80 %, full from 100 %); the `warningRatio` option moves the warning level, for example to the disk alert threshold                                                                                                                     |
 | `BarChart` (`charts.ts`)            | vertical bar chart in SVG with an accessible summary and an equivalent table of every value                                                                                                                                                                                                                                   |
 | `SecretOnceModal` (`secretOnce.ts`) | secret shown once (new API token): closable once copied successfully or acknowledged, navigation guard and `beforeunload` until then                                                                                                                                                                                          |
 | `AuditEventsTable`                  | audit event table shared by the tenant and global audit logs, with an optional leading column (the tenant of the global log); cells `AuditActorCell`, `AuditActionCell`, `AuditObjectCell` (object links to the tenant of the event) and `AuditDetails` (details as plain text pairs), labels in `screens/ops/auditLabels.ts` |
-| `SystemNav`                         | sub-navigation of the system screens (super admin), from `systemLinks()` in `shell.ts`; the overview link is marked on its exact page only (`navCurrent(path, target, exact)`)                                                                                                                                                |
 
 Status and levels are always written out (text and badge), never conveyed by colour alone. The
 screens of the tenant operations are in `src/admin/screens/ops/` (one pure `.ts` module per
@@ -140,10 +154,10 @@ of the status and end only on a user action or with another rotation.
 
 The maintenance state is kept by `src/admin/maintenance.svelte.ts` (`adminMaintenance`), without
 any timer: read at sign-in (`start()`), on each navigation (`routeChanged(path)`, called by
-`AdminLayout`), when the page becomes visible again, and on demand with `refresh()`; the
+`AdminShell`), when the page becomes visible again, and on demand with `refresh()`; the
 maintenance screen records the answer of its `PUT` with `set(state)`. Answers are ordered (an
 older one never overwrites a newer one) and `failed` tells that the latest read failed (the
-dashboard then shows "state unknown"); `AdminLayout` starts and stops it. `maintenanceBanner.ts` builds the banner shown to every admin while the mode is on (start
+dashboard then shows "state unknown"); `AdminShell` starts and stops it. `maintenanceBanner.ts` builds the banner shown to every admin while the mode is on (start
 date, "forced by the environment", link to the screen for the super admin). Maintenance messages
 are always rendered as text, never as HTML (T-170).
 
@@ -281,17 +295,19 @@ that mark.
 
 Complex screens put a `HelpIcon` (`src/shared/components/HelpIcon.svelte`) next to their heading:
 a "?" link to `/help/<topic>` under the base path of the router, with in-app navigation and the
-accessible name "Help: <screen title>". Place the `h1` and the icon in an element with the
-`tt-title-row` class, and give it the topic of the route of the screen as a literal string:
+accessible name "Help: <screen title>". In the administration, pass it in the `help` snippet of
+`PageHeader` (`src/admin/components/PageHeader.svelte`), which renders the `h1` and places the icon
+next to it, and give it the topic of the route of the screen as a literal string:
 `src/help/guides.test.ts` finds every `<HelpIcon topic="…">` of `src/**/*.svelte` and checks that
 the topic is the `helpTopic` of a route of the same application (so the route checks above apply)
 and opens a section of that application's guides in both languages:
 
 ```svelte
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminTenants.smtp.title')}</h1>
-  <HelpIcon topic="tenant-smtp" title={t('adminTenants.smtp.title')} {nav} />
-</div>
+<PageHeader title={t('adminTenants.smtp.title')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-smtp" title={t('adminTenants.smtp.title')} {nav} />
+  {/snippet}
+</PageHeader>
 ```
 
 The footer help link (`HelpLink`, through `Footer`) also navigates in the application when it

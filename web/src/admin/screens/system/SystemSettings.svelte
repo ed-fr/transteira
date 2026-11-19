@@ -6,14 +6,16 @@
   // - Optional alert address, not verified by the server: it must be typed twice when it
   //   changes; emptying it sends null (no alert mail, the alert stays visible in the overview
   //   and in the audit log).
-  // The system sub-navigation is rendered by App.svelte.
+  // The system navigation is in the sidebar (SidebarSystemBlock of AdminShell).
   import { onMount } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, Spinner, TextField } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, Spinner, TextField } from '../../../shared/components';
   import { formatDate, i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { EMAIL_MAX_LENGTH } from '../../../shared/validation/email';
   import { adminApi } from '../../api';
+  import Card from '../../components/Card.svelte';
   import FormSection from '../../components/FormSection.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
   import { systemPath } from '../../shell';
@@ -138,8 +140,11 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('adminSystem.settings.title')}</h1>
-<p>{t('adminSystem.settings.intro')}</p>
+<PageHeader title={t('adminSystem.settings.title')} description={t('adminSystem.settings.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="system-settings" title={t('adminSystem.settings.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if loading}
   <p><Spinner showLabel /></p>
@@ -209,66 +214,70 @@
   </FormSection>
 
   {#if settings.antivirusEngine !== undefined}
-    <section aria-labelledby="{uid}-antivirus" data-testid="antivirus-engine">
-      <h2 id="{uid}-antivirus">{t('sysSettings.antivirus.title')}</h2>
-      <dl class="tt-dl">
-        <dt>{t('sysSettings.antivirus.engineLabel')}</dt>
-        <dd>
-          <StatusBadge
-            variant={engineDisabled(settings.antivirusEngine) ? 'warning' : 'ok'}
-            label={engineLabel(settings.antivirusEngine, t)}
-          />
-        </dd>
-      </dl>
-      <p class="tt-text-muted">{t('sysSettings.antivirus.hint')}</p>
-      {#if engineDisabled(settings.antivirusEngine)}
-        <Alert severity="warning" live={false}>{t('sysSettings.antivirus.disabledWarning')}</Alert>
-      {:else}
-        <h3>{t('sysSettings.antivirus.selfTest.title')}</h3>
-        {#if selfTest !== undefined}
-          {@const explanation = selfTestExplanationKey(selfTest.outcome)}
-          <dl class="tt-dl" data-testid="antivirus-self-test">
-            <dt>{t('sysSettings.antivirus.selfTest.outcomeLabel')}</dt>
-            <dd>
-              <StatusBadge
-                variant={selfTestVariant(selfTest.outcome)}
-                label={t(selfTestOutcomeKey(selfTest.outcome))}
-              />
-            </dd>
-            <dt>{t('sysSettings.antivirus.selfTest.dateLabel')}</dt>
-            <dd>{formatDate(selfTest.testedAt)}</dd>
-            {#if selfTest.signature !== undefined}
-              <dt>{t('sysSettings.antivirus.selfTest.signatureLabel')}</dt>
-              <dd><code>{selfTest.signature}</code></dd>
-            {/if}
-            <dt>{t('sysSettings.antivirus.selfTest.triggerLabel')}</dt>
-            <dd>{t(selfTestTriggerKey(selfTest.trigger))}</dd>
-          </dl>
-          {#if explanation !== undefined}
-            <Alert severity="warning" live={false}>{t(explanation)}</Alert>
-          {/if}
+    <div data-testid="antivirus-engine">
+      <Card title={t('sysSettings.antivirus.title')} headingId="{uid}-antivirus">
+        <dl class="tt-dl">
+          <dt>{t('sysSettings.antivirus.engineLabel')}</dt>
+          <dd>
+            <StatusBadge
+              variant={engineDisabled(settings.antivirusEngine) ? 'warning' : 'ok'}
+              label={engineLabel(settings.antivirusEngine, t)}
+            />
+          </dd>
+        </dl>
+        <p class="tt-text-muted">{t('sysSettings.antivirus.hint')}</p>
+        {#if engineDisabled(settings.antivirusEngine)}
+          <Alert severity="warning" live={false}>{t('sysSettings.antivirus.disabledWarning')}</Alert>
         {:else}
-          <p class="tt-text-muted">{t('sysSettings.antivirus.selfTest.none')}</p>
+          <h3>{t('sysSettings.antivirus.selfTest.title')}</h3>
+          {#if selfTest !== undefined}
+            {@const explanation = selfTestExplanationKey(selfTest.outcome)}
+            <dl class="tt-dl" data-testid="antivirus-self-test">
+              <dt>{t('sysSettings.antivirus.selfTest.outcomeLabel')}</dt>
+              <dd>
+                <StatusBadge
+                  variant={selfTestVariant(selfTest.outcome)}
+                  label={t(selfTestOutcomeKey(selfTest.outcome))}
+                />
+              </dd>
+              <dt>{t('sysSettings.antivirus.selfTest.dateLabel')}</dt>
+              <dd>{formatDate(selfTest.testedAt)}</dd>
+              {#if selfTest.signature !== undefined}
+                <dt>{t('sysSettings.antivirus.selfTest.signatureLabel')}</dt>
+                <dd><code>{selfTest.signature}</code></dd>
+              {/if}
+              <dt>{t('sysSettings.antivirus.selfTest.triggerLabel')}</dt>
+              <dd>{t(selfTestTriggerKey(selfTest.trigger))}</dd>
+            </dl>
+            {#if explanation !== undefined}
+              <Alert severity="warning" live={false}>{t(explanation)}</Alert>
+            {/if}
+          {:else}
+            <p class="tt-text-muted">{t('sysSettings.antivirus.selfTest.none')}</p>
+          {/if}
+          <p class="tt-text-muted">{t('sysSettings.antivirus.selfTest.hint')}</p>
+          <p>
+            <Button variant="secondary" disabled={testing} onclick={() => void runSelfTest()}>
+              {testing
+                ? t('sysSettings.antivirus.selfTest.running')
+                : t('sysSettings.antivirus.selfTest.button')}
+            </Button>
+          </p>
+          <div role="status" aria-live="polite" data-testid="antivirus-self-test-live">{testAnnounce}</div>
+          {#if testError !== ''}
+            <Alert severity="error">{testError}</Alert>
+          {/if}
         {/if}
-        <p class="tt-text-muted">{t('sysSettings.antivirus.selfTest.hint')}</p>
-        <p>
-          <Button variant="secondary" disabled={testing} onclick={() => void runSelfTest()}>
-            {testing
-              ? t('sysSettings.antivirus.selfTest.running')
-              : t('sysSettings.antivirus.selfTest.button')}
-          </Button>
-        </p>
-        <div role="status" aria-live="polite" data-testid="antivirus-self-test-live">{testAnnounce}</div>
-        {#if testError !== ''}
-          <Alert severity="error">{testError}</Alert>
-        {/if}
-      {/if}
-    </section>
+      </Card>
+    </div>
   {/if}
 
-  <section aria-labelledby="{uid}-smtp">
-    <h2 id="{uid}-smtp">{t('sysSettings.smtp.title')}</h2>
+  <Card title={t('sysSettings.smtp.title')} headingId="{uid}-smtp">
     <p>{t('sysSettings.smtp.text', { host: 'TT_SYSTEM_SMTP_HOST', from: 'TT_SYSTEM_SMTP_FROM' })}</p>
-    <p><a href={nav.href(systemPath('overview'))} use:nav.link>{t('sysSettings.overviewLink')}</a></p>
-  </section>
+    <p>
+      <a class="tt-link-target" href={nav.href(systemPath('overview'))} use:nav.link
+        >{t('sysSettings.overviewLink')}</a
+      >
+    </p>
+  </Card>
 {/if}

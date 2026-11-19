@@ -9,7 +9,7 @@
   //   message shown as text, rate limit (429) handled;
   // - indicative DNS check of the sender domain (GET .../smtp/dns-check): SPF, DKIM (selectors
   //   given by the admin) and DMARC, records and messages shown as text.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
   import {
@@ -24,8 +24,11 @@
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
+  import Card from '../../components/Card.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import SecretModeField from '../../components/SecretModeField.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
+  import { scrollRegion } from '../../components/scrollRegion';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
   import { parseDkimSelectors } from '../../forms/dkim';
   import {
@@ -59,6 +62,8 @@
   const { params, nav }: AdminScreenProps = $props();
 
   const uid = $props.id();
+  /** Caption of the DNS check table, which names its scroll region while it overflows. */
+  const dnsCaptionId = `${uid}-dns-caption`;
   const ids = {
     host: `${uid}-host`,
     port: `${uid}-port`,
@@ -280,10 +285,11 @@
   }
 </script>
 
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminTenants.smtp.title')}</h1>
-  <HelpIcon topic="tenant-smtp" title={t('adminTenants.smtp.title')} {nav} />
-</div>
+<PageHeader title={t('adminTenants.smtp.title')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-smtp" title={t('adminTenants.smtp.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if loading}
   <p><Spinner showLabel /></p>
@@ -390,10 +396,12 @@
     />
   </FormSection>
 
-  <section class="tt-smtp__section" aria-labelledby="{uid}-test-heading">
-    <h2 id="{uid}-test-heading">{t('adminTenants.smtp.test.title')}</h2>
-    <p class="tt-smtp__intro">{t('adminTenants.smtp.test.intro')}</p>
-    <form novalidate onsubmit={sendTest} aria-labelledby="{uid}-test-heading">
+  <Card
+    title={t('adminTenants.smtp.test.title')}
+    headingId="{uid}-test-heading"
+    description={t('adminTenants.smtp.test.intro')}
+  >
+    <form class="tt-smtp__form" novalidate onsubmit={sendTest} aria-labelledby="{uid}-test-heading">
       <TextField
         id={ids.to}
         type="email"
@@ -431,15 +439,17 @@
     {#if testFailure !== ''}
       <Alert severity="error">{testFailure}</Alert>
     {/if}
-  </section>
+  </Card>
 
-  <section class="tt-smtp__section" aria-labelledby="{uid}-dns-heading">
-    <h2 id="{uid}-dns-heading">{t('adminTenants.smtp.dns.title')}</h2>
-    <p class="tt-smtp__intro">{t('adminTenants.smtp.dns.intro')}</p>
+  <Card
+    title={t('adminTenants.smtp.dns.title')}
+    headingId="{uid}-dns-heading"
+    description={t('adminTenants.smtp.dns.intro')}
+  >
     {#if stored === null}
       <p>{t('adminTenants.smtp.dns.notConfigured')}</p>
     {:else}
-      <form novalidate onsubmit={checkDns} aria-labelledby="{uid}-dns-heading">
+      <form class="tt-smtp__form" novalidate onsubmit={checkDns} aria-labelledby="{uid}-dns-heading">
         <TextField
           id={ids.selectors}
           label={t('adminTenants.smtp.dns.selectors.label')}
@@ -461,9 +471,11 @@
       <Alert severity="error">{dnsFailure}</Alert>
     {/if}
     {#if dnsCheck !== undefined}
-      <div class="tt-smtp__table-wrap">
+      <div class="tt-smtp__table-wrap" use:scrollRegion={dnsCaptionId}>
         <table class="tt-smtp__table">
-          <caption class="tt-break">{t('adminTenants.smtp.dns.domain', { domain: dnsCheck.domain })}</caption>
+          <caption id={dnsCaptionId} class="tt-break"
+            >{t('adminTenants.smtp.dns.domain', { domain: dnsCheck.domain })}</caption
+          >
           <thead>
             <tr>
               <th scope="col">{t('adminTenants.smtp.dns.columns.check')}</th>
@@ -500,7 +512,7 @@
         </table>
       </div>
     {/if}
-  </section>
+  </Card>
 {/if}
 
 <style>
@@ -508,16 +520,7 @@
     margin: calc(-1 * var(--tt-space-2)) 0 var(--tt-space-4);
   }
 
-  .tt-smtp__section {
-    margin-bottom: var(--tt-space-8);
-  }
-
-  .tt-smtp__intro {
-    margin: 0 0 var(--tt-space-4);
-    color: var(--tt-muted);
-  }
-
-  .tt-smtp__section form {
+  .tt-smtp__form {
     margin-bottom: var(--tt-space-4);
   }
 
@@ -528,7 +531,10 @@
     font-size: var(--tt-font-size-sm);
   }
 
+  /* Scrolls inside the card on a narrow screen; a named focusable region only while it overflows
+     (scrollRegion.ts). position: relative keeps the screen-reader-only texts of the cells inside. */
   .tt-smtp__table-wrap {
+    position: relative;
     overflow-x: auto;
   }
 
@@ -546,7 +552,7 @@
   .tt-smtp__table th,
   .tt-smtp__table td {
     padding: var(--tt-space-2);
-    border-bottom: var(--tt-border-width) solid var(--tt-border);
+    border-bottom: var(--tt-border-width) solid var(--tt-separator);
     text-align: left;
     vertical-align: top;
   }

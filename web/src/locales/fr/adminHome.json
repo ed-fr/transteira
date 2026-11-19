@@ -1,17 +1,47 @@
 {
-  "welcome": "Bienvenue, {username}.",
+  "greeting": {
+    "superCount": {
+      "one": "Bonjour, {username} · Vue d’ensemble de l’instance · {count} entité",
+      "other": "Bonjour, {username} · Vue d’ensemble de l’instance · {count} entités"
+    },
+    "delegatedOne": "Bonjour, {username} · Vue d’ensemble de {name}",
+    "delegatedMany": {
+      "one": "Bonjour, {username} · Vue d’ensemble de {count} entité",
+      "other": "Bonjour, {username} · Vue d’ensemble de vos {count} entités"
+    },
+    "auditorOne": "Bonjour, {username} · Vue d’ensemble de {name} en lecture seule",
+    "auditorMany": {
+      "one": "Bonjour, {username} · Vue d’ensemble de {count} entité en lecture seule",
+      "other": "Bonjour, {username} · Vue d’ensemble de vos {count} entités en lecture seule"
+    },
+    "plain": "Bonjour, {username}"
+  },
+  "newTenant": "Nouvelle entité",
   "totpRecommended": "La double authentification n’est pas activée sur votre compte. Nous vous recommandons de l’activer.",
   "accountLink": "L’activer depuis Mon compte",
   "noTenant": "Aucune entité n’est encore rattachée à votre compte. Demandez à un super administrateur de vous rattacher à une entité.",
   "tenantsTitle": "Entités",
-  "periodNote": "Chiffres des 30 derniers jours. Le stockage indique l’occupation actuelle.",
-  "allTenants": "Ouvrir la liste complète des entités",
-  "card": {
+  "seeAll": "Tout voir",
+  "seeAllName": "Tout voir : toutes les entités",
+  "tiles": {
+    "title": "Chiffres clés des 30 derniers jours",
+    "loading": "Chargement des chiffres clés…",
+    "error": "Les chiffres clés n’ont pas pu être chargés.",
+    "errorTenants": "Les statistiques de {names} n’ont pas pu être chargées.",
     "transfers": "Transferts (30 jours)",
-    "volume": "Volume déposé (30 jours)",
-    "loading": "Chargement des statistiques de {name}…",
-    "error": "Les statistiques de {name} n’ont pas pu être chargées.",
-    "retry": "Réessayer"
+    "volume": "Volume échangé (30 jours)",
+    "viruses": "Virus bloqués (30 jours)",
+    "disk": "Disque",
+    "diskText": "Alerte à {threshold} · {free} libres",
+    "diskFree": "{free} libres",
+    "diskValueText": "{percent} utilisés : {used} sur {total}",
+    "diskAlertActive": "L’alerte d’espace disque est levée.",
+    "diskMailOff": "L’alerte n’est pas envoyée par mail.",
+    "storage": "Stockage utilisé",
+    "storageText": "{used} sur {quota} · alerte à {threshold}"
+  },
+  "shortcuts": {
+    "title": "Accès rapides"
   },
   "links": {
     "transfers": "Transferts de {name}",
@@ -22,9 +52,55 @@
   "table": {
     "caption": "Entités et occupation du stockage",
     "empty": "Aucune entité pour le moment. Créez-en une depuis la page Entités.",
-    "name": "Nom",
-    "fqdn": "Nom de domaine",
+    "entity": "Entité",
     "status": "Statut",
-    "storage": "Stockage"
+    "storage": "Stockage",
+    "storageOf": "Stockage de {name}",
+    "actions": "Actions",
+    "configure": "Configurer",
+    "configureName": "Configurer {name}",
+    "open": "Ouvrir",
+    "openName": "Ouvrir {name}"
+  },
+  "system": {
+    "title": "État du système",
+    "loading": "Chargement de l’état du système…",
+    "error": "L’état du système n’a pas pu être chargé.",
+    "application": "Application",
+    "database": "Base de données",
+    "databaseValue": "{engine} · {status}",
+    "antivirus": "Antivirus",
+    "antivirusEngine": "Antivirus ({engine})",
+    "storage": "Stockage des fichiers",
+    "maintenance": "Mode maintenance",
+    "manageMaintenance": "Gérer le mode maintenance",
+    "status": {
+      "operational": "Opérationnelle",
+      "degraded": "Dégradée",
+      "available": "Disponible",
+      "unavailable": "Indisponible",
+      "disabled": "Désactivé",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "unknown": "Inconnu"
+    },
+    "engines": {
+      "sqlite": "SQLite",
+      "postgres": "PostgreSQL",
+      "clamd": "clamd",
+      "icap": "ICAP",
+      "http": "API HTTP"
+    },
+    "source": {
+      "environment": "Imposé par l’environnement",
+      "admin": "Activé par un super administrateur"
+    },
+    "version": {
+      "label": "Version",
+      "upToDate": "{version} · à jour",
+      "update": "{version} · mise à jour disponible : {latest}",
+      "unchecked": "{version} · pas encore vérifiée",
+      "checkOff": "{version} · vérification désactivée"
+    }
   }
 }

@@ -1,5 +1,5 @@
 // Last known versions of the admin application: the running version (every admin, footer) and,
-// for a super admin, the update check state (notice of the layout). Read once when the admin is
+// for a super admin, the update check state (notice of AdminShell). Read once when the admin is
 // authenticated, never on a timer (a poll would keep the session alive, T-165); the system
 // overview records the answer of "Check now" with setSystem().
 import { adminApi } from './api';

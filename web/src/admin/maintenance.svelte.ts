@@ -1,17 +1,17 @@
 // Last known maintenance state (GET /admin/system/maintenance, readable by every admin), for the
-// maintenance banner of AdminLayout, the dashboard card and the screens that change it.
+// maintenance banner of AdminShell and the maintenance screen, which changes it.
 //
 // No timer: every read of the administration API extends the admin session (sliding idle
 // timeout, internal/adminauth), so a background poll would keep an unattended session open
 // forever (threat model T-165). The state is therefore read only on events that come from the
 // admin:
 // - start() (application start or sign-in);
-// - routeChanged(path) with a new path (AdminLayout, on each navigation of the admin);
+// - routeChanged(path) with a new path (AdminShell, on each navigation of the admin);
 // - the page becoming visible again (the admin comes back to the tab);
 // - refresh() on demand, and set(state) with the answer of a PUT (maintenance screen).
 // Answers are ordered: an older answer never overwrites a newer one or a state given to set().
 // A failed read keeps the last value and raises failed until the next successful read.
-// stop() (sign-out, layout destroyed) forgets the state and ignores the answers in flight. The
+// stop() (sign-out, AdminShell destroyed) forgets the state and ignores the answers in flight. The
 // reader and the page visibility are injectable for the tests.
 import { adminApi } from './api';
 import type { Maintenance } from './maintenanceBanner';

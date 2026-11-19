@@ -9,6 +9,9 @@
   //   before leaving the page, and beforeunload warns before closing or reloading the tab.
   // When dirty is given and false, submitting announces "No changes to save." without calling
   // onsubmit. validate runs before onsubmit: its errors fill the summary.
+  // Look (CLAUDE.md section 13.2): a card of the administration (radius 16 px, decorative
+  // --tt-separator border) by default for the section layout; the fieldset layout, used inside
+  // dialogs and larger forms, has no frame unless card is set.
   //
   //   <FormSection title={text} dirty={isDirty} addGuard={(g) => nav.addGuard(g)}
   //                validate={checkFields} onsubmit={save}>
@@ -62,6 +65,8 @@
     children: Snippet;
     /** Extra buttons next to the save button (e.g. "Send a test email"). */
     actions?: Snippet;
+    /** Draws the section as a card (default: true for a section, false for a fieldset). */
+    card?: boolean | undefined;
     class?: string;
   }
 
@@ -83,11 +88,13 @@
     disabled = false,
     children,
     actions,
+    card,
     class: className = '',
   }: Props = $props();
 
   const uid = $props.id();
   const headingId = `${uid}-heading`;
+  const framed = $derived(card ?? as === 'section');
   let saving = $state(false);
   let success = $state('');
   let failure = $state('');
@@ -185,7 +192,7 @@
         <ul class="tt-form__summary">
           {#each errors as item (item.id)}
             <li>
-              <a href="#{item.id}" onclick={(e) => goTo(e, item.id)}>
+              <a class="tt-link-target" href="#{item.id}" onclick={(e) => goTo(e, item.id)}>
                 {t('adminComponents.form.errorLink', { label: item.label, message: item.message })}
               </a>
             </li>
@@ -207,14 +214,14 @@
 {/snippet}
 
 {#if as === 'fieldset'}
-  <form class="tt-form {className}" novalidate onsubmit={submit}>
+  <form class="tt-form {className}" class:tt-form--card={framed} novalidate onsubmit={submit}>
     <fieldset class="tt-form__fieldset">
       <legend class="tt-form__legend">{title}</legend>
       {@render body()}
     </fieldset>
   </form>
 {:else}
-  <section class="tt-form {className}" aria-labelledby={headingId}>
+  <section class="tt-form {className}" class:tt-form--card={framed} aria-labelledby={headingId}>
     <svelte:element this={`h${headingLevel}`} id={headingId} class="tt-form__heading">{title}</svelte:element>
     <form novalidate onsubmit={submit} aria-labelledby={headingId}>
       {@render body()}
@@ -225,6 +232,21 @@
 <style>
   .tt-form {
     margin-bottom: var(--tt-space-8);
+  }
+
+  .tt-form--card {
+    min-width: 0;
+    margin-bottom: var(--tt-space-4);
+    padding: var(--tt-space-5);
+    border: var(--tt-border-width) solid var(--tt-separator);
+    border-radius: var(--tt-radius-lg);
+    background: var(--tt-surface);
+    color: var(--tt-text);
+  }
+
+  .tt-form--card .tt-form__heading {
+    font-size: var(--tt-font-size-lg);
+    font-weight: var(--tt-font-weight-heading);
   }
 
   .tt-form__fieldset {
@@ -270,5 +292,17 @@
   .tt-form__result {
     margin-top: var(--tt-space-2);
     font-weight: var(--tt-font-weight-bold);
+  }
+
+  @media (max-width: 40rem) {
+    .tt-form--card {
+      padding: var(--tt-space-4);
+    }
+  }
+
+  @media (forced-colors: active) {
+    .tt-form--card {
+      border-color: CanvasText;
+    }
   }
 </style>

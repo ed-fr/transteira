@@ -5,16 +5,18 @@
   // restoration of the default template (DELETE, after confirmation). A successful DELETE is
   // a success even when reloading the template afterwards fails: the editor is then replaced by
   // "restored, but not reloaded" and a retry button (never the stale customized content, which a
-  // save would put back). FormSection guards the unsaved changes. The tenant sub-navigation is
-  // rendered by App.svelte.
+  // save would put back). FormSection guards the unsaved changes. The tenant navigation is
+  // in the sidebar (SidebarTenantBlock of AdminShell).
   import { tick } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError, fieldMessage } from '../../../shared/api/problem';
   import type { components } from '../../../shared/api/schema';
-  import { Alert, Button, Spinner, announce, languageName } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, Spinner, announce, languageName } from '../../../shared/components';
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
+  import ActionLink from '../../components/ActionLink.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import type { SubmitOutcome } from '../../components/form';
   import TemplateEditor from '../../components/TemplateEditor.svelte';
@@ -44,7 +46,7 @@
     templateKey: key as TemplateKey,
     language: lang as Language,
   });
-  const listHref = $derived(nav.href(`/tenants/${encodeURIComponent(tenantId)}/templates`));
+  const listPath = $derived(`/tenants/${encodeURIComponent(tenantId)}/templates`);
   const keyLabelKey = $derived(`adminTenants.templates.key.${key}`);
   const keyLabel = $derived(i18n.has(keyLabelKey) ? t(keyLabelKey) : key);
   const keyDescriptionKey = $derived(`adminTenants.templates.keyDescription.${key}`);
@@ -222,9 +224,18 @@
   }
 </script>
 
-<p><a href={listHref} use:nav.link>{t('adminTenants.templates.editor.back')}</a></p>
-<h1 tabindex="-1" bind:this={heading}>{title}</h1>
-{#if i18n.has(keyDescriptionKey)}<p>{t(keyDescriptionKey)}</p>{/if}
+<PageHeader
+  {title}
+  description={i18n.has(keyDescriptionKey) ? t(keyDescriptionKey) : undefined}
+  bind:element={heading}
+>
+  {#snippet help()}
+    <HelpIcon topic="tenant-templates" {title} {nav} />
+  {/snippet}
+  {#snippet actions()}
+    <ActionLink to={listPath} {nav} variant="secondary">{t('adminTenants.templates.editor.back')}</ActionLink>
+  {/snippet}
+</PageHeader>
 
 {#if view.kind === 'loading'}
   <Spinner label={t('admin.common.loading')} />
@@ -244,14 +255,13 @@
     {t('adminTenants.templates.reset.retry')}
   </Button>
 {:else if template !== undefined}
-  <p>
-    {template.customised ? t('adminTenants.templates.customized') : t('adminTenants.templates.default')}
-    {#if template.customised && template.updatedAt}
-      · {t('admin.common.lastUpdated', { date: formatDate(template.updatedAt) })}
-    {/if}
-  </p>
   <FormSection
     title={t('adminTenants.templates.editor.formTitle')}
+    intro={template.customised && template.updatedAt
+      ? `${t('adminTenants.templates.customized')} · ${t('admin.common.lastUpdated', { date: formatDate(template.updatedAt) })}`
+      : template.customised
+        ? t('adminTenants.templates.customized')
+        : t('adminTenants.templates.default')}
     {dirty}
     addGuard={(guard) => nav.addGuard(guard)}
     onsubmit={save}

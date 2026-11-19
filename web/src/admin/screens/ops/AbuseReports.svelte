@@ -8,7 +8,7 @@
   //   link to its detail while it exists) or, since 2.3, the express secret (its identifier and a
   //   link to the secrets screen, where it is found from its link; never a transfer link), and
   //   close (with an optional note) or reopen.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { tick, untrack } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
@@ -16,6 +16,7 @@
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import DataTable from '../../components/DataTable.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
   import SelectField from '../../components/SelectField.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -232,11 +233,15 @@
   </Button>
 {/snippet}
 
-<div class="tt-title-row">
-  <h1 tabindex="-1" bind:this={heading}>{t('adminOps.abuseReports.title')}</h1>
-  <HelpIcon topic="tenant-abuse-reports" title={t('adminOps.abuseReports.title')} {nav} />
-</div>
-<p>{t('adminOps.abuseReports.intro')}</p>
+<PageHeader
+  title={t('adminOps.abuseReports.title')}
+  description={t('adminOps.abuseReports.intro')}
+  bind:element={heading}
+>
+  {#snippet help()}
+    <HelpIcon topic="tenant-abuse-reports" title={t('adminOps.abuseReports.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 <FilterBar
   label={t('opsAbuse.filters.label')}

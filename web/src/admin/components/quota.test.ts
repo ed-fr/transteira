@@ -4,10 +4,12 @@ import fr from '../../locales/fr/adminComponents.json';
 import {
   QUOTA_WARNING_RATIO,
   quotaBadgeVariant,
+  quotaGaugeLevel,
   quotaLevel,
   quotaMeterAttributes,
   quotaRatio,
   quotaTexts,
+  showsQuotaLevel,
   warningRatioOrDefault,
   type QuotaLevel,
   type Translate,
@@ -63,6 +65,31 @@ describe('quotaLevel', () => {
       'ok',
       'warning',
       'error',
+    ]);
+  });
+});
+
+describe('showsQuotaLevel', () => {
+  it('always or never shows the level pill for a boolean display', () => {
+    for (const level of ['ok', 'warning', 'full'] as const) {
+      expect(showsQuotaLevel(true, level)).toBe(true);
+      expect(showsQuotaLevel(false, level)).toBe(false);
+    }
+  });
+
+  it('shows the pill of the nearly full and full levels only in alert mode', () => {
+    expect(showsQuotaLevel('alert', 'ok')).toBe(false);
+    expect(showsQuotaLevel('alert', 'warning')).toBe(true);
+    expect(showsQuotaLevel('alert', 'full')).toBe(true);
+  });
+});
+
+describe('quotaGaugeLevel', () => {
+  it('colours the gauge by level', () => {
+    expect((['ok', 'warning', 'full'] as QuotaLevel[]).map(quotaGaugeLevel)).toEqual([
+      'default',
+      'warning',
+      'danger',
     ]);
   });
 });

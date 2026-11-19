@@ -174,6 +174,43 @@ html[data-app='admin'] {
   }
 }
 
+/*
+ * Sidebar of the administration console (CLAUDE.md section 13.2, AdminShell): a dark green panel
+ * in both themes, with its own palette (plan of step 3c, deviation 4). On #0b1f17: text #cbd5e1
+ * (11.6:1), group headings #94a3b8 (6.7:1), the current link in white on 10 % of white (12.9:1)
+ * with its icon in #00bf63 (graphic, 5.3:1), the user block on 6 % of white, the sign-out link in
+ * #6ee7b7 (9.6:1). The TransTeira green #00703f only reaches 2.8:1 there, so the focus indicator of
+ * the sidebar is #6ee7b7 (base.css reads --tt-focus and --tt-focus-ring), and so is --tt-link there
+ * (the sign-out button is a link button). In the dark theme the
+ * sidebar keeps this palette and gets a separating border (decorative). tokens.test.ts checks every
+ * pair, translucent backgrounds composited over the sidebar background.
+ */
+html[data-app='admin'] .tt-admin-sidebar {
+  --tt-sidebar-bg: #0b1f17;
+  --tt-sidebar-text: #cbd5e1;
+  --tt-sidebar-strong: #ffffff;
+  --tt-sidebar-muted: #94a3b8;
+  /* Current link. */
+  --tt-sidebar-active-bg: rgb(255 255 255 / 10%);
+  --tt-sidebar-active-icon: #00bf63;
+  /* Hovered link and user block. */
+  --tt-sidebar-raised-bg: rgb(255 255 255 / 6%);
+  /* Sign-out link. */
+  --tt-sidebar-link: #6ee7b7;
+  /* Separating border (decorative): the background colour itself in the light theme. */
+  --tt-sidebar-border: #0b1f17;
+  /* Links and link buttons (sign out), focus indicator and its ring inside the sidebar. */
+  --tt-link: var(--tt-sidebar-link);
+  --tt-focus: #6ee7b7;
+  --tt-focus-ring: #0b1f17;
+}
+
+@media not print {
+  html[data-app='admin'][data-theme='dark'] .tt-admin-sidebar {
+    --tt-sidebar-border: rgb(255 255 255 / 16%);
+  }
+}
+
 :root {
   /* Spacing scale. */
   --tt-space-1: 0.25rem;
@@ -209,6 +246,8 @@ html[data-app='admin'] {
   --tt-line-height-tight: 1.25;
   --tt-font-weight-normal: 400;
   --tt-font-weight-bold: 600;
+  /* Page and card titles, key figures of the administration (mockup: heavier than bold). */
+  --tt-font-weight-heading: 700;
 
   /* Layout. */
   --tt-card-width: 36rem;

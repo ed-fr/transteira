@@ -13,6 +13,7 @@ import {
   quotaTexts,
   type QuotaLevel,
 } from '../../components/quota';
+import { sumPeriods } from '../../components/trend';
 import { systemPath, tenantPath } from '../../shell';
 import { DEFAULT_PERIOD, type StatsPeriod } from '../ops/stats';
 
@@ -102,6 +103,13 @@ export interface TenantStatsRow {
   transfers: string;
   /** Volume uploaded over the period, formatted. */
   volume: string;
+  /** Files found infected over the period, formatted. */
+  viruses: string;
+  /** Download starts over the period, formatted. */
+  downloads: string;
+  /** Bytes used and storage quota (the compact QuotaMeter of the storage column). */
+  used: number;
+  quota: number;
   /** "12 GiB of 100 GiB (12 %)", or the no-quota notice. */
   usage: string;
   level: QuotaLevel;
@@ -126,6 +134,10 @@ export function tenantStatsRow(row: GlobalTenantStats, fmt: RowFormatters, t: Tr
     path: tenantPath(row.tenantId, 'general'),
     transfers: fmt.number(row.transferCount),
     volume: fmt.bytes(row.bytesUploaded),
+    viruses: fmt.number(row.virusDetections ?? 0),
+    downloads: fmt.number(row.downloadCount ?? 0),
+    used: row.storageUsedBytes,
+    quota: row.storageQuotaBytes,
     usage: texts.usage,
     level,
     levelVariant: quotaBadgeVariant(level),
@@ -136,4 +148,44 @@ export function tenantStatsRow(row: GlobalTenantStats, fmt: RowFormatters, t: Tr
 /** Rows of the tenant table, in the order of the API. */
 export function tenantStatsRows(stats: GlobalStats, fmt: RowFormatters, t: Translate): TenantStatsRow[] {
   return stats.tenants.map((row) => tenantStatsRow(row, fmt, t));
+}
+
+/** The four counters of the KPI tiles, summed over the active tenants. */
+export interface OverviewCounters {
+  transfers: number;
+  bytes: number;
+  viruses: number;
+  downloads: number;
+}
+
+const OVERVIEW_KEYS = [
+  'transfers',
+  'bytes',
+  'viruses',
+  'downloads',
+] as const satisfies readonly (keyof OverviewCounters)[];
+
+/** Totals of the period and, for 7 and 30 days, of the previous period (undefined for 12 months). */
+export interface OverviewTotals {
+  current: OverviewCounters;
+  previous: OverviewCounters | undefined;
+}
+
+/**
+ * Sums the rows of the global statistics for the KPI tiles. The previous totals exist only when
+ * there is at least one row and every row carries its previous period (never for 12 months), so a
+ * partial sum is never compared with a full one.
+ */
+export function overviewTotals(stats: GlobalStats): OverviewTotals {
+  return sumPeriods(stats.tenants, OVERVIEW_KEYS, (row) => ({
+    transfers: row.transferCount,
+    bytes: row.bytesUploaded,
+    viruses: row.virusDetections,
+    downloads: row.downloadCount,
+  }));
+}
+
+/** Number of days of a period with a previous period to compare with (undefined: 12 months). */
+export function trendDays(period: StatsPeriod): number | undefined {
+  return period === '7d' ? 7 : period === '30d' ? 30 : undefined;
 }

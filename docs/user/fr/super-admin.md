@@ -1,6 +1,6 @@
 # Guide du super administrateur
 
-Ce guide s’adresse à l’exploitant de l’instance TransTeira. En tant que super administrateur, vous pouvez faire tout ce que fait un administrateur délégué, sur toutes les entités : les écrans communs sont décrits dans le guide de l’administrateur délégué, par exemple [Se connecter](topic:login), [Mon compte](topic:account), [Entités](topic:tenants) et [Transferts](topic:tenant-transfers). Ce guide couvre ce que vous seul pouvez faire : le premier lancement, la création et l’ouverture des entités, les comptes administrateurs, les écrans du système, les jetons de provisionnement, le mode maintenance et la clé maître. Votre navigation principale comporte donc deux entrées de plus, **Administrateurs** et **Système**. La documentation publique personnalisée de chaque entité (version imprimable comprise) est décrite dans [Documentation de l’entité](topic:tenant-docs).
+Ce guide s’adresse à l’exploitant de l’instance TransTeira. En tant que super administrateur, vous pouvez faire tout ce que fait un administrateur délégué, sur toutes les entités : les écrans communs sont décrits dans le guide de l’administrateur délégué, par exemple [Se connecter](topic:login), [Mon compte](topic:account), [Entités](topic:tenants) et [Transferts](topic:tenant-transfers). Ce guide couvre ce que vous seul pouvez faire : le premier lancement, la création et l’ouverture des entités, les comptes administrateurs, les écrans du système, les jetons de provisionnement, le mode maintenance et la clé maître. La navigation principale de votre barre latérale comporte donc deux entrées de plus, **Administrateurs** et **Système**. La documentation publique personnalisée de chaque entité (version imprimable comprise) est décrite dans [Documentation de l’entité](topic:tenant-docs).
 
 <!-- topic: setup -->
 ## Premier lancement
@@ -28,26 +28,28 @@ Gardez **deux** super administrateurs. TransTeira refuse de supprimer, de désac
 <!-- topic: admin-home-super -->
 ## Page d’accueil
 
-Votre page d’accueil donne l’état de toute l’instance en un coup d’œil. Elle commence par deux cartes, au-dessus du tableau de toutes les entités.
+Votre page d’accueil donne l’état de toute l’instance en un coup d’œil. L’en-tête de page affiche, sous le titre **Accueil**, une ligne d’accueil (**Bonjour**, votre identifiant, **Vue d’ensemble de l’instance** et le nombre d’entités de l’instance, quel que soit leur statut) et, à droite, le champ **Rechercher** et son bouton, et le bouton **Nouvelle entité**. En dessous :
 
-![Page d’accueil du super administrateur avec les cartes Mode maintenance et Disque au-dessus du tableau des entités](../screenshots/fr/admin-home-super.png)
+- **Chiffres clés des 30 derniers jours**, pour toutes les entités : **Transferts (30 jours)**, **Volume échangé (30 jours)** (le volume déposé) et **Virus bloqués (30 jours)**, chacun avec une tendance par rapport aux 30 jours précédents (un texte comme **+12 % par rapport aux 30 jours précédents**, **Stable par rapport aux 30 jours précédents** ou **Aucune activité les 30 jours précédents**, jamais coloré), et la tuile **Disque** : la part du disque de données utilisée, une jauge avec le seuil d’alerte repéré, et la ligne **Alerte à 85 %** suivie de l’espace libre. La tuile passe à l’état d’alerte, avec **L’alerte d’espace disque est levée.**, lorsque l’alerte disque est déclenchée ; **L’alerte n’est pas envoyée par mail.** vous le rappelle lorsqu’aucun serveur SMTP système n’est configuré.
+- **Entités** : une carte avec une ligne par entité (dix au plus) indiquant sa pastille de couleur, son nom et son adresse, sa pastille de **Statut** (**Active**, **En cours de mise en service** ou **Suppression en cours**), une jauge de stockage (avec **Presque plein** ou **Plein** seulement le cas échéant) et un lien **Configurer** ; **Tout voir** ouvre la liste décrite dans [Entités](topic:tenants).
+- **État du système** : **Application** (**Opérationnelle** ou **Dégradée**), **Base de données** (son moteur et **Disponible** ou **Indisponible**), **Antivirus** suivi de son moteur (**Disponible**, **Indisponible** ou **Désactivé**), **Stockage des fichiers**, **Mode maintenance** (**Inactif** ou **Actif**, avec **Imposé par l’environnement** ou **Activé par un super administrateur**) et **Version** (la version en cours, suivie de **à jour**, **mise à jour disponible** et de la dernière version, **pas encore vérifiée** ou **vérification désactivée**) ; **Gérer le mode maintenance** ouvre l’écran de maintenance.
 
-- **Mode maintenance** : **Actif** ou **Inactif**, avec la date de début et **(imposé par l’environnement)** lorsque la variable `TT_MAINTENANCE` l’impose ; **Gérer le mode maintenance** ouvre l’écran de maintenance.
-- **Disque** : l’occupation du disque de données, le seuil d’alerte et l’état de l’alerte ; **Ouvrir la vue d’ensemble du système** affiche le détail.
-- **Entités** : une ligne par entité avec son **Nom**, son **Nom de domaine**, son **Statut** et son **Stockage** ; **Ouvrir la liste complète des entités** ouvre la liste décrite dans [Entités](topic:tenants).
+![Page d’accueil du super administrateur : la barre latérale, le titre Accueil et son bouton d’aide, la ligne d’accueil, le champ de recherche et le bouton Nouvelle entité ; les tuiles Transferts, Volume échangé, Virus bloqués et Disque ; la carte Entités avec deux entités actives et leur stockage ; l’encadré État du système](../screenshots/fr/admin-home-super.png)
+
+En tant que super administrateur, le champ **Rechercher** cherche un transfert par identifiant ou par adresse complète dans toutes les entités de l’instance, comme décrit dans [Recherche](topic:admin-search) (guide de l’administrateur délégué).
 
 ## Entités
 
-La liste des entités fonctionne comme décrit dans [Entités](topic:tenants), avec un bouton de plus pour vous, **Créer une entité**. Certains réglages d’une entité, ainsi que sa suppression, vous sont réservés.
+La liste des entités fonctionne comme décrit dans [Entités](topic:tenants), avec des liens de plus pour vous : **Créer une entité** et **Importer une configuration** en haut à droite de l’en-tête de page, et sur chaque ligne, après **Configurer**, un lien **Dupliquer** suivi du nom de l’entité. Certains réglages d’une entité, ainsi que sa suppression, vous sont réservés.
 
 <!-- topic: tenant-create -->
 ### Créer une entité
 
 Une entité est une organisation (filiale, service) qui dispose de son adresse publique, de son habillage et de ses réglages propres. Avant de la créer, vérifiez que son adresse (FQDN) pointe vers le reverse proxy dans le DNS et que le reverse proxy la sert avec un certificat (avec Caddy, le certificat peut aussi être obtenu à la demande, voir [Jetons de provisionnement](topic:system-provisioning)).
 
-Sur la page **Entités**, cliquez sur **Créer une entité**, puis remplissez le formulaire.
+Sur la page **Entités**, cliquez sur **Créer une entité** (ou sur **Nouvelle entité** depuis votre page d’accueil), puis remplissez le formulaire, qui commence par la carte **Informations de l’entité**.
 
-![Formulaire de création d’une entité avec le nom, l’adresse, la langue par défaut, le quota de stockage et le plafond de la taille par envoi](../screenshots/fr/admin-tenant-create.png)
+![Écran Créer une entité : la carte Informations de l’entité avec le nom de l’entité, l’adresse (FQDN), la langue par défaut, le quota de stockage et le plafond de la taille par envoi](../screenshots/fr/admin-tenant-create.png)
 
 - **Nom de l’entité** : affiché sur les pages publiques et dans les mails, 100 caractères au plus.
 - **Adresse (FQDN)** : le nom de domaine des pages publiques de l’entité, par exemple `transfer.entity-a.example.com`. Elle doit être unique et ne peut pas être l’adresse de l’administration.
@@ -65,9 +67,9 @@ Sans administrateur délégué, vous arrivez aussitôt sur la mise en service de
 <!-- topic: tenant-setup-super -->
 ### Mise en service d’une entité
 
-L’assistant de mise en service d’une entité est l’entrée **Mise en service** de sa navigation (le bouton **Configurer** de la liste mène à l’entité, et une entité en cours de mise en service est aussi signalée sur votre page d’accueil, avec un bouton pour lancer sa mise en service). Il affiche une liste calculée à partir de la configuration réelle de l’entité : chaque étape est **Fait** ou **À faire**, **Obligatoire** ou **Facultatif**, et son bouton **Configurer** mène à l’écran correspondant. Les étapes sont :
+L’assistant de mise en service d’une entité est l’entrée **Mise en service** de son bloc dans la barre latérale (le lien **Configurer** de sa ligne, dans la liste des entités ou dans la carte **Entités** de votre page d’accueil, ouvre l’entité ; tant qu’elle est en cours de mise en service, sa pastille de **Statut** indique **En cours de mise en service**, et son bloc dans la barre latérale affiche le badge **En cours de mise en service** sous son nom). Il affiche une liste calculée à partir de la configuration réelle de l’entité : chaque étape est **Fait** ou **À faire**, **Obligatoire** ou **Facultatif**, et son lien **Configurer** mène à l’écran correspondant. Les étapes sont :
 
-![Assistant de mise en service d’une entité en cours de mise en service, avec son badge et la liste des étapes faites ou à faire, obligatoires ou facultatives](../screenshots/fr/admin-tenant-setup.png)
+![Assistant de mise en service d’une entité en cours de mise en service : le badge En cours de mise en service sous le titre et dans la barre latérale, et la carte Étapes de la mise en service avec chaque étape marquée À faire, Obligatoire ou Facultatif, et son lien Configurer](../screenshots/fr/admin-tenant-setup.png)
 
 - obligatoires : **Messagerie (SMTP)** (réglages testés avec succès depuis leur dernière modification), **Plages d’adresses IP internes**, **Domaines de messagerie internes** (pour une entité importée, faites seulement après confirmation, voir [Dupliquer ou importer une configuration](topic:tenant-import)), **Mentions légales** et **Politique de confidentialité** (rédigées dans la langue par défaut de l’entité, sans marqueur « À compléter » restant) ;
 - facultatives : **Logo**, **Couleurs** et **Modèles de mails**, qui compte comme fait dès que vous cochez **J’ai relu les modèles de mails**.
@@ -88,7 +90,7 @@ Sur l’écran [Général](topic:tenant-general) d’une entité, vous pouvez mo
 - **Quota de stockage** : lorsqu’il est atteint, les nouveaux dépôts sont refusés jusqu’à ce que de l’espace soit libéré (les secrets avec fichier joint aussi : les fichiers des secrets à usage unique, 10 Mio par défaut et 25 Mio au plus chacun, comptent dans le quota et dans l’occupation du disque tant qu’ils existent). Des mails d’alerte partent à 80 % et lorsque le quota est atteint, vers les administrateurs délégués de l’entité ; si elle n’en a aucun, ils vont aux super administrateurs, par la messagerie de l’entité. Contrôlez ces réglages lorsqu’une entité se retrouve sans administrateur délégué.
 - **Plafond de la taille par envoi** : l’abaisser en dessous de la taille maximale par envoi actuelle réduit aussi celle-ci.
 - **Analyse antivirus** : activée par défaut. La désactiver (après confirmation) fait remettre tous les fichiers finalisés à partir de ce moment **sans analyse**, avec la mention « non analysé : antivirus désactivé » : l’expéditeur est prévenu par mail et la page de téléchargement avertit les destinataires. Les fichiers déjà en attente d’analyse au moment de la désactivation continuent d’attendre l’antivirus ; la réactivation n’analyse jamais les fichiers remis entre-temps. La liste de blocage par empreinte, la détection des abus et le téléchargement forcé restent appliqués. Chaque changement est enregistré dans le [journal d’audit](topic:tenant-audit) (`tenant.antivirus_disabled`, `tenant.antivirus_enabled`). Un administrateur délégué voit l’interrupteur en lecture seule. **Attention** : sans analyse, l’entité peut servir à distribuer des logiciels malveillants ; ne la désactivez qu’en connaissance de cause. Si l’exploitant a désactivé l’antivirus pour toute l’instance (`TT_ANTIVIRUS_ENGINE=none`), l’interrupteur n’a aucun effet : aucun fichier n’est analysé, et le moteur est affiché en lecture seule dans les [paramètres du système](topic:system-settings).
-- **Chiffrement de bout en bout** : **interdit** (par défaut), **autorisé** ou **imposé**. Ce réglage vous est réservé. Lorsqu’il est autorisé, les expéditeurs qui utilisent un client prenant en charge le chiffrement de bout en bout peuvent chiffrer leurs fichiers de sorte que le serveur ne détienne jamais la clé et ne puisse pas les lire. **Conséquence : un fichier chiffré n’est jamais analysé par l’antivirus** (il est signalé « non analysé : chiffré de bout en bout » à l’expéditeur et aux destinataires), et la liste de blocage par empreinte ne peut pas s’y appliquer ; les listes de blocage d’adresses et de domaines et la détection des abus restent actives. **Imposé** revient donc à désactiver l’antivirus pour tous les dépôts de l’entité (les dépôts par lien de dépôt permanent deviennent impossibles). Nous recommandons de ne l’autoriser que pour des niveaux de confidentialité maîtrisés, dont les destinataires sont connus (chaque niveau peut ensuite durcir le réglage, jamais l’assouplir, voir [Niveaux de confidentialité](topic:tenant-confidentiality)). Un administrateur délégué ne peut pas le modifier. Chaque changement est consigné dans le [journal d’audit](topic:tenant-audit) (`tenant.updated`). Les expéditeurs chiffrent depuis l’interface du navigateur (une case du formulaire de transfert), et les clients de l’API qui implémentent le format peuvent aussi le faire.
+- **Chiffrement de bout en bout** : **Interdit** (par défaut), **Autorisé** ou **Obligatoire**. Ce réglage vous est réservé. Lorsqu’il est autorisé, les expéditeurs qui utilisent un client prenant en charge le chiffrement de bout en bout peuvent chiffrer leurs fichiers de sorte que le serveur ne détienne jamais la clé et ne puisse pas les lire. **Conséquence : un fichier chiffré n’est jamais analysé par l’antivirus** (il est signalé « non analysé : chiffré de bout en bout » à l’expéditeur et aux destinataires), et la liste de blocage par empreinte ne peut pas s’y appliquer ; les listes de blocage d’adresses et de domaines et la détection des abus restent actives. **Obligatoire** revient donc à désactiver l’antivirus pour tous les dépôts de l’entité (les dépôts par lien de dépôt permanent deviennent impossibles). Nous recommandons de ne l’autoriser que pour des niveaux de confidentialité maîtrisés, dont les destinataires sont connus (chaque niveau peut ensuite durcir le réglage, jamais l’assouplir, voir [Niveaux de confidentialité](topic:tenant-confidentiality)). Un administrateur délégué ne peut pas le modifier. Chaque changement est consigné dans le [journal d’audit](topic:tenant-audit) (`tenant.updated`). Les expéditeurs chiffrent depuis l’interface du navigateur (une case du formulaire de transfert), et les clients de l’API qui implémentent le format peuvent aussi le faire.
 - **Lien seul** : autorise les expéditeurs internes et les jetons d’API de l’entité à créer des transferts en lien seul, dont le lien n’est transmis à aucun destinataire par mail mais montré une seule fois à l’expéditeur (voir « Envoyer en lien seul » (guide du déposant)). Désactivé par défaut. Ce réglage vous est réservé ; chaque niveau de confidentialité peut ensuite l’interdire (voir [Niveaux de confidentialité](topic:tenant-confidentiality)). Le lien seul expose un lien utilisable par quiconque le détient, sans trace par destinataire : activez-le en connaissance de cause. Désactiver le réglage ne touche pas aux transferts existants.
 
 Les **secrets à usage unique** ne vous sont pas réservés : vous les gérez comme un administrateur délégué, sur l’écran **Réglages des secrets** de n’importe quelle entité, **Activer les secrets à usage unique** compris (voir le guide de l’administrateur délégué, [Secrets à usage unique](topic:tenant-secrets)). Depuis la 2.1, le module est **activé par défaut dans chaque entité, y compris celles qui existaient avant la mise à jour**, avec les fichiers joints (10 Mio) et l’envoi par mail autorisés, et un administrateur délégué peut aussi modifier ces réglages, l’option de fichier comprise. Après la mise à jour, passez en revue les réglages de chaque entité, surtout celles sans administrateur délégué, et désactivez ce dont une entité n’a pas besoin.
@@ -107,9 +109,9 @@ Avant d’activer le service pour une entité, vérifiez que ses mentions légal
 
 Vous pouvez créer une entité à partir de la configuration exportée d’une autre, voir [Exporter la configuration](topic:tenant-export). L’import crée toujours une **nouvelle** entité, à l’état de configuration : il ne modifie jamais une entité existante.
 
-Dans la liste des entités, cliquez sur **Dupliquer** sur la ligne de l’entité à copier, ou sur **Importer une configuration** et choisissez un fichier JSON. Saisissez ensuite le **Nom de l’entité**, l’**Adresse (FQDN)** et le **Quota de stockage** de la nouvelle entité, et éventuellement son premier administrateur délégué, comme dans [Créer une entité](topic:tenant-create). Le logo et l’image de fond ne sont importés que si le fichier les contient. Les réglages des secrets à usage unique sont copiés et contrôlés comme les autres : une valeur invalide est refusée avec son emplacement (par exemple `/config/secretSettings/fileMaxBytes`). Un fichier exporté avant la 2.1 n’en contient pas : la nouvelle entité reçoit alors les réglages par défaut, module activé.
+Dans la liste des entités, cliquez sur **Dupliquer** suivi du nom de l’entité sur la ligne de l’entité à copier, ou sur **Importer une configuration** en haut à droite de l’en-tête de page et choisissez un fichier JSON dans **Fichier de configuration (JSON)**. Saisissez ensuite le **Nom de l’entité**, l’**Adresse (FQDN)** et le **Quota de stockage** de la nouvelle entité, et éventuellement son premier administrateur délégué, comme dans [Créer une entité](topic:tenant-create). Le logo et l’image de fond ne sont importés que si le fichier les contient. Les réglages des secrets à usage unique sont copiés et contrôlés comme les autres : une valeur invalide est refusée avec son emplacement (par exemple `/config/secretSettings/fileMaxBytes`). Un fichier exporté avant la 2.1 n’en contient pas : la nouvelle entité reçoit alors les réglages par défaut, module activé.
 
-![Écran Importer une configuration, avec le choix du fichier de configuration, les champs nom, adresse et quota de stockage de l’entité et le premier administrateur délégué facultatif](../screenshots/fr/admin-tenant-import.png)
+![Écran Importer une configuration : la carte Nouvelle entité avec le choix du fichier de configuration, les champs nom, adresse et quota de stockage de l’entité et le premier administrateur délégué facultatif](../screenshots/fr/admin-tenant-import.png)
 
 Le fichier est vérifié strictement et la création est tout ou rien. Si le fichier est refusé, le message indique l’endroit de la première erreur (par exemple `/config/settings/maxTransferBytes`) : corrigez-le ou exportez de nouveau l’entité source. Un fichier écrit par une version plus récente de TransTeira est aussi refusé, de même qu’une adresse déjà utilisée par une autre entité. Chaque import est consigné dans le [journal d’audit](topic:system-audit) (`tenant.imported`).
 
@@ -127,7 +129,7 @@ Certains éléments ne sont jamais copiés : complétez-les dans l’[assistant 
 
 Vous seul pouvez configurer l’authentification unique (OpenID Connect) d’une entité ; les administrateurs délégués et les auditeurs voient la configuration en lecture seule. Sur l’entité, ouvrez **Authentification unique** et renseignez :
 
-![Écran d’authentification unique d’une entité avec la case d’activation, l’émetteur et l’identifiant client](../screenshots/fr/admin-tenant-sso.png)
+![Écran Authentification unique d’une entité : la carte Réglages de l’authentification unique avec Activer l’authentification unique coché, l’émetteur, l’identifiant client et le secret client, marqué Un secret est enregistré](../screenshots/fr/admin-tenant-sso.png)
 
 - **Émetteur** : l’adresse `https` du fournisseur d’identité. Pour Microsoft Entra ID, utilisez l’émetteur de votre annuaire, `login.microsoftonline.com/<identifiant de l’annuaire>/v2.0`, précédé de `https://` ; les adresses multi-annuaires `common`, `organizations` et `consumers` sont refusées.
 - **Identifiant client** et **Secret client** : ceux de l’application inscrite chez le fournisseur, avec l’adresse de redirection `https://<hôte d’administration>/api/v1/admin/auth/oidc/callback`. Le secret n’est jamais réaffiché ; laissez le champ vide pour conserver celui qui est enregistré. Il est exigé de nouveau quand l’émetteur ou l’identifiant client change.
@@ -136,7 +138,7 @@ Vous seul pouvez configurer l’authentification unique (OpenID Connect) d’une
 - **Imposer l’authentification unique** : refuse la connexion par mot de passe des administrateurs délégués et des auditeurs de l’entité. Leurs sessions par mot de passe existantes n’atteignent plus l’entité non plus, jusqu’à ce qu’ils se connectent par l’authentification unique. Vous n’êtes jamais concerné.
 - **Activer l’authentification unique** : active la fonction pour l’entité.
 
-Cliquez sur **Tester** avant d’activer : le test vérifie que le fournisseur est joignable et répond de façon cohérente, sans connecter personne. Changer l’émetteur ou l’identifiant client ferme les sessions d’authentification unique de l’entité et désépingle les identités épinglées pour l’ancien fournisseur (sauf si une autre entité du compte l’utilise encore). Désactiver ou supprimer la configuration ferme les sessions d’authentification unique mais conserve les identités épinglées : elles sont inutilisables tant qu’une configuration avec le même émetteur et le même identifiant client n’est pas revenue.
+Enregistrez, puis cliquez sur **Tester l’émetteur** dans la carte **Test** avant d’activer : le test vérifie que l’émetteur enregistré est joignable et répond de façon cohérente, sans connecter personne. Changer l’émetteur ou l’identifiant client ferme les sessions d’authentification unique de l’entité et désépingle les identités épinglées pour l’ancien fournisseur (sauf si une autre entité du compte l’utilise encore). Désactiver ou supprimer la configuration ferme les sessions d’authentification unique mais conserve les identités épinglées : elles sont inutilisables tant qu’une configuration avec le même émetteur et le même identifiant client n’est pas revenue.
 
 Si le fournisseur est en panne alors que l’authentification unique est imposée, connectez-vous avec votre propre compte (vous n’utilisez jamais l’authentification unique : votre mot de passe et votre second facteur fonctionnent toujours), décochez **Imposer l’authentification unique** sur l’entité et enregistrez. Les administrateurs délégués qui ont un mot de passe peuvent alors se reconnecter. Recochez-la quand le fournisseur est revenu.
 
@@ -152,16 +154,16 @@ Tous les transferts, fichiers, secrets à usage unique (avec leurs fichiers et l
 <!-- topic: admins -->
 ## Comptes administrateurs
 
-La page **Administrateurs** liste tous les comptes qui ont accès à l’administration. Ses colonnes sont **Identifiant**, **Adresse électronique**, **Rôle**, **Entités**, **Double authentification** (**Activée**, **Non activée** ou **Obligatoire**), **Statut** (**Actif**, **Désactivé** ou **En attente d’activation**) et **Dernière connexion**.
+La page **Administrateurs** liste tous les comptes qui ont accès à l’administration. Ses colonnes sont **Identifiant** (le vôtre est suivi de **(vous)**), **Adresse électronique**, **Rôle**, **Entités**, **Double authentification** (une pastille : **Activée**, **Non activée** ou **Obligatoire**), **Statut** (une pastille : **Actif**, **Désactivé** ou **En attente d’activation**) et **Dernière connexion**, suivies d’un lien **Modifier**.
 
-![Liste des administrateurs avec leur rôle, leurs entités, leur double authentification et leur statut](../screenshots/fr/admin-admins.png)
+![Écran Administrateurs : le bouton Créer un administrateur dans l’en-tête de page et la liste des comptes avec leur rôle, leurs entités, les pastilles de double authentification et de statut, leur dernière connexion et le lien Modifier](../screenshots/fr/admin-admins.png)
 
 <!-- topic: admin-create -->
 ### Créer un administrateur délégué
 
-Un administrateur délégué ne gère que les entités que vous rattachez à son compte. Un **auditeur** est un compte en lecture seule sur les entités que vous lui rattachez (voir le [guide de l’auditeur](topic:auditor)), par exemple pour un RSSI ou un audit. Cliquez sur **Créer un administrateur** et remplissez le formulaire.
+Un administrateur délégué ne gère que les entités que vous rattachez à son compte. Un **auditeur** est un compte en lecture seule sur les entités que vous lui rattachez (voir le [guide de l’auditeur](topic:auditor)), par exemple pour un RSSI ou un audit. Cliquez sur **Créer un administrateur** en haut à droite de l’en-tête de page et remplissez le formulaire, qui commence par la carte **Informations du compte**.
 
-![Formulaire de création d’un administrateur délégué avec l’identifiant, l’adresse électronique, les entités rattachées et l’exigence de double authentification](../screenshots/fr/admin-admin-create.png)
+![Écran Créer un administrateur délégué : la carte Informations du compte avec le rôle (Administrateur délégué ou Auditeur (lecture seule)), l’identifiant, l’adresse électronique et les entités rattachées](../screenshots/fr/admin-admin-create.png)
 
 - **Rôle** : **Administrateur délégué** (configure et exploite les entités rattachées) ou **Auditeur (lecture seule)** (les consulte et ne modifie rien). L’auditeur ne peut lire ni la configuration ni les écrans de l’instance. Un super administrateur n’est jamais créé ici : promouvez plutôt un compte activé (voir [Modifier un compte](topic:admin-edit)) ; le rôle d’un compte existant peut aussi devenir auditeur de cette façon.
 - **Identifiant** : de 3 à 64 caractères, lettres minuscules, chiffres, point, tiret ou tiret bas. Il ne peut plus être modifié ensuite.
@@ -178,12 +180,12 @@ Lorsqu’aucun serveur SMTP système n’est configuré, la remise par courriel 
 
 Cliquez sur **Créer l’administrateur**. Le compte est créé sans mot de passe. Avec la remise par courriel, un message confirme **Invitation envoyée** à l’adresse, avec la date jusqu’à laquelle le lien est valable ; le lien lui-même ne peut pas être retrouvé. Avec l’autre option, un **Lien d’activation** s’affiche **une seule fois** : cliquez sur **Copier le lien** et transmettez-le par un autre canal que la messagerie habituelle (de vive voix, par messagerie instantanée ou par téléphone), car toute personne qui l’obtient peut définir le mot de passe du compte. Cliquez ensuite sur **J’ai transmis le lien**. Le lien est valable 72 heures et ne sert qu’une fois ; ce que la personne en fait est décrit dans [Activer votre compte](topic:activation).
 
-Pour émettre un nouveau lien pour un compte pas encore activé (le courriel n’est pas arrivé, le lien a expiré), cliquez sur **Renvoyer l’invitation…** sur sa ligne, choisissez la remise comme ci-dessus, puis cliquez sur **Envoyer l’invitation**. Les liens précédents sont révoqués, le nouveau est valable 72 heures, et 5 invitations par heure au plus peuvent être envoyées pour un même compte. L’action n’est plus proposée une fois le compte activé. Pour un compte de super administrateur, le lien n’est jamais envoyé par courriel : il vous est affiché.
+Pour émettre un nouveau lien pour un compte pas encore activé (le courriel n’est pas arrivé, le lien a expiré), ouvrez le compte avec **Modifier**, cliquez sur **Renvoyer l’invitation…** dans sa carte **Actions**, choisissez la remise comme ci-dessus, puis cliquez sur **Envoyer l’invitation**. Les liens précédents sont révoqués, le nouveau est valable 72 heures, et 5 invitations par heure au plus peuvent être envoyées pour un même compte. L’action n’est plus proposée une fois le compte activé. Pour un compte de super administrateur, le lien n’est jamais envoyé par courriel : il vous est affiché.
 
 <!-- topic: admin-edit -->
 ### Modifier un compte
 
-Cliquez sur **Modifier** sur la ligne d’un compte pour changer son adresse électronique, ses entités rattachées, l’exigence de double authentification ou son rôle, puis cliquez sur **Enregistrer**.
+Cliquez sur **Modifier** sur la ligne d’un compte pour changer son adresse électronique, ses entités rattachées, l’exigence de double authentification ou son rôle, puis cliquez sur **Enregistrer** ; **Retour**, en bas de la page, ramène à la liste.
 
 - **Rôle** : seul un compte activé, avec la double authentification configurée, peut devenir super administrateur ; ses rattachements aux entités sont alors retirés. Pour rétrograder un super administrateur, sélectionnez les entités à lui rattacher.
 - **Compte désactivé** : le compte ne peut plus se connecter et ses sessions ouvertes sont fermées.
@@ -200,34 +202,35 @@ Les comptes sont toujours créés par vous, jamais par une connexion. Dans le fo
 <!-- topic: admin-reset -->
 ### Mot de passe ou appareil perdu
 
-Lorsqu’un administrateur a perdu son mot de passe ou son appareil d’authentification, réinitialisez ses accès. Sur son compte, cliquez sur **Réinitialiser les accès…**, puis confirmez : le mot de passe, la double authentification et les codes de secours sont effacés, les sessions sont fermées, et un nouveau lien d’activation s’affiche une seule fois, à transmettre comme pour un nouveau compte. Un compte désactivé doit d’abord être réactivé.
+Lorsqu’un administrateur a perdu son mot de passe ou son appareil d’authentification, réinitialisez ses accès. Ouvrez son compte avec **Modifier** et, dans la carte **Actions**, cliquez sur **Réinitialiser les accès…**, puis confirmez : le mot de passe, la double authentification et les codes de secours sont effacés, les sessions sont fermées, et un nouveau lien d’activation s’affiche une seule fois, à transmettre comme pour un nouveau compte. Un compte désactivé doit d’abord être réactivé.
 
-Pour retirer un compte, cliquez sur **Supprimer…** et confirmez avec **Supprimer définitivement**. Le journal d’audit garde la trace de ses actions.
+Pour retirer un compte, cliquez sur **Supprimer…** dans la même carte et confirmez avec **Supprimer définitivement**. Le journal d’audit garde la trace de ses actions.
 
 Si vous êtes le seul super administrateur et que vous avez perdu votre appareil, connectez-vous avec un code de secours (voir [Codes de secours](topic:admin-recovery-codes)). S’il ne vous en reste aucun, ou si vous avez perdu votre mot de passe, un exploitant ayant accès au serveur peut réinitialiser votre compte en ligne de commande, par exemple avec `docker exec -it transteira transteira admin reset-totp <identifiant>` : les commandes sont décrites dans `docs/operations/admin.md`, sections « Losing the second factor » et « Losing the password ».
 
 ## Système
 
-L’entrée **Système** regroupe les réglages de toute l’instance. Sa sous-navigation comporte huit écrans : **Vue d’ensemble**, **Maintenance**, **Paramètres**, **Webhooks**, **Journal d’audit**, **Journal de sécurité**, **Clé maître** et **Jetons de provisionnement**. Les administrateurs délégués ne la voient pas.
+L’entrée **Système** regroupe les réglages de toute l’instance. Sur un écran du système, son bloc dans la barre latérale, sous **Système**, liste huit écrans : **Vue d’ensemble**, **Maintenance**, **Paramètres**, **Webhooks**, **Journal d’audit**, **Journal de sécurité**, **Clé maître** et **Jetons de provisionnement**. Les administrateurs délégués ne la voient pas.
 
 <!-- topic: system-overview -->
 ### Vue d’ensemble du système
 
 La vue d’ensemble montre l’activité de toutes les entités et l’occupation du disque de données. Choisissez la **Période** : **7 derniers jours**, **30 derniers jours** ou **12 derniers mois**.
 
-![Vue d’ensemble du système avec la période, la jauge du disque de données, le seuil d’alerte et le tableau des entités](../screenshots/fr/admin-system.png)
+![Vue d’ensemble du système : la période, les tuiles Transferts, Volume déposé, Virus bloqués et Téléchargements avec leur tendance par rapport aux 30 jours précédents, la tuile Disque utilisé, et le début de la carte Disque de données avec le seuil d’alerte et la pastille Aucune alerte](../screenshots/fr/admin-system.png)
 
-- **Disque de données** : l’espace occupé sur le disque qui contient les fichiers, le seuil d’alerte et un badge **Alerte active** ou **Aucune alerte**. L’alerte se lève au seuil et retombe 5 points en dessous ; **Modifier le seuil et l’adresse d’alerte** ouvre les [paramètres du système](topic:system-settings).
-- **Entités** : une ligne par entité active, avec ses **Transferts** et son **Volume déposé** sur la période, et son **Stockage**.
+- **Tuiles** : **Transferts**, **Volume déposé**, **Virus bloqués** et **Téléchargements** sur la période, pour toutes les entités actives, chacune avec une tendance par rapport aux 7 ou 30 jours précédents (un texte neutre, comme **Stable par rapport aux 30 jours précédents** ; pas de tendance sur 12 mois), et **Disque utilisé**, la part du disque de données occupée avec l’espace occupé sur le total, affichée à l’état d’alerte tant que l’alerte disque est levée.
+- Carte **Disque de données** : l’espace occupé sur le disque qui contient les fichiers, sur une jauge qui repère le seuil d’alerte, la ligne **Seuil d’alerte** avec une pastille **Alerte active** ou **Aucune alerte**. L’alerte se lève au seuil et retombe 5 points en dessous ; **Modifier le seuil et l’adresse d’alerte** ouvre les [paramètres du système](topic:system-settings).
+- Carte **Entités** : une ligne par entité active, avec son nom (un lien vers son écran Général), ses **Transferts**, son **Volume déposé**, ses **Virus bloqués** et ses **Téléchargements** sur la période, et sa jauge de **Stockage** (avec **Presque plein** ou **Plein** seulement le cas échéant).
 
 Lorsqu’aucun serveur SMTP système n’est configuré, l’avertissement **L’alerte disque n’est pas envoyée par mail** s’affiche : l’alerte n’est alors visible que sur cette page, dans le journal d’audit et dans le journal applicatif. Pour la recevoir par mail, renseignez `TT_SYSTEM_SMTP_HOST`, `TT_SYSTEM_SMTP_FROM` et les variables associées (voir `.env.example`), puis redémarrez l’application. Les chiffres sont indicatifs : les compteurs sont mis à jour environ toutes les 30 secondes.
 
 <!-- topic: system-version -->
 ### Version et mises à jour
 
-La version de TransTeira en cours d’exécution s’affiche dans le pied de page de l’administration, pour tous les administrateurs.
+La version de TransTeira en cours d’exécution s’affiche dans le pied de page de l’administration, pour tous les administrateurs, et dans l’encadré **État du système** de votre page d’accueil, qui indique aussi si une mise à jour est disponible.
 
-Le bloc **Version** de la [vue d’ensemble du système](topic:system-overview) est réservé au super administrateur. Il indique la version en cours, la **Dernière version publiée** et la date de la **Dernière vérification réussie**. Le bouton **Vérifier maintenant** lance une vérification immédiate, au plus une fois par minute pour toute l’instance. Lorsqu’une version plus récente existe, un avis s’affiche avec un lien vers sa page de publication.
+La carte **Version**, en bas de la [vue d’ensemble du système](topic:system-overview), est réservée au super administrateur. Elle indique la version en cours, la **Dernière version publiée** et la date de la **Dernière vérification réussie**. Le bouton **Vérifier maintenant** lance une vérification immédiate, au plus une fois par minute pour toute l’instance. Lorsqu’une version plus récente existe, un avis s’affiche avec un lien vers sa page de publication.
 
 TransTeira ne se met jamais à jour tout seul : lisez le `CHANGELOG.md`, puis suivez la procédure de mise à jour décrite dans la documentation d’installation.
 
@@ -238,15 +241,15 @@ Pour désactiver la recherche de nouvelles versions, par exemple sur une install
 
 Le mode maintenance suspend les nouveaux dépôts pendant une mise à jour. Tant qu’il est actif, les nouveaux dépôts et les invitations sont refusés sur toutes les entités et les visiteurs voient une page de maintenance dans leur langue ; les téléchargements, l’administration et le health check restent disponibles. Les envois en cours sont suspendus et reprennent après la désactivation du mode.
 
-![Écran de maintenance avec l’état actuel, la case Mode maintenance actif et l’avertissement sur les messages](../screenshots/fr/admin-system-maintenance.png)
+![Écran Mode maintenance avec le bandeau de maintenance en haut, la carte État actuel (État Actif, Source, Depuis le) et la carte Mode maintenance et messages avec sa case Mode maintenance actif, l’avertissement sur les messages et le message en français](../screenshots/fr/admin-system-maintenance.png)
 
-**État actuel** indique l’**État**, la **Source** et la date de début du mode (**Depuis le**). Pour activer le mode :
+La carte **État actuel** indique l’**État**, la **Source** et la date de début du mode (**Depuis le**). Pour activer le mode, dans la carte **Mode maintenance et messages** :
 
 1. Cochez **Mode maintenance actif**.
 2. Si besoin, rédigez un **Message en français** et un **Message en anglais** : texte brut facultatif, 500 caractères au plus, affiché sous le texte de maintenance standard. Ces messages sont publics sur toutes les entités : n’y écrivez rien de confidentiel. L’**Aperçu** les montre tels que les visiteurs les verront.
 3. Enregistrez, puis confirmez **Activer le mode maintenance ?** avec **Activer**.
 
-Pour le désactiver, décochez la case, enregistrez et confirmez avec **Désactiver**. Tant que le mode est actif, chaque administrateur voit un bandeau en haut de l’administration.
+Pour le désactiver, décochez la case, enregistrez et confirmez avec **Désactiver**. Tant que le mode est actif, chaque administrateur voit un bandeau en haut de l’administration, avec un lien **Gérer le mode maintenance**.
 
 ![Page de maintenance publique vue par les visiteurs](../screenshots/fr/maintenance.png)
 
@@ -257,14 +260,14 @@ Une mise à jour type : activez le mode maintenance, attendez que les envois en 
 <!-- topic: system-settings -->
 ### Paramètres du système (alerte disque)
 
-Les paramètres du système portent l’alerte d’occupation du disque de toute l’instance.
+Les paramètres du système portent l’alerte d’occupation du disque de toute l’instance, dans la carte **Alerte d’espace disque**.
 
-![Paramètres du système avec le seuil d’alerte et l’adresse d’alerte supplémentaire](../screenshots/fr/admin-system-settings.png)
+![Écran Paramètres du système : la carte Alerte d’espace disque avec le seuil d’alerte, l’adresse d’alerte supplémentaire, son avertissement et le bouton Enregistrer, et la carte Antivirus avec le moteur et le dernier auto-test](../screenshots/fr/admin-system-settings.png)
 
 - **Seuil d’alerte (% du disque de données)** : un pourcentage de 50 à 99, 85 par défaut. L’alerte se lève quand l’occupation du disque atteint le seuil et retombe quand elle redescend 5 points en dessous.
 - **Adresse d’alerte supplémentaire** : facultative, elle reçoit l’alerte disque et l’alerte antivirus en plus des super administrateurs. Cette adresse n’est pas vérifiée : saisissez-la une seconde fois dans **Adresse d’alerte, de nouveau** et contrôlez-la soigneusement. Laissez le champ vide pour la retirer.
 
-Sous le formulaire, la section **Antivirus** affiche le moteur choisi par l’exploitant (en lecture seule) et, sauf s’il est désactivé, le résultat du dernier **auto-test** : résultat, date, signature lorsque la chaîne de test a été détectée, et qui l’a lancé (l’instance ou un super administrateur). L’auto-test envoie au moteur la chaîne de test EICAR (inoffensive), qu’il doit signaler comme infectée. Cliquez sur **Tester l’antivirus** pour le lancer maintenant ; le résultat est annoncé et consigné dans le [journal d’audit](topic:system-audit) (`antivirus.self_test`). Le bouton n’apparaît pas lorsque l’antivirus est désactivé pour l’instance.
+En dessous, la carte **Antivirus** affiche le moteur choisi par l’exploitant (en lecture seule) et, sauf s’il est désactivé, le résultat du dernier **auto-test** : résultat, date, signature lorsque la chaîne de test a été détectée, et qui l’a lancé (l’instance ou un super administrateur). L’auto-test envoie au moteur la chaîne de test EICAR (inoffensive), qu’il doit signaler comme infectée. Cliquez sur **Tester l’antivirus** pour le lancer maintenant ; le résultat est annoncé et consigné dans le [journal d’audit](topic:system-audit) (`antivirus.self_test`). Le bouton n’apparaît pas lorsque l’antivirus est désactivé pour l’instance.
 
 Un résultat autre que **Détecté (réussi)** signifie que le moteur ne remplit pas son rôle : il est injoignable, répond de façon inattendue ou ne signale pas la chaîne de test (vérifiez sa configuration et, pour un moteur HTTP, les règles de verdict). Tant qu’un auto-test n’a pas réussi, le moteur est considéré comme indisponible et **les fichiers attendent leur analyse** (l’alerte antivirus suit après le délai habituel). L’instance réessaie d’elle-même après un échec au démarrage ; après un test réussi, elle ne le répète jamais seule, et un test que vous lancez et qui échoue referme le moteur.
 
@@ -275,7 +278,7 @@ Cliquez sur **Enregistrer**. Les mails d’alerte partent par le serveur SMTP sy
 
 Les webhooks de l’instance envoient les alertes de toute l’instance vers un canal Microsoft Teams ou Slack, ou vers tout destinataire JSON, en plus des mails d’alerte. Ils fonctionnent comme les [webhooks d’une entité](topic:tenant-webhooks), avec d’autres événements : **Alerte d’espace disque**, **Espace disque revenu à la normale**, **Antivirus indisponible**, **Antivirus de nouveau disponible**, **Mode maintenance activé**, **Mode maintenance désactivé**, **Rotation de la clé maître terminée**, **Échec de la rotation de la clé maître**, **Entité créée par provisionnement**, **Configuration de l’entité terminée** et **Jeton de provisionnement créé**. Les trois derniers concernent le provisionnement des entités, voir [Jetons de provisionnement](topic:system-provisioning). Ils ne reçoivent jamais les événements d’une entité, qui se configurent dans chaque entité. L’instance peut avoir 20 webhooks au plus.
 
-![Liste des webhooks de l’instance avec leur état et leur dernier envoi](../screenshots/fr/admin-system-webhooks.png)
+![Écran Webhooks de l’instance : le bouton Ajouter un webhook dans l’en-tête de page et un webhook Slack avec ses événements, l’état Activé, son dernier envoi et ses boutons Tester, Modifier et Supprimer](../screenshots/fr/admin-system-webhooks.png)
 
 Par défaut, l’adresse d’un webhook doit utiliser `https://` et mener à une adresse publique ; une adresse dont le nom d’hôte ne peut pas être résolu est refusée avec le même message, pour que le contrôle ne révèle rien du DNS interne. Certains réseaux ne peuvent jamais être ouverts : les adresses non spécifiées, les adresses lien-local (dont les services de métadonnées des clouds), le multicast, les adresses réservées et de diffusion, les réseaux du conteneur TransTeira lui-même, les adresses IPv6 compatibles IPv4, et les plages listées dans `TT_WEBHOOK_DENY_NETWORKS`. Les plages privées (RFC 1918, `100.64.0.0/10`, `fc00::/7` et les autres plages réservées listées dans `.env.example`) sont refusées elles aussi, mais l’exploitant peut les ouvrir pour un destinataire du réseau interne en déclarant sa plage dans `TT_WEBHOOK_ALLOW_NETWORKS`. Le `http://` simple n’est accepté que vers une plage listée dans `TT_WEBHOOK_ALLOW_HTTP_NETWORKS`, et cette plage doit elle-même être joignable : une plage privée doit aussi figurer dans `TT_WEBHOOK_ALLOW_NETWORKS`. TransTeira refuse de démarrer lorsqu’une plage autorisée chevauche les réseaux qui ne peuvent jamais être ouverts, par exemple une plage contenant le réseau Docker du conteneur. Ces variables sont décrites dans `.env.example` et s’appliquent aussi aux webhooks des entités. La création de webhooks et la saisie de nouvelles adresses sont limitées à 30 par heure et par administrateur.
 
@@ -288,7 +291,7 @@ L’instance peut être supervisée par Prometheus, Grafana, Zabbix ou tout scri
 
 Le journal d’audit global regroupe les événements d’audit de toutes les entités et de l’instance elle-même. Il fonctionne comme le [journal d’audit](topic:tenant-audit) d’une entité, avec un filtre et une colonne **Entité** en plus.
 
-![Journal d’audit global avec le filtre Entité et la colonne Entité](../screenshots/fr/admin-system-audit.png)
+![Écran Journal d’audit global : la carte des filtres avec le filtre Entité (Toutes les entités et l’instance) et le filtre Action, et la liste des événements dont la première colonne est l’Entité](../screenshots/fr/admin-system-audit.png)
 
 Avec **Toutes les entités et l’instance**, le journal montre aussi les événements de l’instance, marqués **Instance** : initialisation, connexions et comptes administrateurs, mode maintenance, paramètres du système, alertes disque, alertes antivirus, rotations de la clé maître et jetons de provisionnement (**Jeton de provisionnement créé** et **Jeton de provisionnement révoqué**). Les événements d’une entité comprennent désormais **Configuration de l’entité terminée**, **Entité créée par provisionnement** et **Création d’entité par provisionnement refusée**, et l’envoi d’une invitation à un administrateur délégué est consigné sous **Administrateur invité**. Lorsqu’une entité est choisie, seuls ses événements s’affichent. Les actions sur les secrets à usage unique d’une entité (groupe **Secrets à usage unique** : création, lecture, suppression, verrouillage, modification des réglages) y figurent aussi, sans aucun contenu, clé ni lien. Les événements sont conservés 12 mois.
 
@@ -304,9 +307,9 @@ Filtrez par **Entité** (avec **Toutes les entités et l’instance**, les évé
 
 Un jeton de provisionnement permet à un infogéreur de créer des entités par l’API, sans aucun accès à l’administration. L’écran **Jetons de provisionnement** liste les jetons avec leur **Nom**, **Préfixe**, **Plages IP autorisées**, **Suffixes de FQDN autorisés**, **Entités créées**, **Plafonds**, **Création**, **Dernière utilisation**, **Expiration** et **Statut**. Les jetons révoqués restent listés. Le côté technique, pour l’infogéreur, est décrit dans `docs/api/provisioning.md`.
 
-![Écran des jetons de provisionnement avec son introduction et le bouton de création d’un jeton](../screenshots/fr/admin-provisioning-tokens.png)
+![Écran Jetons de provisionnement : son introduction, le bouton Créer un jeton de provisionnement dans l’en-tête de page et la carte indiquant qu’il n’y a encore aucun jeton de provisionnement](../screenshots/fr/admin-provisioning-tokens.png)
 
-Pour créer un jeton, cliquez sur **Créer un jeton de provisionnement** et remplissez le formulaire :
+Pour créer un jeton, cliquez sur **Créer un jeton de provisionnement** en haut à droite de l’en-tête de page et remplissez le formulaire :
 
 - **Nom** : pour reconnaître le jeton, par exemple l’infogéreur à qui il est remis.
 - **Plages IP autorisées** : une plage par ligne (CIDR), les adresses depuis lesquelles l’infogéreur se connecte. Une plage qui autorise toutes les adresses est refusée.
@@ -334,9 +337,9 @@ Les preuves de dépôt et de remise (voir le [guide de l’administrateur délé
 
 La clé maître protège la clé de chiffrement de chaque fichier et les clés de données des secrets à usage unique, texte et fichier (chiffrement par enveloppe) : elle ne chiffre jamais directement les fichiers. L’effacement cryptographique détruit ces clés quand un secret est lu, expire, est verrouillé ou est supprimé, et une rotation les rechiffre comme les clés de fichier. Une sauvegarde du serveur faite pendant qu’un secret attendait encore conserve son texte chiffré et ne peut plus être effacée ensuite (risque résiduel accepté) : seules la clé du secret, qui n’est pas sur le serveur, et sa phrase de passe le protègent alors. Une copie de la clé maître doit être conservée dans un coffre de mots de passe hors de la VM, car une sauvegarde de la VM est inexploitable sans elle. L’écran n’affiche que les identifiants des clés (`mk_` suivi de 16 caractères hexadécimaux), jamais les clés elles-mêmes, et l’administration ne peut ni créer, ni importer, ni télécharger une clé.
 
-![Écran de la clé maître avec la clé actuelle, aucune nouvelle clé configurée et les étapes pour préparer une rotation](../screenshots/fr/admin-system-master-key.png)
+![Écran Clé maître : la carte Clés maîtres avec l’identifiant de la clé actuelle et aucune nouvelle clé configurée, et la carte Préparer une rotation avec les étapes à suivre sur le serveur](../screenshots/fr/admin-system-master-key.png)
 
-Sous **Clés maîtres**, l’écran affiche la **Clé actuelle (TT_MASTER_KEY_FILE)** et la **Nouvelle clé (TT_MASTER_KEY_NEW_FILE)**, ou **Aucune configurée**. Vérifiez ces identifiants dans les entrées de votre coffre. Après une rotation terminée, un badge **Redémarrage requis** apparaît. **Dernière rotation** donne l’identifiant, le **Statut** (**En cours**, **Terminée** ou **Échouée**), les clés, les dates et la progression de la dernière rotation.
+Dans la carte **Clés maîtres**, l’écran affiche la **Clé actuelle (TT_MASTER_KEY_FILE)** et la **Nouvelle clé (TT_MASTER_KEY_NEW_FILE)**, ou **Aucune configurée**. Vérifiez ces identifiants dans les entrées de votre coffre. Après une rotation terminée, un badge **Redémarrage requis** apparaît. **Dernière rotation** donne l’identifiant, le **Statut** (**En cours**, **Terminée** ou **Échouée**), les clés, les dates et la progression de la dernière rotation.
 
 <!-- topic: master-key-rotation -->
 ### Rotation de la clé maître

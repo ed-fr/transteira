@@ -4,8 +4,8 @@
   // address (not for an auditor: 403 read-only-role). Metadata only: the text, the file and the
   // link of a secret are never available. A delegated admin or the super admin can delete a
   // pending or active secret after a confirmation; the auditor only reads. The filters live in
-  // the URL query string, like the transfer list. The tenant sub-navigation is rendered by
-  // App.svelte.
+  // the URL query string, like the transfer list. The tenant navigation is in the
+  // sidebar (SidebarTenantBlock of AdminShell).
   // Since 2.3 (express secrets, CLAUDE.md section 22.2): express secrets carry an "Express"
   // marker and the creator kind "Anonymous" (no creator address), and a field finds a secret
   // from its pasted link (POST …/secrets/lookup, also for an auditor: read only). The link goes
@@ -16,6 +16,8 @@
   import { Alert, Button, HelpIcon, TextField, announce } from '../../../shared/components';
   import { formatDate, i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
+  import Card from '../../components/Card.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import DataTable from '../../components/DataTable.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
@@ -273,82 +275,95 @@
   {/if}
 {/snippet}
 
-<div class="tt-title-row">
-  <h1 tabindex="-1" bind:this={heading}>{t('adminOps.secrets.title')}</h1>
-  <HelpIcon topic="tenant-secrets" title={t('adminOps.secrets.title')} {nav} />
-</div>
-<p>{t(readOnly ? 'adminOps.secrets.introReadOnly' : 'adminOps.secrets.intro')}</p>
-
-<form
-  class="tt-secretlist__lookup"
-  aria-labelledby="{uid}-lookup-title"
-  onsubmit={(e) => {
-    e.preventDefault();
-    void lookup();
-  }}
+<PageHeader
+  title={t('adminOps.secrets.title')}
+  description={t(readOnly ? 'adminOps.secrets.introReadOnly' : 'adminOps.secrets.intro')}
+  bind:element={heading}
 >
-  <h2 class="tt-text-lg" id="{uid}-lookup-title">{t('adminSecrets.lookup.title')}</h2>
-  <p class="tt-text-sm tt-text-muted">{t('adminSecrets.lookup.intro')}</p>
-  <TextField
-    id="{uid}-lookup"
-    label={t('adminSecrets.lookup.label')}
-    hint={t('adminSecrets.lookup.hint')}
-    autocomplete="off"
-    autocapitalize="off"
-    spellcheck={false}
-    maxlength={2048}
-    bind:value={lookupText}
-    error={lookupError === '' ? undefined : lookupError}
-    bind:element={lookupInputEl}
-  />
-  <Button type="submit" variant="secondary" loading={lookupBusy} loadingLabel={t('adminSecrets.lookup.busy')}>
-    {t('adminSecrets.lookup.button')}
-  </Button>
-</form>
+  {#snippet help()}
+    <HelpIcon topic="tenant-secrets" title={t('adminOps.secrets.title')} {nav} />
+  {/snippet}
+</PageHeader>
+
+<Card tag="div">
+  <form
+    class="tt-secretlist__lookup"
+    aria-labelledby="{uid}-lookup-title"
+    onsubmit={(e) => {
+      e.preventDefault();
+      void lookup();
+    }}
+  >
+    <h2 class="tt-text-lg" id="{uid}-lookup-title">{t('adminSecrets.lookup.title')}</h2>
+    <p class="tt-text-sm tt-text-muted">{t('adminSecrets.lookup.intro')}</p>
+    <TextField
+      id="{uid}-lookup"
+      label={t('adminSecrets.lookup.label')}
+      hint={t('adminSecrets.lookup.hint')}
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck={false}
+      maxlength={2048}
+      bind:value={lookupText}
+      error={lookupError === '' ? undefined : lookupError}
+      bind:element={lookupInputEl}
+    />
+    <Button
+      type="submit"
+      variant="secondary"
+      loading={lookupBusy}
+      loadingLabel={t('adminSecrets.lookup.busy')}
+    >
+      {t('adminSecrets.lookup.button')}
+    </Button>
+  </form>
+</Card>
 
 {#if found !== undefined}
   {@const view = secretStateView(found.state, t)}
-  <section class="tt-secretlist__found" id="{uid}-found" aria-labelledby="{uid}-found-title">
-    <h2 class="tt-text-lg" id="{uid}-found-title" tabindex="-1" bind:this={foundHeading}>
-      {t('adminSecrets.lookup.result.title')}
-    </h2>
-    <dl class="tt-dl">
-      <dt>{t('adminSecrets.lookup.result.id')}</dt>
-      <dd class="tt-break"><code>{found.id}</code></dd>
-      <dt>{t('adminSecrets.lookup.result.kind')}</dt>
-      <dd>
-        {t(isExpress(found) ? 'adminSecrets.lookup.result.express' : 'adminSecrets.lookup.result.standard')}
-      </dd>
-      <dt>{t('adminSecrets.list.columns.state')}</dt>
-      <dd><StatusBadge variant={view.variant} label={view.label} /></dd>
-      <dt>{t('adminSecrets.list.columns.creator')}</dt>
-      <dd class="tt-break">
-        {#if found.senderEmail !== undefined}{found.senderEmail}<br />{/if}
-        {creatorKindLabel(found.creatorKind, t)}
-      </dd>
-      <dt>{t('adminSecrets.list.columns.delivery')}</dt>
-      <dd class="tt-break">{deliveryText(found, t)}</dd>
-      <dt>{t('adminSecrets.list.columns.file')}</dt>
-      <dd>
-        {found.hasFile
-          ? found.fileSize === undefined
-            ? t('adminSecrets.list.file.yes')
-            : formatBytes(found.fileSize)
-          : t('adminSecrets.list.file.no')}
-      </dd>
-      <dt>{t('adminSecrets.list.columns.created')}</dt>
-      <dd>{dateTime(found.createdAt)}</dd>
-      <dt>{t('adminSecrets.list.columns.expiry')}</dt>
-      <dd>{dateOr(found.expiresAt, t('adminSecrets.list.noExpiry'), dateTime)}</dd>
-      <dt>{t('adminSecrets.list.columns.read')}</dt>
-      <dd>{dateOr(found.readAt, t('adminSecrets.list.notRead'), dateTime)}</dd>
-    </dl>
-    {#if !readOnly && canDeleteSecret(found.state)}
-      <Button variant="secondary" onclick={() => found !== undefined && askDelete(found)}>
-        {t('adminSecrets.delete.button')}
-      </Button>
-    {/if}
-  </section>
+  <Card tag="div">
+    <section class="tt-secretlist__found" id="{uid}-found" aria-labelledby="{uid}-found-title">
+      <h2 class="tt-text-lg" id="{uid}-found-title" tabindex="-1" bind:this={foundHeading}>
+        {t('adminSecrets.lookup.result.title')}
+      </h2>
+      <dl class="tt-dl">
+        <dt>{t('adminSecrets.lookup.result.id')}</dt>
+        <dd class="tt-break"><code>{found.id}</code></dd>
+        <dt>{t('adminSecrets.lookup.result.kind')}</dt>
+        <dd>
+          {t(isExpress(found) ? 'adminSecrets.lookup.result.express' : 'adminSecrets.lookup.result.standard')}
+        </dd>
+        <dt>{t('adminSecrets.list.columns.state')}</dt>
+        <dd><StatusBadge variant={view.variant} label={view.label} /></dd>
+        <dt>{t('adminSecrets.list.columns.creator')}</dt>
+        <dd class="tt-break">
+          {#if found.senderEmail !== undefined}{found.senderEmail}<br />{/if}
+          {creatorKindLabel(found.creatorKind, t)}
+        </dd>
+        <dt>{t('adminSecrets.list.columns.delivery')}</dt>
+        <dd class="tt-break">{deliveryText(found, t)}</dd>
+        <dt>{t('adminSecrets.list.columns.file')}</dt>
+        <dd>
+          {found.hasFile
+            ? found.fileSize === undefined
+              ? t('adminSecrets.list.file.yes')
+              : formatBytes(found.fileSize)
+            : t('adminSecrets.list.file.no')}
+        </dd>
+        <dt>{t('adminSecrets.list.columns.created')}</dt>
+        <dd>{dateTime(found.createdAt)}</dd>
+        <dt>{t('adminSecrets.list.columns.expiry')}</dt>
+        <dd>{dateOr(found.expiresAt, t('adminSecrets.list.noExpiry'), dateTime)}</dd>
+        <dt>{t('adminSecrets.list.columns.read')}</dt>
+        <dd>{dateOr(found.readAt, t('adminSecrets.list.notRead'), dateTime)}</dd>
+      </dl>
+      {#if !readOnly && canDeleteSecret(found.state)}
+        <Button variant="secondary" onclick={() => found !== undefined && askDelete(found)}>
+          {t('adminSecrets.delete.button')}
+        </Button>
+      {/if}
+    </section>
+  </Card>
 {/if}
 
 <FilterBar
@@ -434,11 +449,6 @@
 />
 
 <style>
-  .tt-secretlist__lookup,
-  .tt-secretlist__found {
-    margin-bottom: var(--tt-space-6);
-  }
-
   .tt-secretlist__sub {
     display: block;
     color: var(--tt-muted);

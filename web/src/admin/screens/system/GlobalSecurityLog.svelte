@@ -3,13 +3,14 @@
   // page by page): filters reflected in the URL (tenant, type, period), one row per event with
   // its tenant ("Instance" for the events without tenant: unknown FQDN, provisioning token, admin
   // sign-in), date, type, reason, client IP and occurrences. With a tenant selected, the events
-  // without tenant are not shown. The system sub-navigation is rendered by App.svelte.
+  // without tenant are not shown. The system navigation is in the sidebar.
   import { untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, TextField } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, TextField } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import FilterBar from '../../components/FilterBar.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import SecurityEventsTable from '../../components/SecurityEventsTable.svelte';
   import SelectField from '../../components/SelectField.svelte';
   import { loadAllPages } from '../admins/admins';
@@ -159,8 +160,11 @@
   {/if}
 {/snippet}
 
-<h1 tabindex="-1">{t('adminSystem.security.title')}</h1>
-<p>{t('adminSystem.security.intro')}</p>
+<PageHeader title={t('adminSystem.security.title')} description={t('adminSystem.security.intro')}>
+  {#snippet help()}
+    <HelpIcon topic="system-security-log" title={t('adminSystem.security.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 <FilterBar
   label={t('opsSecurity.filters.globalLabel')}

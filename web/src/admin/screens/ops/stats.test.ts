@@ -13,6 +13,7 @@ import {
   seriesFor,
   seriesLabel,
   statsCards,
+  cardTrends,
   type TenantStats,
   type Translate,
 } from './stats';
@@ -172,5 +173,36 @@ describe('series', () => {
       labelHeader: 'opsStats.charts.labelHeader.day',
     });
     expect(chartTexts('12m', t).transfersTitle).toBe('opsStats.charts.transfers.month');
+  });
+});
+
+describe('cardTrends', () => {
+  const pct = (r: number) => `${Math.round(r * 100)}%`;
+  const previous = {
+    transferCount: 10,
+    bytesUploaded: 4096,
+    downloadCount: 30,
+    bytesDownloaded: 0,
+    virusDetections: 0,
+    secretsCreated: 1,
+  };
+
+  it('compares each figure with the previous period', () => {
+    const texts = cardTrends(stats({ previous, secretsCreated: 2 }), t, pct);
+    expect(texts.transfers).toBe('adminComponents.trend.up');
+    expect(texts.bytesUploaded).toBe('adminComponents.trend.down');
+    expect(texts.downloads).toBe('adminComponents.trend.flat');
+    expect(texts.bytesDownloaded).toBe('adminComponents.trend.new');
+    expect(texts.secretsCreated).toBe('adminComponents.trend.up');
+    expect(texts.virusDetections).toBe('adminComponents.trend.flat');
+  });
+
+  it('leaves out the secrets figure when the server does not report it', () => {
+    expect(cardTrends(stats({ previous }), t, pct).secretsCreated).toBeUndefined();
+  });
+
+  it('shows no trend for 12 months or without a previous period', () => {
+    expect(cardTrends(stats({ period: '12m', previous }), t, pct)).toEqual({});
+    expect(cardTrends(stats(), t, pct)).toEqual({});
   });
 });

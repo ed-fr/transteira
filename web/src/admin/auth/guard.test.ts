@@ -261,6 +261,7 @@ describe('auditor', () => {
     '/',
     '/account',
     '/tenants',
+    '/search',
     '/tenants/',
     '/tenants/t1/general',
     '/tenants/t1/transfers',

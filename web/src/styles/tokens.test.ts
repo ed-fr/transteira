@@ -346,3 +346,65 @@ describe.each(Object.entries(adminOverrides))('tokens.css, administration %s pal
     );
   });
 });
+
+describe.each(Object.entries(adminOverrides))('tokens.css, administration %s gauges', (name, overrides) => {
+  const palette = new Map([...palettes[name as keyof typeof palettes], ...overrides]);
+
+  // Gauge (Gauge, QuotaMeter, plan of step 3c, deviation 5): the fill on its --tt-separator track,
+  // the alert threshold marker in --tt-warning over the track and the muted surface around it.
+  it.each([
+    ['--tt-graphic', '--tt-separator'],
+    ['--tt-warning', '--tt-separator'],
+    ['--tt-danger', '--tt-separator'],
+    ['--tt-warning', '--tt-surface-muted'],
+    ['--tt-warning', '--tt-surface'],
+  ])('%s reaches 3:1 on %s', (fg, bg) => {
+    expect(contrastRatio(resolve(palette, fg), resolve(palette, bg))).toBeGreaterThanOrEqual(
+      MIN_RATIO_NON_TEXT,
+    );
+  });
+});
+
+describe('tokens.css, administration sidebar', () => {
+  const sidebar = block("html[data-app='admin'] .tt-admin-sidebar");
+  const darkSidebar = block("html[data-app='admin'][data-theme='dark'] .tt-admin-sidebar");
+  const background = resolve(sidebar, '--tt-sidebar-bg');
+  // Translucent backgrounds of the sidebar, composited over its background as browsers do.
+  const backgrounds: [string, Rgb][] = [
+    ['the sidebar background', background],
+    ['the current link background', over(resolveRgba(sidebar, '--tt-sidebar-active-bg'), background)],
+    ['the user block and hover background', over(resolveRgba(sidebar, '--tt-sidebar-raised-bg'), background)],
+  ];
+
+  it('keeps the dark green of the mockup', () => {
+    expect(sidebar.get('--tt-sidebar-bg')).toBe('#0b1f17');
+    expect(sidebar.get('--tt-focus-ring')).toBe(sidebar.get('--tt-sidebar-bg'));
+  });
+
+  describe.each(backgrounds)('on %s', (_name, bg) => {
+    it.each([
+      '--tt-sidebar-text',
+      '--tt-sidebar-strong',
+      '--tt-sidebar-muted',
+      '--tt-sidebar-link',
+      '--tt-link',
+    ])('%s reaches AA', (token) => {
+      expect(contrastRatio(resolve(sidebar, token), bg)).toBeGreaterThanOrEqual(MIN_RATIO_AA);
+    });
+
+    it.each(['--tt-focus', '--tt-sidebar-active-icon'])('%s reaches 3:1', (token) => {
+      expect(contrastRatio(resolve(sidebar, token), bg)).toBeGreaterThanOrEqual(MIN_RATIO_NON_TEXT);
+    });
+  });
+
+  it('separates the focus outline from its ring', () => {
+    expect(
+      contrastRatio(resolve(sidebar, '--tt-focus'), resolve(sidebar, '--tt-focus-ring')),
+    ).toBeGreaterThanOrEqual(MIN_RATIO_NON_TEXT);
+  });
+
+  it('keeps its palette in the dark theme, only adding a separating border', () => {
+    expect([...darkSidebar.keys()]).toEqual(['--tt-sidebar-border']);
+    expect(resolveRgba(darkSidebar, '--tt-sidebar-border').a).toBeGreaterThan(0);
+  });
+});

@@ -10,7 +10,7 @@
   // (POST …/express-secrets/purge, after a confirmation). An auditor has no access (403
   // read-only-role, shown as a load error); the fields and the purge are also disabled for the
   // read-only role in case the screen is shown.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { describeError } from '../../../shared/api/problem';
   import {
     Alert,
@@ -25,6 +25,8 @@
   import { adminApi, adminSession } from '../../api';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import FormSection from '../../components/FormSection.svelte';
+  import Card from '../../components/Card.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import SelectField from '../../components/SelectField.svelte';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
   import { isAuditor, tenantPath } from '../../shell';
@@ -151,10 +153,11 @@
   }
 </script>
 
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminTenants.secrets.title')}</h1>
-  <HelpIcon topic="tenant-secrets" title={t('adminTenants.secrets.title')} {nav} />
-</div>
+<PageHeader title={t('adminTenants.secrets.title')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-secrets" title={t('adminTenants.secrets.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if loading}
   <p><Spinner showLabel /></p>
@@ -248,7 +251,7 @@
           <Alert severity="info">
             <p>{t('adminSecrets.express.reminder.text')}</p>
             <p>
-              <a href={nav.href(tenantPath(tenantId, 'legal'))} use:nav.link>
+              <a class="tt-link-target" href={nav.href(tenantPath(tenantId, 'legal'))} use:nav.link>
                 {t('adminSecrets.express.reminder.link')}
               </a>
             </p>
@@ -288,9 +291,11 @@
     </fieldset>
   </FormSection>
 
-  <section class="tt-secrets__purge" id="{uid}-purge" aria-labelledby="{uid}-purge-title">
-    <h2 class="tt-text-lg" id="{uid}-purge-title">{t('adminSecrets.express.purge.title')}</h2>
-    <p>{t('adminSecrets.express.purge.intro')}</p>
+  <Card
+    title={t('adminSecrets.express.purge.title')}
+    headingId="{uid}-purge-title"
+    description={t('adminSecrets.express.purge.intro')}
+  >
     <p>
       <Button variant="danger" disabled={readOnly} onclick={() => (purgeOpen = true)}>
         {t('adminSecrets.express.purge.button')}
@@ -299,7 +304,7 @@
     {#if purgeDone !== ''}
       <Alert severity="success" live={false}>{purgeDone}</Alert>
     {/if}
-  </section>
+  </Card>
 
   <ConfirmDialog
     bind:open={purgeOpen}
@@ -321,10 +326,6 @@
 
   .tt-secrets__reminder {
     margin: 0 0 var(--tt-space-4);
-  }
-
-  .tt-secrets__purge {
-    margin-top: var(--tt-space-6);
   }
 
   .tt-secrets__inline {

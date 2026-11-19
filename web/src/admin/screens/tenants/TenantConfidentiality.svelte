@@ -6,7 +6,7 @@
   // downloads). Levels can be added, removed and reordered with buttons (no drag and drop, for
   // the keyboard). Client-side validation mirrors the spec; the server answer is shown again once
   // saved, and its field errors are mapped to the fields of the levels.
-  // The tenant sub-navigation is rendered by App.svelte.
+  // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { tick } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import {
@@ -22,6 +22,7 @@
   import { adminApi } from '../../api';
   import SelectField from '../../components/SelectField.svelte';
   import FormSection from '../../components/FormSection.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
   import type { AdminScreenProps } from '../types';
   import {
@@ -183,10 +184,11 @@
   }
 </script>
 
-<div class="tt-title-row">
-  <h1 tabindex="-1">{t('adminTenants.confidentiality.title')}</h1>
-  <HelpIcon topic="tenant-confidentiality" title={t('adminTenants.confidentiality.title')} {nav} />
-</div>
+<PageHeader title={t('adminTenants.confidentiality.title')}>
+  {#snippet help()}
+    <HelpIcon topic="tenant-confidentiality" title={t('adminTenants.confidentiality.title')} {nav} />
+  {/snippet}
+</PageHeader>
 
 {#if loading}
   <p><Spinner showLabel /></p>

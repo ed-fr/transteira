@@ -1,0 +1,267 @@
+/*
+ * Administration console (CLAUDE.md section 13.2; plan of step 3c), imported by the admin entry
+ * only (src/admin/main.ts): the public pages never load it.
+ *
+ * - Frame of a signed-in admin (AdminShell): the dark sidebar (Sidebar.svelte, 248 px, stacked
+ *   above the content under 60rem) and the main column on the muted page background, holding the
+ *   main landmark (banners, then the screen) and the slim footer at its bottom. The screens lay
+ *   out their content in cards (Card, DataTable, FormSection, FilterBar, StatCard: radius 16 px,
+ *   decorative --tt-separator border, --tt-surface background).
+ * - Targets of at least 44 px in the whole administration (plan deviation 6), for the shared
+ *   components whose compact sizes are kept on the public pages: small and link buttons, copy
+ *   buttons, the help icon, the theme and language switches of the footer, the labels of radio
+ *   buttons and checkboxes, and the links alone on their line (.tt-link-target). Sign-in and
+ *   setup screens included (no frame there, same rules).
+ * - The native meter of the gauges (.tt-meter, Gauge and QuotaMeter): a --tt-separator track and
+ *   a --tt-graphic fill, --tt-warning or --tt-danger at those levels (the text says the level).
+ * Every colour comes from tokens.css; no inline style anywhere (CSP).
+ */
+
+/* ---- Frame ------------------------------------------------------------------------------- */
+
+.tt-admin-frame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--tt-surface-muted);
+  color: var(--tt-text);
+}
+
+@media (min-width: 60rem) {
+  .tt-admin-frame {
+    grid-template-columns: 15.5rem minmax(0, 1fr);
+  }
+}
+
+.tt-admin-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tt-admin-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.75rem 2.25rem 2.5rem;
+}
+
+.tt-admin-main:focus {
+  outline: none;
+}
+
+/* Banners above the screen; the empty live region alone stays in the DOM, out of the flow. */
+.tt-admin-banners {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tt-space-3);
+  margin-bottom: var(--tt-space-6);
+}
+
+.tt-admin-maintenance:empty {
+  position: absolute;
+}
+
+.tt-admin-banners:has(> .tt-admin-maintenance:only-child:empty) {
+  margin: 0;
+}
+
+/* Slim footer at the bottom of the main column (Footer.svelte): help, language, theme, version. */
+.tt-admin-column > .tt-page__footer {
+  padding: 0 2.25rem var(--tt-space-4);
+}
+
+.tt-admin-column > .tt-page__footer .tt-footer__inner {
+  justify-content: flex-start;
+  max-width: none;
+  margin: 0;
+  padding: var(--tt-space-2) 0 0;
+  border-top: var(--tt-border-width) solid var(--tt-separator);
+  border-radius: 0;
+  background: transparent;
+  color: var(--tt-text);
+}
+
+@media (max-width: 40rem) {
+  .tt-admin-main {
+    padding: var(--tt-space-4);
+  }
+
+  .tt-admin-column > .tt-page__footer {
+    padding: 0 var(--tt-space-4) var(--tt-space-4);
+  }
+}
+
+/* ---- Targets of 44 px ---------------------------------------------------------------------- */
+
+html[data-app='admin'] .tt-button--small,
+html[data-app='admin'] .tt-button--link,
+html[data-app='admin'] .tt-copy {
+  min-width: var(--tt-control-height);
+  min-height: var(--tt-control-height);
+}
+
+html[data-app='admin'] .tt-help-icon {
+  width: var(--tt-control-height);
+  height: var(--tt-control-height);
+}
+
+html[data-app='admin'] .tt-theme,
+html[data-app='admin'] .tt-lang__select {
+  min-height: var(--tt-control-height);
+}
+
+html[data-app='admin'] .tt-footer .tt-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tt-control-height);
+  min-height: var(--tt-control-height);
+}
+
+html[data-app='admin'] .tt-radio__option label {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tt-control-height);
+}
+
+/*
+ * Checkbox labels: a 44 px target whose first line sits in the middle of it (padding, not
+ * centring, so that a label of several lines starts at the same place), and the box lowered to
+ * the middle of that first line (Checkbox keeps the box at the top of its row).
+ */
+html[data-app='admin'] .tt-check__label {
+  display: block;
+  box-sizing: border-box;
+  min-height: var(--tt-control-height);
+  padding-block: calc((var(--tt-control-height) - var(--tt-line-height) * 1em) / 2);
+}
+
+html[data-app='admin'] .tt-check__input {
+  margin-top: calc((var(--tt-control-height) - 1.25rem) / 2);
+}
+
+/*
+ * A link alone on its line (in its own paragraph or list item, never in running text): a target
+ * of at least 44 x 44 px (plan deviation 6), e.g. "Back", "Configure", the links to another
+ * screen; a short text (a one-word "Back") is centred in it.
+ */
+html[data-app='admin'] .tt-link-target {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tt-control-height);
+  min-height: var(--tt-control-height);
+}
+
+/* ---- Native meter of the gauges -------------------------------------------------------------- */
+
+/*
+ * Chromium and WebKit draw the track on ::-webkit-meter-bar (a percentage height does not apply
+ * there, hence the fixed heights); Firefox draws it on the element itself. The low / high /
+ * optimum state of the meter never changes the colour: the level classes do, and the text next
+ * to the meter always says the level (never colour alone).
+ */
+.tt-meter {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  border: 0;
+  background: none;
+}
+
+.tt-meter--sm {
+  height: 0.375rem;
+}
+
+.tt-meter::-webkit-meter-bar {
+  box-sizing: border-box;
+  height: 0.5rem;
+  border: 0;
+  border-radius: var(--tt-radius-full);
+  background: var(--tt-separator);
+}
+
+.tt-meter--sm::-webkit-meter-bar {
+  height: 0.375rem;
+}
+
+.tt-meter::-webkit-meter-optimum-value,
+.tt-meter::-webkit-meter-suboptimum-value,
+.tt-meter::-webkit-meter-even-less-good-value {
+  border-radius: var(--tt-radius-full);
+  background: var(--tt-graphic);
+}
+
+@supports selector(::-moz-meter-bar) {
+  .tt-meter {
+    border-radius: var(--tt-radius-full);
+    background: var(--tt-separator);
+  }
+}
+
+.tt-meter::-moz-meter-bar {
+  border-radius: var(--tt-radius-full);
+  background: var(--tt-graphic);
+}
+
+.tt-meter--warning::-webkit-meter-optimum-value,
+.tt-meter--warning::-webkit-meter-suboptimum-value,
+.tt-meter--warning::-webkit-meter-even-less-good-value {
+  background: var(--tt-warning);
+}
+
+.tt-meter--warning::-moz-meter-bar {
+  background: var(--tt-warning);
+}
+
+.tt-meter--danger::-webkit-meter-optimum-value,
+.tt-meter--danger::-webkit-meter-suboptimum-value,
+.tt-meter--danger::-webkit-meter-even-less-good-value {
+  background: var(--tt-danger);
+}
+
+.tt-meter--danger::-moz-meter-bar {
+  background: var(--tt-danger);
+}
+
+/* Forced colours: system colours for the track and the fill (backgrounds would be dropped). */
+@media (forced-colors: active) {
+  .tt-meter {
+    forced-color-adjust: none;
+  }
+
+  .tt-meter::-webkit-meter-bar {
+    border: 1px solid CanvasText;
+    background: Canvas;
+  }
+
+  /* Separate rules: a selector list with a pseudo-element unknown to the engine is dropped whole. */
+  .tt-meter::-webkit-meter-optimum-value,
+  .tt-meter::-webkit-meter-suboptimum-value,
+  .tt-meter::-webkit-meter-even-less-good-value {
+    background: Highlight;
+  }
+
+  .tt-meter::-moz-meter-bar {
+    background: Highlight;
+  }
+}
+
+/* ---- Printing -------------------------------------------------------------------------------- */
+
+@media print {
+  .tt-admin-sidebar,
+  .tt-admin-column > .tt-page__footer {
+    display: none !important;
+  }
+
+  .tt-admin-frame {
+    display: block;
+    min-height: 0;
+    background: none;
+  }
+
+  .tt-admin-main {
+    padding: 0;
+  }
+}

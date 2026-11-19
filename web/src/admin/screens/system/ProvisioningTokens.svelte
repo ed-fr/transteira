@@ -14,7 +14,7 @@
   // closes and when the screen goes away, and is never put in the URL, in storage, in a log or in
   // an announcement. The typed confirmation code is cleared at each submit, when the dialog
   // closes and when the screen goes away.
-  // The system sub-navigation is rendered by App.svelte.
+  // The system navigation is in the sidebar.
   import { onDestroy, onMount, tick } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, Dialog, HelpIcon, TextField, announce } from '../../../shared/components';
@@ -25,6 +25,7 @@
   import DataTable from '../../components/DataTable.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import LineListEditor from '../../components/LineListEditor.svelte';
+  import PageHeader from '../../components/PageHeader.svelte';
   import SecretOnceModal from '../../components/SecretOnceModal.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
@@ -279,15 +280,18 @@
   {/if}
 {/snippet}
 
-<div class="tt-title-row">
-  <h1 tabindex="-1" bind:this={heading}>{t('adminSystem.provisioning.title')}</h1>
-  <HelpIcon topic="system-provisioning" title={t('adminSystem.provisioning.title')} {nav} />
-</div>
-<p>{t('adminSystem.provisioning.intro')}</p>
-
-<p>
-  <Button onclick={openCreate}>{t('sysProvisioning.list.create')}</Button>
-</p>
+<PageHeader
+  title={t('adminSystem.provisioning.title')}
+  description={t('adminSystem.provisioning.intro')}
+  bind:element={heading}
+>
+  {#snippet help()}
+    <HelpIcon topic="system-provisioning" title={t('adminSystem.provisioning.title')} {nav} />
+  {/snippet}
+  {#snippet actions()}
+    <Button onclick={openCreate}>{t('sysProvisioning.list.create')}</Button>
+  {/snippet}
+</PageHeader>
 
 {#if loadError !== ''}
   <Alert severity="error">

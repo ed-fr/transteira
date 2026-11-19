@@ -94,11 +94,12 @@ export function byteErrorKey(error: ByteFieldError): 'required' | 'invalid' | 'n
 
 // ---- StatusBadge ---------------------------------------------------------------------------
 
-/** Variants of StatusBadge. */
-export type StatusVariant = 'ok' | 'warning' | 'missing' | 'error' | 'AA' | 'AAA' | 'fail' | 'info';
+/** Variants of StatusBadge ("neutral": a state without status colour, e.g. "Inactive"). */
+export type StatusVariant =
+  'ok' | 'warning' | 'missing' | 'error' | 'AA' | 'AAA' | 'fail' | 'info' | 'neutral';
 
-/** Kind of icon of each variant (a CSS class draws it; the text always says the status). */
-export function statusIcon(variant: StatusVariant): 'check' | 'alert' | 'cross' | 'info' {
+/** Kind of icon of each variant (decorative; the text always says the status). */
+export function statusIcon(variant: StatusVariant): 'check' | 'alert' | 'cross' | 'info' | 'dot' {
   switch (variant) {
     case 'ok':
     case 'AA':
@@ -110,6 +111,8 @@ export function statusIcon(variant: StatusVariant): 'check' | 'alert' | 'cross' 
     case 'error':
     case 'fail':
       return 'cross';
+    case 'neutral':
+      return 'dot';
     default:
       return 'info';
   }
