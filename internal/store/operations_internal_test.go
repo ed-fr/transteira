@@ -233,7 +233,10 @@ func TestOperationsDriverFaults(t *testing.T) {
 		"usageadd":   func() error { return db.TenantUsage().Add(ctx, f.tid, day, UsageCounts{Downloads: 1}) },
 		"usagenew":   func() error { return db.TenantUsage().Add(ctx, f.tid, day.AddDate(0, 0, 1), UsageCounts{Downloads: 1}) },
 		"usagerange": func() error { _, err := db.TenantUsage().Range(ctx, f.tid, day); return err },
-		"usageall":   func() error { _, err := db.TenantUsage().RangeAll(ctx, day); return err },
+		"usageall": func() error {
+			_, err := db.TenantUsage().RangeAllSplit(ctx, day.AddDate(0, 0, -1), day, day.AddDate(0, 0, 2))
+			return err
+		},
 		"usagepurge": func() error { _, err := db.TenantUsage().Purge(ctx, day.AddDate(-2, 0, 0)); return err },
 		"quotaget":   func() error { _, err := db.QuotaAlerts().Get(ctx, f.tid); return err },
 		"quotaset": func() error {
@@ -351,3 +354,44 @@ func rollbackAfter(_ int64, err error) error {
 
 // testPHCInternal is a syntactically valid password hash.
 const testPHCInternal = "$argon2id$v=19$m=65536,t=3,p=2$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA"
+
+// TestUsageRangeAllOneRowPerTenant checks that the statement behind the
+// global statistics sums the counters in the database: one row per tenant
+// however many days of counters the range holds on each side of the split,
+// so that the statistics never load a row per tenant and per day.
+func TestUsageRangeAllOneRowPerTenant(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		db := openMigratedEngine(t, e)
+		if _, err := db.Migrate(ctx); err != nil {
+			t.Fatal(err)
+		}
+		split := time.Date(2026, 3, 25, 0, 0, 0, 0, time.UTC)
+		from, until := split.AddDate(0, 0, -30), split.AddDate(0, 0, 30)
+		for _, fqdn := range []string{"a.example.com", "b.example.com"} {
+			tid := newTestTenant(ctx, t, db, fqdn)
+			for d := from; d.Before(until); d = d.AddDate(0, 0, 1) {
+				if err := db.TenantUsage().Add(ctx, tid, d, UsageCounts{Transfers: 1}); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		rows := 0
+		err := db.systemScope(reasonUsageAll).ReadTx(ctx, func(tx *SystemTx) error {
+			rs, err := tx.Query(ctx, qUsageRangeAll, toMillis(split), toMillis(from), toMillis(until))
+			if err != nil {
+				return err
+			}
+			defer func() { _ = rs.Close() }()
+			for rs.Next() {
+				rows++
+			}
+			return rs.Err()
+		})
+		if err != nil || rows != 2 {
+			t.Fatalf("global usage statement returned %d rows for 2 tenants over 60 days, %v; want 2", rows, err)
+		}
+	})
+}

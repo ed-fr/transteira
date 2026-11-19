@@ -48,10 +48,11 @@ var (
 	// (since 2.0), whose recipients are never mailed (409 state-conflict).
 	// It matches [ErrStateConflict].
 	ErrLinkOnly = fmt.Errorf("%w: a link-only transfer is never mailed", ErrStateConflict)
-	// ErrRateLimited reports too many notification resends of a transfer
-	// (429 rate-limited). The error is a *[RateLimitError] carrying the
+	// ErrRateLimited reports too many notification resends of a transfer,
+	// or, since 2.3, too many transfer searches of an administrator (429
+	// rate-limited). The error is a *[RateLimitError] carrying the
 	// Retry-After delay.
-	ErrRateLimited = errors.New("tenantops: too many resends")
+	ErrRateLimited = errors.New("tenantops: rate limit reached")
 	// ErrMailUnavailable reports a notification resend for a tenant
 	// without SMTP settings: nothing was queued (503 mail-unavailable).
 	ErrMailUnavailable = errors.New("tenantops: the tenant has no smtp settings")

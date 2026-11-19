@@ -672,13 +672,35 @@ func TestTenantUsage(t *testing.T) {
 		if got, err := repo.Range(ctx, b.ID, yesterday); err != nil || len(got) != 1 || got[0].Transfers != 5 {
 			t.Errorf("Range(B) = %+v, %v", got, err)
 		}
-		all, err := repo.RangeAll(ctx, yesterday)
-		wantAll := map[tenant.ID]store.UsageCounts{
-			a.ID: {Transfers: 4, BytesUploaded: 107, Downloads: 2, BytesDownloaded: 50, VirusDetections: 1, SecretsCreated: 3},
-			b.ID: {Transfers: 5},
-		}
-		if err != nil || !reflect.DeepEqual(all, wantAll) {
-			t.Errorf("RangeAll = %+v, %v", all, err)
+		// The global sums split the range at a day: from and the split day
+		// included, until excluded; one entry per tenant with activity.
+		todayA := store.UsageCounts{Transfers: 1, BytesUploaded: 100, Downloads: 2, BytesDownloaded: 50, VirusDetections: 1, SecretsCreated: 3}
+		tomorrow := today.AddDate(0, 0, 1)
+		for _, c := range []struct {
+			name               string
+			from, split, until time.Time
+			want               map[tenant.ID]store.PeriodUsage
+		}{
+			{"split at today", yesterday, today, tomorrow, map[tenant.ID]store.PeriodUsage{
+				a.ID: {Current: todayA, Previous: store.UsageCounts{Transfers: 3, BytesUploaded: 7}},
+				b.ID: {Current: store.UsageCounts{Transfers: 5}},
+			}},
+			{"until excluded", yesterday, yesterday, today, map[tenant.ID]store.PeriodUsage{
+				a.ID: {Current: store.UsageCounts{Transfers: 3, BytesUploaded: 7}},
+			}},
+			{"from included", old, today, tomorrow, map[tenant.ID]store.PeriodUsage{
+				a.ID: {Current: todayA, Previous: store.UsageCounts{Transfers: 12, BytesUploaded: 7}},
+				b.ID: {Current: store.UsageCounts{Transfers: 5}},
+			}},
+			{"no previous days", yesterday, yesterday, tomorrow, map[tenant.ID]store.PeriodUsage{
+				a.ID: {Current: store.UsageCounts{Transfers: 4, BytesUploaded: 107, Downloads: 2, BytesDownloaded: 50, VirusDetections: 1, SecretsCreated: 3}},
+				b.ID: {Current: store.UsageCounts{Transfers: 5}},
+			}},
+			{"no activity", tomorrow, tomorrow, tomorrow.AddDate(0, 0, 1), map[tenant.ID]store.PeriodUsage{}},
+		} {
+			if got, err := repo.RangeAllSplit(ctx, c.from, c.split, c.until); err != nil || !reflect.DeepEqual(got, c.want) {
+				t.Errorf("RangeAllSplit %s = %+v, %v; want %+v", c.name, got, err, c.want)
+			}
 		}
 		if n, err := repo.Purge(ctx, today.AddDate(0, -13, 0)); err != nil || n != 1 {
 			t.Errorf("Purge = %d, %v", n, err)

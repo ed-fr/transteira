@@ -49,6 +49,16 @@ and the project follows [Semantic Versioning](https://semver.org/).
   the shared test vectors and a fake server: `express-secret.ps1` (PowerShell 7.4),
   `express-secret.py` (Python 3.11, `cryptography` pinned by hash in `requirements.txt`) and
   `express-secret.go` (Go, standard library only).
+- Administration redesign, server side (specification section 13.2): search of transfers across
+  the entities of the administrator (`POST /admin/transfers/search`, a transfer identifier or a
+  complete address in the body, never in the URL; the super admin searches every active entity,
+  the other roles their own; each entity read through the existing entity-scoped reads; an auditor
+  may search by identifier only; 30 searches per minute per administrator, not audited, no
+  security-log event), state of the instance components for the super admin
+  (`GET /admin/system/status`: database and antivirus engines and states, storage, maintenance,
+  version, from the checks shared with `/healthz`), previous-period totals in the statistics of
+  an entity and in each row of the global statistics (7 and 30 days), virus and download counters
+  in the global rows, and the primary color of each entity in the entity answers.
 
 ### Changed
 

@@ -160,9 +160,20 @@ func TestOperationsIsolation(t *testing.T) {
 		if got, err := f.db.TenantUsage().Range(ctx, f.a.ID, opsDay); err != nil || len(got) != 1 || got[0].Transfers != 1 {
 			t.Errorf("Range(A) = %+v, %v", got, err)
 		}
-		all, err := f.db.TenantUsage().RangeAll(ctx, opsDay)
-		if err != nil || all[f.a.ID].Transfers != 1 || all[f.b.ID].Transfers != 2 {
-			t.Errorf("RangeAll = %+v, %v", all, err)
+		// The global sums (super admin global statistics only) keep each
+		// tenant's counters under its own ID, on both sides of the split.
+		all, err := f.db.TenantUsage().RangeAllSplit(ctx, opsDay.AddDate(0, 0, -1), opsDay, opsDay.AddDate(0, 0, 1))
+		want := map[tenant.ID]store.PeriodUsage{
+			f.a.ID: {Current: store.UsageCounts{Transfers: 1}},
+			f.b.ID: {Current: store.UsageCounts{Transfers: 2}},
+		}
+		if err != nil || len(all) != len(want) || all[f.a.ID] != want[f.a.ID] || all[f.b.ID] != want[f.b.ID] {
+			t.Errorf("RangeAllSplit = %+v, %v; want %+v", all, err, want)
+		}
+		all, err = f.db.TenantUsage().RangeAllSplit(ctx, opsDay, opsDay.AddDate(0, 0, 1), opsDay.AddDate(0, 0, 2))
+		if err != nil || len(all) != 2 || all[f.a.ID].Previous.Transfers != 1 || all[f.b.ID].Previous.Transfers != 2 ||
+			!all[f.a.ID].Current.IsZero() || !all[f.b.ID].Current.IsZero() {
+			t.Errorf("RangeAllSplit (previous side) = %+v, %v", all, err)
 		}
 		if q, err := f.db.QuotaAlerts().Get(ctx, f.a.ID); err != nil || q.Level != store.QuotaLevelWarning {
 			t.Errorf("quota level of A = %+v, %v", q, err)

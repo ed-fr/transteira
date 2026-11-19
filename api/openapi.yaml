@@ -6470,8 +6470,8 @@ paths:
         `400 validation-failed` on `/q` (`invalid-format`; `invalid-email` for a value holding
         `@` that is not a bare address). `limit` (1 to 50, 20 by default) bounds the number of
         transfers answered, all tenants together (`400 validation-failed` on `/limit`, code
-        `invalid-format`, outside that range). An unknown member is refused like in every admin
-        body (`400 validation-failed`, `invalid-format` on its pointer).
+        `invalid-format`, outside that range). An unknown member is refused
+        (`400 validation-failed`, `invalid-format` on its pointer).
 
         Paging without cursor: each tenant contributes at most its `limit` newest matches;
         they are merged, sorted newest first (`createdAt`, then `id`, both descending) and cut

@@ -55,7 +55,7 @@ var (
 		ID: "ten_a", Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
 		MaxTransferBytes: 5 << 30, MaxTransferCeiling: 10 << 30, StorageQuotaBytes: 1 << 40, StorageUsedBytes: 1 << 30,
 		Status: tenant.StatusActive, WebhookIncludeAddresses: true, AntivirusEnabled: true, AntivirusEffective: false,
-		CreatedAt: created, UpdatedAt: now,
+		PrimaryColor: "#1F4E79", CreatedAt: created, UpdatedAt: now,
 	}
 	brandingA = tenantadmin.Branding{
 		PrimaryColor: "#0B5FFF", AccentColor: "#00875A", HasLogo: true, BackgroundPreset: "aurora",
@@ -558,7 +558,8 @@ func TestTenantsHandlers(t *testing.T) {
 		Id: "ten_a", Name: "Entity A", Fqdn: "transfer.entity-a.example.com", DefaultLanguage: "fr",
 		MaxTransferBytes: 5 << 30, MaxTransferCeiling: 10 << 30, Status: gen.TenantStatusActive, StorageQuotaBytes: 1 << 40,
 		StorageUsedBytes: 1 << 30, WebhookIncludeAddresses: new(true), AllowRemoteInternalDeposit: new(false), AllowTransferReply: new(false),
-		AntivirusEnabled: new(true), AntivirusEffective: new(false), LinkOnlyAllowed: new(false), CreatedAt: created, UpdatedAt: now,
+		AntivirusEnabled: new(true), AntivirusEffective: new(false), LinkOnlyAllowed: new(false),
+		PrimaryColor: new(gen.HexColor("#1F4E79")), CreatedAt: created, UpdatedAt: now,
 	}
 
 	cursor, limit := "c1", 10
@@ -1094,5 +1095,19 @@ func TestTenantBodyE2EPolicy(t *testing.T) {
 	}
 	if b := tenantBody(tenantadmin.TenantView{}); b.E2ePolicy != nil {
 		t.Errorf("unknown policy rendered: %v", *b.E2ePolicy)
+	}
+}
+
+func TestPrimaryColorOf(t *testing.T) {
+	t.Parallel()
+	if primaryColorOf("") != nil {
+		t.Error("an empty color must be absent")
+	}
+	if c := primaryColorOf("#0B5FFF"); c == nil || *c != "#0B5FFF" {
+		t.Errorf("color %v", c)
+	}
+	// A new tenant carries its color too (TenantCreated).
+	if b := tenantCreatedBody(tenantadmin.TenantCreated{TenantView: viewA}); b.PrimaryColor == nil || *b.PrimaryColor != "#1F4E79" {
+		t.Errorf("created color %v", b.PrimaryColor)
 	}
 }

@@ -57,8 +57,12 @@ type TenantView struct {
 	// SetupState is setup while the tenant is being configured, active
 	// afterwards (since V1.2, read only: see [Service.CompleteSetup]).
 	SetupState tenant.SetupState
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	// PrimaryColor is the "#RRGGBB" primary color of the branding, the
+	// default color until customized (since 2.3, read only: changed by
+	// [Service.UpdateBranding]).
+	PrimaryColor string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // TenantPage is a page of tenants.
@@ -156,7 +160,8 @@ func (s *Service) view(ctx context.Context, t *tenant.Tenant) (TenantView, error
 		WebhookIncludeAddresses:    t.WebhookIncludeAddresses,
 		AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit, AllowTransferReply: t.AllowTransferReply,
 		AntivirusEnabled: t.AntivirusEnabled, AntivirusEffective: s.AntivirusEffective(t),
-		LinkOnlyAllowed: t.LinkOnlyAllowed, E2EPolicy: t.E2EPolicy, SetupState: t.SetupState, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		LinkOnlyAllowed: t.LinkOnlyAllowed, E2EPolicy: t.E2EPolicy, SetupState: t.SetupState, PrimaryColor: t.PrimaryColor,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}, nil
 }
 

@@ -14,6 +14,7 @@ import (
 // behind one interface, so that the tests can inject failures.
 type repo interface {
 	getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
+	listTenants(ctx context.Context, opts store.TenantListOptions) (store.Page[*tenant.Tenant], error)
 	listTransfers(ctx context.Context, tid tenant.ID, f store.AdminTransferFilter) (store.Page[store.AdminTransfer], error)
 	getTransfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error)
 	listInvitations(ctx context.Context, tid tenant.ID, f store.InvitationFilter) (store.Page[store.Invitation], error)
@@ -71,6 +72,12 @@ func (r *storeRepo) scrub(ctx context.Context) error { return r.db.ScrubDeleted(
 
 func (r *storeRepo) getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
 	return r.db.Tenants().Get(ctx, tid)
+}
+
+// listTenants reads a page of every tenant, whatever its status, for the
+// search of the super admin (store system scope, tenant registry only).
+func (r *storeRepo) listTenants(ctx context.Context, opts store.TenantListOptions) (store.Page[*tenant.Tenant], error) {
+	return r.db.Tenants().List(ctx, opts)
 }
 
 func (r *storeRepo) listTransfers(ctx context.Context, tid tenant.ID, f store.AdminTransferFilter) (store.Page[store.AdminTransfer], error) {

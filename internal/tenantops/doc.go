@@ -73,4 +73,20 @@
 // mail address: the audit package refuses any (audit.ErrPersonalDetail).
 // The no-op cases (transfer already ended, invitation revoked or expired)
 // record nothing.
+//
+// # Transfer search (since 2.3, T-409 to T-414)
+//
+// [Service.SearchTransfers] finds transfers by identifier or by complete
+// address in every tenant within the scope of the administrator: the
+// active tenants read from the registry for the super admin, the active
+// tenants it is attached to otherwise. It adds no query of its own: each
+// tenant is read in turn through [Service.GetTransfer] or
+// [Service.ListTransfers], which check the access and the state of the
+// tenant again and run in its scope, so that a tenant outside the scope is
+// never read and an identifier of another tenant answers like an unknown
+// one. An auditor may search by identifier only (adminauth.ErrReadOnlyRole
+// for a query holding "@", before it is checked). The searches are limited
+// per administrator (SearchRateLimit per SearchRateWindow, kept in
+// memory) and never audited (P95), like the address filter of the
+// transfer list.
 package tenantops

@@ -546,6 +546,7 @@ func (s *Server) GetTenantStats(ctx context.Context, req gen.GetTenantStatsReque
 	}
 	secrets := int(st.SecretsCreated)
 	resp.SecretsCreated = &secrets
+	resp.Previous = periodTotals(st.Previous)
 	resp.Series = makeLike(resp.Series, len(st.Series))
 	for i, pt := range st.Series {
 		out := &resp.Series[i]
@@ -575,11 +576,25 @@ func (s *Server) GetGlobalStats(ctx context.Context, req gen.GetGlobalStatsReque
 		out := &resp.Tenants[i]
 		out.TenantId, out.Name = string(row.TenantID), row.Name
 		out.TransferCount, out.BytesUploaded = int(row.Transfers), row.BytesUploaded
-		secrets := int(row.SecretsCreated)
-		out.SecretsCreated = &secrets
+		secrets, downloads, virus := int(row.SecretsCreated), int(row.Downloads), int(row.VirusDetections)
+		out.SecretsCreated, out.DownloadCount, out.VirusDetections = &secrets, &downloads, &virus
+		out.BytesDownloaded = &row.BytesDownloaded
+		out.Previous = periodTotals(row.Previous)
 		out.StorageUsedBytes, out.StorageQuotaBytes, out.StorageUsedRatio = row.UsedBytes, row.QuotaBytes, float32(row.UsedRatio)
 	}
 	return resp, nil
+}
+
+// periodTotals renders the counters of the previous period, nil when the
+// period has none (12m).
+func periodTotals(c *store.UsageCounts) *gen.PeriodTotals {
+	if c == nil {
+		return nil
+	}
+	return &gen.PeriodTotals{
+		TransferCount: int(c.Transfers), BytesUploaded: c.BytesUploaded, DownloadCount: int(c.Downloads),
+		BytesDownloaded: c.BytesDownloaded, VirusDetections: int(c.VirusDetections), SecretsCreated: int(c.SecretsCreated),
+	}
 }
 
 // byteSize converts a filesystem size, capped at the largest ByteSize.

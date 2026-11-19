@@ -375,8 +375,19 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, AllowRemoteInternalDeposit: &v.AllowRemoteInternalDeposit,
 		AllowTransferReply: &v.AllowTransferReply, AntivirusEnabled: &v.AntivirusEnabled,
 		AntivirusEffective: &v.AntivirusEffective, SetupState: setupStateOf(v.SetupState),
-		LinkOnlyAllowed: &v.LinkOnlyAllowed, E2ePolicy: e2ePolicyOf(v.E2EPolicy), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		LinkOnlyAllowed: &v.LinkOnlyAllowed, E2ePolicy: e2ePolicyOf(v.E2EPolicy), PrimaryColor: primaryColorOf(v.PrimaryColor),
+		CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
+}
+
+// primaryColorOf renders the primary color of a tenant, nil when unknown
+// (a view built without one; a stored tenant always has one).
+func primaryColorOf(c string) *gen.HexColor {
+	if c == "" {
+		return nil
+	}
+	v := gen.HexColor(c)
+	return &v
 }
 
 // e2ePolicyOf renders the end-to-end policy of a tenant, nil when unknown
@@ -437,7 +448,7 @@ func tenantCreatedBody(c tenantadmin.TenantCreated) gen.TenantCreated {
 		WebhookIncludeAddresses: t.WebhookIncludeAddresses, AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit,
 		AllowTransferReply: t.AllowTransferReply, AntivirusEnabled: t.AntivirusEnabled,
 		AntivirusEffective: t.AntivirusEffective, SetupState: t.SetupState, LinkOnlyAllowed: t.LinkOnlyAllowed,
-		E2ePolicy: t.E2ePolicy, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		E2ePolicy: t.E2ePolicy, PrimaryColor: t.PrimaryColor, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}
 }
 

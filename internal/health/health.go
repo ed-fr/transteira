@@ -104,8 +104,9 @@ type Service struct {
 
 // run is a set of checks in progress, shared by concurrent callers.
 type run struct {
-	done   chan struct{} // closed once report is set
+	done   chan struct{} // closed once report and at are set
 	report Report
+	at     time.Time // completion time of report
 }
 
 // unavailableReport is returned to a caller that gives up waiting.
@@ -129,11 +130,20 @@ func (r Report) Healthy() bool {
 // its own timeout), so a caller giving up does not cancel it for the others;
 // that caller gets every component reported unavailable.
 func (s *Service) Run(ctx context.Context) Report {
+	r, _ := s.RunAt(ctx)
+	return r
+}
+
+// RunAt is Run that also returns when the checks of the report ran (the
+// completion time of the run, which may be up to CacheTTL old). A caller
+// that gave up waiting gets the current time with its all-unavailable
+// report.
+func (s *Service) RunAt(ctx context.Context) (Report, time.Time) {
 	s.mu.Lock()
 	if !s.cachedAt.IsZero() && s.clock().Sub(s.cachedAt) < CacheTTL {
-		r := s.cached
+		r, at := s.cached, s.cachedAt
 		s.mu.Unlock()
-		return r
+		return r, at
 	}
 	c := s.inflight
 	if c == nil {
@@ -145,9 +155,9 @@ func (s *Service) Run(ctx context.Context) Report {
 
 	select {
 	case <-c.done:
-		return c.report
+		return c.report, c.at
 	case <-ctx.Done():
-		return unavailableReport
+		return unavailableReport, s.clock()
 	}
 }
 
@@ -155,7 +165,8 @@ func (s *Service) Run(ctx context.Context) Report {
 func (s *Service) execute(ctx context.Context, c *run) {
 	c.report = s.runChecks(ctx)
 	s.mu.Lock()
-	s.cached, s.cachedAt, s.inflight = c.report, s.clock(), nil
+	c.at = s.clock()
+	s.cached, s.cachedAt, s.inflight = c.report, c.at, nil
 	s.mu.Unlock()
 	close(c.done)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/ed-fr/transteira/internal/antivirus/antivirustest"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/store/storetest"
+	"github.com/ed-fr/transteira/internal/tenant"
 )
 
 // End-to-end tests of the tenant operations of the administration
@@ -115,6 +116,41 @@ func TestOperationsFullFlow(t *testing.T) {
 			expectSeries(t, "series "+p.period, st.Series, p.n, p.monthly, *tr.FinalizedAt, 1, size)
 		}
 		expectProblem(t, o.sa.call(t, http.MethodGet, tenantPath(o.tid, "/stats?period=1y"), nil), http.StatusBadRequest, "validation-failed")
+
+		// Trend (2.3): the previous period is given for 7d and 30d (zero
+		// here, the activity of the test is today), never for 12m; the
+		// answers match the contract.
+		for _, per := range []string{"7d", "30d", "12m"} {
+			path := tenantPath(o.tid, "/stats?period="+per)
+			resp := mustStatus(t, "getTenantStats "+per, o.sa.call(t, http.MethodGet, path, nil), http.StatusOK)
+			expectContract(t, "getTenantStats", http.MethodGet, path, resp)
+			var body struct {
+				Previous *map[string]float64 `json:"previous"`
+			}
+			mustJSON(t, resp.body, &body)
+			if wantPrev := per != "12m"; (body.Previous != nil) != wantPrev {
+				t.Errorf("stats %s previous = %v, want present: %v", per, body.Previous, wantPrev)
+			}
+			if body.Previous != nil && len(*body.Previous) != 6 {
+				t.Errorf("stats %s previous = %v, want the six counters", per, *body.Previous)
+			}
+		}
+		for _, call := range []struct{ id, path string }{
+			{"listTenants", pathTenants + "?limit=200"},
+			{"getTenant", tenantPath(o.tid, "")},
+			{"getGlobalStats", pathGlobalStats + "?period=30d"},
+			{"getGlobalStats", pathGlobalStats + "?period=12m"},
+		} {
+			resp := mustStatus(t, call.id, o.sa.call(t, http.MethodGet, call.path, nil), http.StatusOK)
+			expectContract(t, call.id, http.MethodGet, call.path, resp)
+		}
+		var tn struct {
+			PrimaryColor string `json:"primaryColor"`
+		}
+		mustJSON(t, mustStatus(t, "getTenant", o.sa.call(t, http.MethodGet, tenantPath(o.tid, ""), nil), http.StatusOK).body, &tn)
+		if tn.PrimaryColor != tenant.DefaultPrimaryColor {
+			t.Errorf("tenant primaryColor = %q, want the default %q", tn.PrimaryColor, tenant.DefaultPrimaryColor)
+		}
 
 		// Global statistics (item 11): the disk of the data directory and
 		// one row per active tenant.

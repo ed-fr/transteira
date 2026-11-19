@@ -29,13 +29,15 @@ const apiBase = "/api/v1"
 // API 2.1 the one-time secrets settings update (every required member) and,
 // since API 1.2, the creation of a provisioning token and of a tenant by a
 // provisioning token, and since API 2.0 the import of a tenant
-// configuration (strict JSON: duplicate and unknown members refused).
+// configuration (strict JSON: duplicate and unknown members refused), and
+// since API 2.3 the transfer search (unknown members refused).
 var rawBodyRoutes = map[string]bool{
 	http.MethodPut + " " + apiBase + "/admin/tenants/{tenantId}/abuse-thresholds": true,
 	http.MethodPut + " " + apiBase + "/admin/tenants/{tenantId}/secret-settings":  true,
 	http.MethodPost + " " + apiBase + "/admin/provisioning-tokens":                true,
 	http.MethodPost + " " + apiBase + "/provisioning/tenants":                     true,
 	importRoute: true,
+	searchRoute: true,
 }
 
 // importRoute is the route pattern of importTenant.

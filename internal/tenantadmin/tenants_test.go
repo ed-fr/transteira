@@ -104,6 +104,9 @@ func TestGetTenant(t *testing.T) {
 		if v.ID != ev.a.ID || v.FQDN != hostA || v.StorageUsedBytes != 0 || v.MaxTransferCeiling != 10<<30 {
 			t.Fatalf("view: %+v", v)
 		}
+		if v.PrimaryColor == "" || v.PrimaryColor != ev.a.PrimaryColor {
+			t.Fatalf("primary color %q, want %q", v.PrimaryColor, ev.a.PrimaryColor)
+		}
 		_, err = ev.svc.GetTenant(ctx, ev.adminB, ev.a.ID)
 		wantErr(t, "other tenant", err, ErrNotFound)
 		_, err = ev.svc.GetTenant(ctx, ev.super, "ten_01JAB00000000000000000000Z")
@@ -149,6 +152,9 @@ func TestCreateTenant(t *testing.T) {
 		}
 		if v.SetupState != tenant.SetupStateActive {
 			t.Fatalf("setup state %q, want active", v.SetupState)
+		}
+		if v.PrimaryColor != tenant.DefaultPrimaryColor {
+			t.Fatalf("primary color %q, want the default", v.PrimaryColor)
 		}
 		// The state asked for is kept: setup.
 		setup := in

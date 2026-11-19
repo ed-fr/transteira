@@ -27,6 +27,14 @@
 // points, the current month included, each dated on the first day of its
 // month). Every point is present, zero-filled when there was no activity.
 // The storage figures are the current values.
+//
+// # Trend
+//
+// For the 7d and 30d periods the counters of the period of the same length
+// that ends just before the requested one (the 7 or 30 UTC days before its
+// first day) are given as Previous, read in the same query as the period
+// and split at its first day. There is none for 12m: the daily counters are
+// kept 13 months.
 package stats
 
 import (
@@ -127,6 +135,9 @@ type TenantStats struct {
 	// Series breaks Transfers and BytesUploaded down over the period,
 	// oldest first.
 	Series []Point
+	// Previous are the counters of the period of the same length just
+	// before this one (7d and 30d only, nil for 12m).
+	Previous *store.UsageCounts
 }
 
 // Disk is the usage of the filesystem holding the data directory.
@@ -157,6 +168,14 @@ type TenantRow struct {
 	BytesUploaded int64
 	// SecretsCreated counts the one-time secrets created over the period.
 	SecretsCreated int64
+	// Downloads, BytesDownloaded and VirusDetections are the other counters
+	// of the period, as in [TenantStats].
+	Downloads       int64
+	BytesDownloaded int64
+	VirusDetections int64
+	// Previous are the counters of the period of the same length just
+	// before this one (7d and 30d only, nil for 12m).
+	Previous *store.UsageCounts
 	// Storage is the current storage.
 	Storage
 }
@@ -178,7 +197,7 @@ type repo interface {
 	usedBytes(ctx context.Context, tid tenant.ID) (int64, error)
 	usedBytesAll(ctx context.Context) (map[tenant.ID]int64, error)
 	usage(ctx context.Context, tid tenant.ID, fromDay time.Time) ([]store.DailyUsage, error)
-	usageAll(ctx context.Context, fromDay time.Time) (map[tenant.ID]store.UsageCounts, error)
+	usageAll(ctx context.Context, fromDay, splitDay, untilDay time.Time) (map[tenant.ID]store.PeriodUsage, error)
 	scanQueueFiles(ctx context.Context) (int64, error)
 	activeCounts(ctx context.Context, since time.Time) (map[tenant.ID]store.TenantTransferCounts, error)
 	secretCounts(ctx context.Context, since time.Time) (map[tenant.ID]store.TenantSecretCounts, error)
@@ -277,7 +296,7 @@ func (s *Service) TenantStats(ctx context.Context, p adminauth.Principal, tid te
 	case t.Status != tenant.StatusActive:
 		return TenantStats{}, ErrNotFound
 	}
-	days, err := s.repo.usage(ctx, tid, w.from)
+	days, err := s.repo.usage(ctx, tid, w.readFrom())
 	if err != nil {
 		return TenantStats{}, fmt.Errorf("stats: read usage: %w", err)
 	}
@@ -286,7 +305,14 @@ func (s *Service) TenantStats(ctx context.Context, p adminauth.Principal, tid te
 		return TenantStats{}, fmt.Errorf("stats: read storage used: %w", err)
 	}
 	out := TenantStats{Period: period, Storage: storage(used, t.StorageQuotaBytes), Series: w.points()}
+	if w.hasPrevious() {
+		out.Previous = &store.UsageCounts{}
+	}
 	for _, d := range days {
+		if d.Day.Before(w.from) {
+			*out.Previous = add(*out.Previous, d.UsageCounts)
+			continue
+		}
 		i := w.index(d.Day)
 		if i < 0 {
 			continue // after today (clock skew): outside the period
@@ -335,7 +361,7 @@ func (s *Service) GlobalStats(ctx context.Context, p adminauth.Principal, period
 	if err != nil {
 		return GlobalStats{}, fmt.Errorf("stats: list tenants: %w", err)
 	}
-	usage, err := s.repo.usageAll(ctx, w.from)
+	usage, err := s.repo.usageAll(ctx, w.readFrom(), w.from, w.until)
 	if err != nil {
 		return GlobalStats{}, fmt.Errorf("stats: read usage: %w", err)
 	}
@@ -345,10 +371,16 @@ func (s *Service) GlobalStats(ctx context.Context, p adminauth.Principal, period
 	}
 	out := GlobalStats{Period: period, Disk: d, Tenants: make([]TenantRow, 0, len(tenants))}
 	for _, t := range tenants {
-		u := usage[t.ID]
+		pu := usage[t.ID]
+		u := pu.Current
+		var prev *store.UsageCounts
+		if w.hasPrevious() {
+			prev = &pu.Previous
+		}
 		out.Tenants = append(out.Tenants, TenantRow{
 			TenantID: t.ID, Name: t.Name, Transfers: u.Transfers, BytesUploaded: u.BytesUploaded,
-			SecretsCreated: u.SecretsCreated, Storage: storage(used[t.ID], t.StorageQuotaBytes),
+			SecretsCreated: u.SecretsCreated, Downloads: u.Downloads, BytesDownloaded: u.BytesDownloaded,
+			VirusDetections: u.VirusDetections, Previous: prev, Storage: storage(used[t.ID], t.StorageQuotaBytes),
 		})
 	}
 	return out, nil
@@ -454,13 +486,27 @@ type window struct {
 	starts []time.Time
 	// monthly tells whether the points are months.
 	monthly bool
+	// until is 00:00 UTC of the day after today, the excluded end of the
+	// days read.
+	until time.Time
+	// length is the number of days of a 7d or 30d period, 0 for 12m.
+	length int
+}
+
+// hasPrevious tells whether the period has a previous one (7d and 30d).
+func (w window) hasPrevious() bool { return w.length > 0 }
+
+// readFrom returns the first day to read: the first day of the previous
+// period when there is one, else the first day of the period.
+func (w window) readFrom() time.Time {
+	return w.from.AddDate(0, 0, -w.length)
 }
 
 // newWindow returns the window of period (a value returned by
 // ParsePeriod) ending today (the UTC day of now).
 func newWindow(period Period, now time.Time) window {
 	today := store.DayOf(now)
-	var w window
+	w := window{until: today.AddDate(0, 0, 1)}
 	if period == Period12Months {
 		w.monthly = true
 		first := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, time.UTC)
@@ -472,6 +518,7 @@ func newWindow(period Period, now time.Time) window {
 		if period == Period7Days {
 			n = 7
 		}
+		w.length = n
 		for i := n - 1; i >= 0; i-- {
 			w.starts = append(w.starts, today.AddDate(0, 0, -i))
 		}

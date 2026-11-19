@@ -72,8 +72,8 @@ func (r storeRepo) usage(ctx context.Context, tid tenant.ID, fromDay time.Time) 
 }
 
 // usageAll implements repo.
-func (r storeRepo) usageAll(ctx context.Context, fromDay time.Time) (map[tenant.ID]store.UsageCounts, error) {
-	return r.db.TenantUsage().RangeAll(ctx, fromDay)
+func (r storeRepo) usageAll(ctx context.Context, fromDay, splitDay, untilDay time.Time) (map[tenant.ID]store.PeriodUsage, error) {
+	return r.db.TenantUsage().RangeAllSplit(ctx, fromDay, splitDay, untilDay)
 }
 
 // scanQueueFiles implements repo.

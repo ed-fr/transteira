@@ -120,6 +120,12 @@ type Service struct {
 	busyRetries    int
 	busyDelay      time.Duration
 	busyRetryAfter time.Duration
+	// searches limits the transfer searches of each administrator
+	// (SearchRateLimit per SearchRateWindow, keyed by admin ID).
+	searches *ratelimit.Window
+	// tenantPage is the page size of the tenant registry read by the
+	// search of the super admin.
+	tenantPage int
 }
 
 // errMissingDependency reports a [New] call without a required option.
@@ -154,6 +160,8 @@ func New(db *store.DB, opts Options) (*Service, error) {
 		window = DefaultResendWindow
 	}
 	s.resends = ratelimit.NewWindow(limit, window, ratelimit.WithClock(s.now))
+	s.searches = ratelimit.NewWindow(SearchRateLimit, SearchRateWindow, ratelimit.WithClock(s.now))
+	s.tenantPage = store.MaxPageSize
 	s.busyRetries, s.busyDelay, s.busyRetryAfter = opts.BusyRetries, opts.BusyDelay, opts.BusyRetryAfter
 	switch {
 	case s.busyRetries == 0:

@@ -11,7 +11,7 @@ import (
 
 // Reasons of the usage and quota alert system queries.
 const (
-	reasonUsageAll   = "global statistics: usage counters of every tenant (no personal data)"
+	reasonUsageAll   = "global statistics: usage counters of every tenant over a bounded range, summed per tenant (no personal data)"
 	reasonUsagePurge = "periodic cleanup: purge the usage counters older than 13 months"
 )
 
@@ -33,13 +33,25 @@ var (
 	qUsageRange = tenantQuery(
 		`SELECT day, transfers, bytes_uploaded, downloads, bytes_downloaded, virus_detections, secrets_created
 		FROM tenant_daily_stats WHERE tenant_id = ? AND day >= ? ORDER BY day`)
-	// qUsageRangeAll sums the counters of every tenant since a day. The
-	// CASTs keep integer results on PostgreSQL (sum of BIGINT is NUMERIC).
+	// qUsageRangeAll sums the counters of every tenant over the days from a
+	// first day (included) to an end day (excluded), split at a day: the
+	// first six sums cover the days from the split day (in_period is 1),
+	// the last six the days before it (in_period is 0). The database does
+	// the sums, so the statement returns one row per tenant whatever the
+	// length of the range. The CASTs keep integer results on PostgreSQL
+	// (sum of BIGINT is NUMERIC).
 	qUsageRangeAll = systemQuery(
-		`SELECT tenant_id, CAST(sum(transfers) AS BIGINT), CAST(sum(bytes_uploaded) AS BIGINT),
-		CAST(sum(downloads) AS BIGINT), CAST(sum(bytes_downloaded) AS BIGINT), CAST(sum(virus_detections) AS BIGINT),
-		CAST(sum(secrets_created) AS BIGINT)
-		FROM tenant_daily_stats WHERE day >= ? GROUP BY tenant_id ORDER BY tenant_id`,
+		`SELECT tenant_id,
+		CAST(sum(transfers * in_period) AS BIGINT), CAST(sum(bytes_uploaded * in_period) AS BIGINT),
+		CAST(sum(downloads * in_period) AS BIGINT), CAST(sum(bytes_downloaded * in_period) AS BIGINT),
+		CAST(sum(virus_detections * in_period) AS BIGINT), CAST(sum(secrets_created * in_period) AS BIGINT),
+		CAST(sum(transfers * (1 - in_period)) AS BIGINT), CAST(sum(bytes_uploaded * (1 - in_period)) AS BIGINT),
+		CAST(sum(downloads * (1 - in_period)) AS BIGINT), CAST(sum(bytes_downloaded * (1 - in_period)) AS BIGINT),
+		CAST(sum(virus_detections * (1 - in_period)) AS BIGINT), CAST(sum(secrets_created * (1 - in_period)) AS BIGINT)
+		FROM (SELECT tenant_id, transfers, bytes_uploaded, downloads, bytes_downloaded, virus_detections, secrets_created,
+		CASE WHEN day >= ? THEN 1 ELSE 0 END AS in_period
+		FROM tenant_daily_stats WHERE day >= ? AND day < ?) d
+		GROUP BY tenant_id ORDER BY tenant_id`,
 		reasonUsageAll)
 	qUsagePurge = systemQuery(
 		`DELETE FROM tenant_daily_stats WHERE day < ?`,
@@ -128,12 +140,16 @@ func (r *TenantUsage) Add(ctx context.Context, tid tenant.ID, day time.Time, del
 	})
 }
 
+// usageFields returns the addresses of the six counters of c, in the
+// column order of the statements.
+func usageFields(c *UsageCounts) []any {
+	return []any{&c.Transfers, &c.BytesUploaded, &c.Downloads, &c.BytesDownloaded, &c.VirusDetections, &c.SecretsCreated}
+}
+
 // scanUsage reads the six counters after the scanned prefix.
 func scanUsage(sc interface{ Scan(...any) error }, prefix ...any) (UsageCounts, error) {
 	var c UsageCounts
-	dest := append(append(make([]any, 0, len(prefix)+6), prefix...), &c.Transfers, &c.BytesUploaded, &c.Downloads,
-		&c.BytesDownloaded, &c.VirusDetections, &c.SecretsCreated)
-	err := sc.Scan(dest...)
+	err := sc.Scan(append(append(make([]any, 0, len(prefix)+6), prefix...), usageFields(&c)...)...)
 	return c, err
 }
 
@@ -153,29 +169,42 @@ func (r *TenantUsage) Range(ctx context.Context, tid tenant.ID, fromDay time.Tim
 	})
 }
 
-// RangeAll returns, for every tenant with counters from fromDay included,
-// the sum of its counters since then. It is a system query (reason "global
-// statistics: usage counters of every tenant (no personal data)"); a
-// tenant without activity is absent from the map.
-func (r *TenantUsage) RangeAll(ctx context.Context, fromDay time.Time) (map[tenant.ID]UsageCounts, error) {
-	out := map[tenant.ID]UsageCounts{}
+// PeriodUsage is the usage of a tenant over a period and over the days
+// read just before it (see [TenantUsage.RangeAllSplit]).
+type PeriodUsage struct {
+	// Current sums the counters of the days of the period.
+	Current UsageCounts
+	// Previous sums the counters of the days read before the period.
+	Previous UsageCounts
+}
+
+// RangeAllSplit returns, for every tenant with counters for the days from
+// fromDay (included) to untilDay (excluded), the sums of its counters for
+// the days from splitDay (Current) and for the days before it (Previous);
+// a tenant without activity over the range is absent from the map. The
+// database does the sums: the result holds one entry per tenant whatever
+// the length of the range. It is a system query (reason "global
+// statistics: usage counters of every tenant over a bounded range, summed
+// per tenant (no personal data)"), reserved to the global statistics of the
+// super admin.
+func (r *TenantUsage) RangeAllSplit(ctx context.Context, fromDay, splitDay, untilDay time.Time) (map[tenant.ID]PeriodUsage, error) {
+	out := map[tenant.ID]PeriodUsage{}
 	err := r.db.systemScope(reasonUsageAll).ReadTx(ctx, func(tx *SystemTx) error {
-		rows, err := tx.Query(ctx, qUsageRangeAll, toMillis(fromDay))
+		rows, err := tx.Query(ctx, qUsageRangeAll, toMillis(splitDay), toMillis(fromDay), toMillis(untilDay))
 		if err != nil {
 			return err
 		}
 		type row struct {
 			tid string
-			c   UsageCounts
+			u   PeriodUsage
 		}
 		rs, err := collect(rows, func(r *sql.Rows) (row, error) {
 			var x row
-			var err error
-			x.c, err = scanUsage(r, &x.tid)
-			return x, err
+			dest := append(append([]any{&x.tid}, usageFields(&x.u.Current)...), usageFields(&x.u.Previous)...)
+			return x, r.Scan(dest...)
 		})
 		for _, x := range rs {
-			out[tenant.ID(x.tid)] = x.c
+			out[tenant.ID(x.tid)] = x.u
 		}
 		return err
 	})

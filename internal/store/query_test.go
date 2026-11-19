@@ -1120,9 +1120,16 @@ var systemAllowlist = map[string]string{
 	`SELECT tenant_id, CAST(COALESCE(sum(total_bytes), 0) AS BIGINT) FROM transfers ` +
 		`WHERE status IN ('uploading', 'scanning', 'available') GROUP BY tenant_id ORDER BY tenant_id`: reasonUsedBytesAll,
 	`UPDATE audit_events SET actor = ? WHERE tenant_id = ? AND actor = ? AND actor_kind IN ('depositor', 'recipient')`: reasonAuditPseudonymise,
-	`SELECT tenant_id, CAST(sum(transfers) AS BIGINT), CAST(sum(bytes_uploaded) AS BIGINT), ` +
-		`CAST(sum(downloads) AS BIGINT), CAST(sum(bytes_downloaded) AS BIGINT), CAST(sum(virus_detections) AS BIGINT), ` +
-		`CAST(sum(secrets_created) AS BIGINT) FROM tenant_daily_stats WHERE day >= ? GROUP BY tenant_id ORDER BY tenant_id`: reasonUsageAll,
+	`SELECT tenant_id, ` +
+		`CAST(sum(transfers * in_period) AS BIGINT), CAST(sum(bytes_uploaded * in_period) AS BIGINT), ` +
+		`CAST(sum(downloads * in_period) AS BIGINT), CAST(sum(bytes_downloaded * in_period) AS BIGINT), ` +
+		`CAST(sum(virus_detections * in_period) AS BIGINT), CAST(sum(secrets_created * in_period) AS BIGINT), ` +
+		`CAST(sum(transfers * (1 - in_period)) AS BIGINT), CAST(sum(bytes_uploaded * (1 - in_period)) AS BIGINT), ` +
+		`CAST(sum(downloads * (1 - in_period)) AS BIGINT), CAST(sum(bytes_downloaded * (1 - in_period)) AS BIGINT), ` +
+		`CAST(sum(virus_detections * (1 - in_period)) AS BIGINT), CAST(sum(secrets_created * (1 - in_period)) AS BIGINT) ` +
+		`FROM (SELECT tenant_id, transfers, bytes_uploaded, downloads, bytes_downloaded, virus_detections, secrets_created, ` +
+		`CASE WHEN day >= ? THEN 1 ELSE 0 END AS in_period FROM tenant_daily_stats WHERE day >= ? AND day < ?) d ` +
+		`GROUP BY tenant_id ORDER BY tenant_id`: reasonUsageAll,
 	`DELETE FROM tenant_daily_stats WHERE day < ?`: reasonUsagePurge,
 	`SELECT a.id, a.email, a.language FROM admins a JOIN admin_tenants t ON t.admin_id = a.id ` +
 		`WHERE t.tenant_id = ? AND a.role = 'delegated_admin' AND a.disabled = false AND a.password_hash IS NOT NULL ` +

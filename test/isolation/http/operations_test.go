@@ -282,6 +282,11 @@ var isolationCases = map[string]isolationCase{
 	// tenant.
 	"listGlobalAuditEvents": superAdminOperation,
 	"getGlobalStats":        superAdminOperation,
+	// The transfer search across the tenants of an administrator
+	// (search_test.go, since 2.3, T-409 to T-411): the delegated admin and
+	// the auditor of A never find a transfer of B, and B's identifier
+	// answers exactly like a random one; the super admin finds both.
+	"searchTransfers": searchAcrossTenants,
 	// Security events kept in the database (securityevents_test.go, since
 	// 2.0, T-283): a tenant's listing holds its own events only, never
 	// those of another tenant nor those without tenant; the instance-wide
@@ -335,6 +340,7 @@ var isolationCases = map[string]isolationCase{
 	"getMasterKeyStatus":     systemOperation,
 	"testAntivirus":          systemOperation,
 	"getSystemVersion":       systemOperation,
+	"getSystemStatus":        systemOperation,
 	"checkSystemVersion":     systemOperation,
 	// Webhooks (webhooks_test.go): served on the admin host only. The
 	// delegated admin of tenant A gets for tenant B's ID exactly the answer

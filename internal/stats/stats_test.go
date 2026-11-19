@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -141,11 +142,11 @@ func (f *faultRepo) usage(ctx context.Context, tid tenant.ID, from time.Time) ([
 	return f.repo.usage(ctx, tid, from)
 }
 
-func (f *faultRepo) usageAll(ctx context.Context, from time.Time) (map[tenant.ID]store.UsageCounts, error) {
+func (f *faultRepo) usageAll(ctx context.Context, from, split, until time.Time) (map[tenant.ID]store.PeriodUsage, error) {
 	if f.usageAllErr != nil {
 		return nil, f.usageAllErr
 	}
-	return f.repo.usageAll(ctx, from)
+	return f.repo.usageAll(ctx, from, split, until)
 }
 
 // env is a service over a real database.
@@ -312,6 +313,10 @@ func TestTenantStats(t *testing.T) {
 		if s.Period != Period30Days || s.UsageCounts != counts(14, 140, 17, 170, 3) {
 			t.Fatalf("30d totals %+v", s.UsageCounts)
 		}
+		// The 30 days before 2024-01-31 hold the row of January 30 only.
+		if s.Previous == nil || *s.Previous != counts(1, 10, 2, 20, 0) {
+			t.Fatalf("30d previous %+v", s.Previous)
+		}
 		if s.Storage != (Storage{UsedBytes: 250, QuotaBytes: 1000, UsedRatio: 0.25}) {
 			t.Fatalf("storage %+v", s.Storage)
 		}
@@ -340,6 +345,10 @@ func TestTenantStats(t *testing.T) {
 		if len(s.Series) != 7 || s.UsageCounts != counts(12, 120, 14, 140, 2) || s.Series[0].Transfers != 4 || s.Series[6].Transfers != 8 {
 			t.Fatalf("7d %+v", s)
 		}
+		// Present, zero: nothing happened during the 7 days before.
+		if s.Previous == nil || !s.Previous.IsZero() {
+			t.Fatalf("7d previous %+v", s.Previous)
+		}
 
 		s, err = ev.svc.TenantStats(ctx, principal(store.RoleSuperAdmin), tn.ID, Period12Months)
 		if err != nil {
@@ -347,6 +356,9 @@ func TestTenantStats(t *testing.T) {
 		}
 		if len(s.Series) != 12 || s.UsageCounts != counts(15, 150, 19, 190, 3) {
 			t.Fatalf("12m totals %+v", s.UsageCounts)
+		}
+		if s.Previous != nil {
+			t.Fatalf("12m previous %+v, want none", s.Previous)
 		}
 		for i, pt := range s.Series {
 			want := Point{Date: day(2023, 3, 1).AddDate(0, i, 0)}
@@ -430,16 +442,29 @@ func TestGlobalStats(t *testing.T) {
 			t.Fatalf("global %+v", g)
 		}
 		want := []TenantRow{
-			{TenantID: a.ID, Name: a.Name, Transfers: 3, BytesUploaded: 30, Storage: Storage{UsedBytes: 500, QuotaBytes: 1000, UsedRatio: 0.5}},
+			{TenantID: a.ID, Name: a.Name, Transfers: 3, BytesUploaded: 30, Downloads: 1, BytesDownloaded: 1, Storage: Storage{UsedBytes: 500, QuotaBytes: 1000, UsedRatio: 0.5}},
 			{TenantID: b.ID, Name: b.Name, Storage: Storage{QuotaBytes: 4000}},
 		}
 		slices.SortFunc(want, func(x, y TenantRow) int { return strings.Compare(string(x.TenantID), string(y.TenantID)) })
-		if !slices.Equal(g.Tenants, want) {
+		// The previous period of 30d is 2 November - 1 December: A's row of
+		// December 1 only; both tenants have one (zero for B).
+		want[0].Previous, want[1].Previous = &store.UsageCounts{}, &store.UsageCounts{}
+		for i := range want {
+			if want[i].TenantID == a.ID {
+				want[i].Previous = &store.UsageCounts{Transfers: 5, BytesUploaded: 50, Downloads: 1, BytesDownloaded: 1}
+			}
+		}
+		if !reflect.DeepEqual(g.Tenants, want) {
 			t.Fatalf("rows %+v, want %+v", g.Tenants, want)
 		}
 		g, err = ev.svc.GlobalStats(ctx, principal(store.RoleSuperAdmin), Period12Months)
 		if err != nil || g.Tenants[slices.IndexFunc(g.Tenants, func(r TenantRow) bool { return r.TenantID == a.ID })].Transfers != 8 {
 			t.Fatalf("12m: %v %+v", err, g)
+		}
+		for _, r := range g.Tenants {
+			if r.Previous != nil {
+				t.Fatalf("12m previous of %s: %+v, want none", r.TenantID, r.Previous)
+			}
 		}
 	})
 }
@@ -786,6 +811,68 @@ func TestInstanceStateTransfers(t *testing.T) {
 		s, err := ev.svc.InstanceState(context.Background())
 		if err != nil || len(s.Tenants) != 1 || s.Tenants[0].ActiveTransfers != 2 || s.Tenants[0].TransfersLast24h != 1 || s.ScanQueueFiles != 0 {
 			t.Fatalf("state %+v, %v", s, err)
+		}
+	})
+}
+
+// TestTrendDayBoundaries checks, for both statistics, that the last day of
+// the previous period and the first day of the period fall on their own
+// side of UTC midnight, and that the days around are left out.
+func TestTrendDayBoundaries(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		now := time.Date(2026, 3, 31, 23, 59, 59, 0, time.UTC)
+		ev := newEnv(t, e, now)
+		tn := ev.tenant(1000)
+		other := ev.tenant(1000)
+		ctx := context.Background()
+		super := principal(store.RoleSuperAdmin)
+		full := func(n int64) store.UsageCounts {
+			return store.UsageCounts{
+				Transfers: n, BytesUploaded: 2 * n, Downloads: 3 * n, BytesDownloaded: 4 * n, VirusDetections: 5 * n, SecretsCreated: 6 * n,
+			}
+		}
+		// 7d: from 2026-03-25; previous 2026-03-18 .. 2026-03-24.
+		ev.add(tn, day(2026, 3, 17), full(1))      // before the previous period
+		ev.add(tn, day(2026, 3, 18), full(2))      // first day of the previous period
+		ev.add(tn, day(2026, 3, 24), full(4))      // last day of the previous period
+		ev.add(tn, day(2026, 3, 25), full(8))      // first day of the period
+		ev.add(tn, day(2026, 3, 1), full(16))      // last day of the 30d previous period
+		ev.add(tn, day(2026, 1, 31), full(32))     // first day of the 30d previous period
+		ev.add(tn, day(2026, 1, 30), full(64))     // before it
+		ev.add(other, day(2026, 3, 24), full(128)) // another tenant
+		for _, c := range []struct {
+			per      Period
+			cur, pre store.UsageCounts
+		}{
+			{Period7Days, full(8), full(6)},
+			// 30d: from 2026-03-02; previous 2026-01-31 .. 2026-03-01.
+			{Period30Days, full(15), full(48)},
+		} {
+			s, err := ev.svc.TenantStats(ctx, super, tn.ID, c.per)
+			if err != nil || s.UsageCounts != c.cur || s.Previous == nil || *s.Previous != c.pre {
+				t.Errorf("%s: %+v previous %+v, %v; want %+v and %+v", c.per, s.UsageCounts, s.Previous, err, c.cur, c.pre)
+			}
+		}
+		for _, c := range []struct {
+			per      Period
+			cur, pre store.UsageCounts
+		}{
+			{Period7Days, full(8), full(6)},
+			{Period30Days, full(15), full(48)},
+		} {
+			g, err := ev.svc.GlobalStats(ctx, super, c.per)
+			if err != nil {
+				t.Fatal(err)
+			}
+			i := slices.IndexFunc(g.Tenants, func(r TenantRow) bool { return r.TenantID == tn.ID })
+			r := g.Tenants[i]
+			got := store.UsageCounts{
+				Transfers: r.Transfers, BytesUploaded: r.BytesUploaded, Downloads: r.Downloads, BytesDownloaded: r.BytesDownloaded,
+				VirusDetections: r.VirusDetections, SecretsCreated: r.SecretsCreated,
+			}
+			if got != c.cur || r.Previous == nil || *r.Previous != c.pre {
+				t.Errorf("global %s: %+v previous %+v; want %+v and %+v", c.per, got, r.Previous, c.cur, c.pre)
+			}
 		}
 	})
 }

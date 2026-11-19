@@ -39,6 +39,11 @@ const (
 	// session is authenticated): the auditor cookie plays no part, the
 	// guard never answers it.
 	loginFlow
+	// searchRead: the transfer search across the tenants of the auditor
+	// (since 2.3, T-411), without tenant in its path: an identifier of A is
+	// answered, one of B like a random identifier, and an address is 403
+	// read-only-role.
+	searchRead
 )
 
 // auditorExpect classifies every administration operation of the
@@ -90,9 +95,8 @@ var auditorExpect = map[string]auditorClass{
 	"lookupTenantSecret":  tenantRead,
 	"purgeExpressSecrets": refused,
 	// Since 2.3 the search across the tenants of the admin (a read despite
-	// its POST). Refused until the server implements it (step 3b opens it:
-	// identifier answered, address refused).
-	"searchTransfers": refused,
+	// its POST): identifier answered, address refused.
+	"searchTransfers": searchRead,
 
 	// Accounts (super admin only).
 	"createAdmin":           refused,
@@ -333,7 +337,7 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 			if !known[id] {
 				t.Errorf("auditorExpect has a stale entry %q", id)
 			}
-			open := class == tenantRead || class == ownAccount
+			open := class == tenantRead || class == ownAccount || class == searchRead
 			if open != adminauth.AuditorOperations[id] {
 				t.Errorf("%s: class %d, but adminauth.AuditorOperations[%s] = %v", id, class, id, adminauth.AuditorOperations[id])
 			}
@@ -433,6 +437,23 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 					resp := h.sendRole(t, auditor, op, a, params)
 					if problemCode(resp) == "read-only-role" || resp.status >= 500 {
 						t.Errorf("%s with the auditor cookie: %d %s", op, resp.status, resp.body)
+					}
+				case searchRead:
+					trB := h.newTransfer(t, h.other(t), "ivan@customer.example.net")
+					own, _ := h.searchAs(t, auditor, trA.ID)
+					if own.status != http.StatusOK || !strings.Contains(string(own.body), trA.ID) {
+						t.Errorf("%s by the auditor of A, identifier of A: %d %s, want it", op, own.status, own.body)
+					}
+					foreign, _ := h.searchAs(t, auditor, trB.ID)
+					if foreign.status != http.StatusOK || string(foreign.body) != emptySearch+"\n" {
+						t.Errorf("%s by the auditor of A, identifier of B: %d %s, want no match", op, foreign.status, foreign.body)
+					}
+					address, _ := h.searchAs(t, auditor, "ivan@customer.example.net")
+					if address.status != http.StatusForbidden || problemCode(address) != "read-only-role" {
+						t.Errorf("%s by the auditor of A, address: %d %s, want 403 read-only-role", op, address.status, address.body)
+					}
+					for _, resp := range []response{own, foreign, address} {
+						h.noDataOfB(t, op, "auditor of A", resp, trB.ID)
 					}
 				}
 			})

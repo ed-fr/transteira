@@ -72,7 +72,7 @@ func systemOperation(t *testing.T, h *harness, op operation) {
 		// The harness disables the update check (no outbound connection).
 		resp = h.adminCall(t, super, op.verb, systemPath(op), "")
 		wantCode(t, op, hostAdmin, resp, http.StatusConflict, "update-check-disabled")
-	default: // getSystemSettings, updateSystemSettings, getMasterKeyStatus, testAntivirus, getSystemVersion
+	default: // getSystemSettings, updateSystemSettings, getMasterKeyStatus, testAntivirus, getSystemVersion, getSystemStatus
 		resp = h.adminCall(t, super, op.verb, systemPath(op), systemBodies[op.id])
 		wantOK(t, op, "super admin", resp)
 		if op.id == "testAntivirus" && !strings.Contains(string(resp.body), `"outcome":"detected"`) {
@@ -80,6 +80,9 @@ func systemOperation(t *testing.T, h *harness, op operation) {
 		}
 		if op.id == "getSystemVersion" && !strings.Contains(string(resp.body), `"enabled":false`) {
 			t.Errorf("%s: update check %s", op, resp.body)
+		}
+		if op.id == "getSystemStatus" && !strings.Contains(string(resp.body), `"database":{"engine":`) {
+			t.Errorf("%s: no database engine in %s", op, resp.body)
 		}
 		if op.id == "getMasterKeyStatus" && !strings.Contains(string(resp.body), `"activeKeyId":"`) {
 			t.Errorf("%s: no active key in %s", op, resp.body)

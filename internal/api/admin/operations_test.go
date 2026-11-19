@@ -201,6 +201,9 @@ func (f *fakeStats) TenantStats(_ context.Context, p adminauth.Principal, tid te
 			{Date: time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC), Transfers: 3, BytesUploaded: 300},
 		},
 	}
+	if period != stats.Period12Months {
+		st.Previous = &store.UsageCounts{Transfers: 1, BytesUploaded: 100, Downloads: 2, BytesDownloaded: 200, VirusDetections: 3, SecretsCreated: 4}
+	}
 	return st, f.record("TenantStats", p.SessionID, tid, period)
 }
 
@@ -751,7 +754,9 @@ func TestStatsOperations(t *testing.T) {
 		},
 		Tenants: []stats.TenantRow{{
 			TenantID: "ten_a", Name: "Entity A", Transfers: 4, BytesUploaded: 400, SecretsCreated: 2,
-			Storage: stats.Storage{UsedBytes: 250, QuotaBytes: 1000, UsedRatio: 0.25},
+			Downloads: 7, BytesDownloaded: 700, VirusDetections: 8,
+			Previous: &store.UsageCounts{Transfers: 9, BytesUploaded: 90, SecretsCreated: 1},
+			Storage:  stats.Storage{UsedBytes: 250, QuotaBytes: 1000, UsedRatio: 0.25},
 		}},
 	}}
 	s := opsServer(nil, nil, st)
@@ -769,6 +774,20 @@ func TestStatsOperations(t *testing.T) {
 		body["bytesDownloaded"] != float64(600) || body["virusDetections"] != float64(1) || body["storageUsedRatio"] != 0.25 || body["secretsCreated"] != float64(9) ||
 		len(series) != 2 || series[1].(map[string]any)["date"] != "2026-10-22" || series[1].(map[string]any)["transfers"] != float64(3) {
 		t.Errorf("tenant stats = %d %v", code, body)
+	}
+	if prev, _ := body["previous"].(map[string]any); !reflect.DeepEqual(prev, map[string]any{
+		"transferCount": float64(1), "bytesUploaded": float64(100), "downloadCount": float64(2), "bytesDownloaded": float64(200),
+		"virusDetections": float64(3), "secretsCreated": float64(4),
+	}) {
+		t.Errorf("tenant stats previous = %v", body["previous"])
+	}
+	p12 := gen.GetTenantStatsParamsPeriod("12m")
+	resp12, err := s.GetTenantStats(ctx, gen.GetTenantStatsRequestObject{TenantId: "ten_a", Params: gen.GetTenantStatsParams{Period: &p12}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, b12 := decode(t, resp12); b12["previous"] != nil {
+		t.Errorf("12m previous = %v, want none", b12["previous"])
 	}
 	// The period is passed as given: the service checks it after the
 	// access.
@@ -794,6 +813,21 @@ func TestStatsOperations(t *testing.T) {
 	if code != http.StatusOK || body["period"] != "12m" || disk["totalBytes"] != float64(1000) || disk["usedBytes"] != float64(300) ||
 		disk["alertThreshold"] != 0.85 || disk["alertActive"] != true || disk["alertMailConfigured"] != true || row["tenantId"] != "ten_a" || row["transferCount"] != float64(4) || row["secretsCreated"] != float64(2) || row["storageQuotaBytes"] != float64(1000) {
 		t.Errorf("global stats = %d %v", code, body)
+	}
+	if row["downloadCount"] != float64(7) || row["bytesDownloaded"] != float64(700) || row["virusDetections"] != float64(8) ||
+		!reflect.DeepEqual(row["previous"], map[string]any{
+			"transferCount": float64(9), "bytesUploaded": float64(90), "downloadCount": float64(0), "bytesDownloaded": float64(0),
+			"virusDetections": float64(0), "secretsCreated": float64(1),
+		}) {
+		t.Errorf("global row = %v", row)
+	}
+	st.global.Tenants[0].Previous = nil
+	noPrev, err := s.GetGlobalStats(ctx, gen.GetGlobalStatsRequestObject{Params: gen.GetGlobalStatsParams{Period: &gperiod}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, nb := decode(t, noPrev); nb["tenants"].([]any)[0].(map[string]any)["previous"] != nil {
+		t.Errorf("row without previous = %v", nb["tenants"])
 	}
 	gbad := gen.GetGlobalStatsParamsPeriod("1y")
 	st.err = stats.ErrInvalidPeriod

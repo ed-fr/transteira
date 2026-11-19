@@ -136,6 +136,8 @@ type Server struct {
 	// updates serves the check for a newer release; nil until
 	// WithUpdateCheck.
 	updates UpdateCheckService
+	// statusSources feeds getSystemStatus; nil until WithSystemStatus.
+	statusSources *systemStatusSources
 	// provisioning manages the provisioning tokens and serves the
 	// provisioning API; nil until WithProvisioningService.
 	provisioning ProvisioningService

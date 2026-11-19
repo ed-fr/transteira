@@ -228,3 +228,54 @@ func TestHandlerHungStorageHidesDetails(t *testing.T) {
 		clk.advance(CacheTTL)
 	}
 }
+
+// RunAt returns the completion time of the run, the same one for the
+// callers served from the cache, and the current time for a caller that
+// gave up waiting.
+func TestRunAtReportsCheckTime(t *testing.T) {
+	var calls atomic.Int32
+	clk := newClock()
+	svc := &Service{
+		Database: Check{Checker: counting(&calls)}, Antivirus: Check{Checker: ok}, Storage: Check{Checker: ok},
+		now: clk.now,
+	}
+	r, at := svc.RunAt(context.Background())
+	if !r.Healthy() || !at.Equal(clk.now()) {
+		t.Fatalf("RunAt = %+v at %v, want healthy at %v", r, at, clk.now())
+	}
+	first := clk.now()
+	clk.advance(time.Second)
+	if _, again := svc.RunAt(context.Background()); !again.Equal(first) || calls.Load() != 1 {
+		t.Fatalf("cached RunAt at %v after %d runs, want %v after 1", again, calls.Load(), first)
+	}
+	clk.advance(CacheTTL)
+	if _, fresh := svc.RunAt(context.Background()); !fresh.Equal(clk.now()) || calls.Load() != 2 {
+		t.Fatalf("fresh RunAt at %v after %d runs", fresh, calls.Load())
+	}
+
+	// A caller whose context is already done gets the unavailable report at
+	// the current time. The check blocks until released, so the run cannot
+	// complete first: the caller always takes the give-up branch.
+	release := make(chan struct{})
+	held := CheckerFunc(func(context.Context) error {
+		<-release
+		return nil
+	})
+	idle := &Service{
+		Database: Check{Checker: held, Timeout: time.Hour}, Antivirus: Check{Checker: ok}, Storage: Check{Checker: ok},
+		now: clk.now,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	gaveUp := clk.now()
+	if r, at := idle.RunAt(ctx); r != unavailableReport || !at.Equal(gaveUp) {
+		close(release)
+		t.Fatalf("canceled RunAt = %+v at %v, want %+v at %v", r, at, unavailableReport, gaveUp)
+	}
+	// The run goes on for the others and is dated when it completes.
+	clk.advance(time.Second)
+	close(release)
+	if r, at := idle.RunAt(context.Background()); !r.Healthy() || !at.Equal(clk.now()) || at.Equal(gaveUp) {
+		t.Fatalf("RunAt after the give-up = %+v at %v, want healthy at %v", r, at, clk.now())
+	}
+}

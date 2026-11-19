@@ -221,6 +221,13 @@ func (f *faultRepo) getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenan
 	return f.repo.getTenant(ctx, tid)
 }
 
+func (f *faultRepo) listTenants(ctx context.Context, opts store.TenantListOptions) (store.Page[*tenant.Tenant], error) {
+	if err := f.fail("listTenants"); err != nil {
+		return store.Page[*tenant.Tenant]{}, err
+	}
+	return f.repo.listTenants(ctx, opts)
+}
+
 func (f *faultRepo) listTransfers(ctx context.Context, tid tenant.ID, fl store.AdminTransferFilter) (store.Page[store.AdminTransfer], error) {
 	if err := f.fail("listTransfers"); err != nil {
 		return store.Page[store.AdminTransfer]{}, err
