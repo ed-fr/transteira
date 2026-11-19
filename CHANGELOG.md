@@ -86,6 +86,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
   pills, one line per file with an antivirus badge and an abbreviated SHA-256 fingerprint with a
   Copy button, and "Reply with files" and "Report an abuse" at the bottom. The administration is
   unchanged at that step, except the branding preview. User guides, integrated help and screenshots updated.
+- ESLint 10.15.0 and typescript-eslint 8.73.0 in `web` and `test/e2e`: they pull minimatch 11.0.9,
+  which fixes GHSA-g3hv-75wg-m249 (denial of service in glob matching). Lint tools only, nothing
+  of them is shipped in the binary.
 
 ## [2.2.0] - 2026-11-11
 
