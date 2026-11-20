@@ -10,15 +10,16 @@
 [English](README.md) | **Français**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](CHANGELOG.md)
 
 **TransTeira** est un service de transfert de fichiers volumineux, auto-hébergé et multi-tenant, dans
 l'esprit de WeTransfer ou SwissTransfer, conçu pour les organisations composées de plusieurs entités.
 
-> **Statut : stable.** La version 2.2.0 livre le périmètre V1 (le cœur), le périmètre V1.1
-> (l'exploitation), le périmètre V1.2 (la mise en service), le périmètre V2 (l'entreprise) et le
-> périmètre V2.1 (partage de secrets à usage unique), avec un installeur pour un serveur Debian
-> vierge ; voir [Versions](#versions).
+> **Statut : stable.** La version 2.3.0 livre le périmètre V1 (le cœur), le périmètre V1.1
+> (l'exploitation), le périmètre V1.2 (la mise en service), le périmètre V2 (l'entreprise), le
+> périmètre V2.1 (partage de secrets à usage unique) et le périmètre V2.3 (secret express et
+> refonte de l'interface), avec un installeur pour un serveur Debian vierge ; voir
+> [Versions](#versions).
 
 ## Points forts
 
@@ -497,9 +498,16 @@ cours est renvoyée par `/api/v1/version` et `/healthz` et affichée par `transt
 | V1.2, la mise en service (1.2) | Mise en service des entités, invitation des admins délégués, bibliothèque d'images, API de provisionnement, vérification des mises à jour. |
 | V2, l'entreprise (2.0) | SSO OpenID Connect (Entra ID), rôle auditeur, preuve de dépôt et de remise, export et import de configuration d'entité, liens de dépôt permanents, image signée avec SBOM, client en ligne de commande, option lien seul sans mail, chiffrement de bout en bout en option, kit de conformité. |
 | V2.1, secrets à usage unique (2.1) | Secrets scellés dans le navigateur et lus une seule fois, avec phrase de passe, fichier, remise par mail et accusé de lecture facultatifs. |
-| **2.2, installation rapide** (2.2, actuelle) | `install.sh`, un fichier signé de la release qui installe TransTeira, ClamAV et Caddy sur un serveur Debian 12 ou 13 vierge, avec pare-feu, fail2ban et mises à jour de sécurité, et le met à jour ensuite. |
+| 2.2, installation rapide (2.2) | `install.sh`, un fichier signé de la release qui installe TransTeira, ClamAV et Caddy sur un serveur Debian 12 ou 13 vierge, avec pare-feu, fail2ban et mises à jour de sécurité, et le met à jour ensuite. |
+| **V2.3, l'interface et le secret express** (2.3, actuelle) | Refonte des pages publiques et de l'administration (barre latérale, indicateurs avec leur tendance, recherche de transferts entre les entités, état du système), et le secret express : un secret texte anonyme, scellé dans le navigateur et lu une seule fois, désactivé par défaut dans chaque entité. |
 
-La version 2.2 ajoute l'installeur ([installation rapide](docs/install/fr/quick-install.md)) ;
+La version 2.3 refait l'interface et ajoute le secret express, compatibles avec la 2.2 et la 2.1 :
+l'API est toujours `/api/v1`, avec des ajouts seulement, la migration 0036 est appliquée au
+démarrage et aucun changement de configuration n'est nécessaire. Le secret express est désactivé
+dans toutes les entités, y compris les existantes ; si vous avez copié le filtre fail2ban ou le
+scénario CrowdSec, copiez-les de nouveau
+([guide de mise à jour](docs/operations/upgrade.md#from-22-to-23)).
+La version 2.2 a ajouté l'installeur ([installation rapide](docs/install/fr/quick-install.md)) ;
 l'API et la base sont inchangées et l'application est seulement recompilée avec Go 1.27.4 : passer de la 2.1 à
 la 2.2 revient à changer d'image. La version 2.1 a ajouté les secrets à usage unique, compatibles avec la 2.0 : l'API est
 toujours `/api/v1`, avec des ajouts seulement, les migrations 0033, 0034 et 0035 sont appliquées au

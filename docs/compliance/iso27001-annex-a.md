@@ -1,7 +1,7 @@
 # ISO/IEC 27001:2022 Annex A mapping
 
 Correspondence between the 93 controls of **ISO/IEC 27001:2022 Annex A** and
-**TransTeira 2.1**, to help build the Statement of Applicability (SoA) and
+**TransTeira 2.3**, to help build the Statement of Applicability (SoA) and
 to prepare audits.
 
 Français : [docs/compliance/fr/iso27001-annex-a.md](fr/iso27001-annex-a.md).

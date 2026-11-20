@@ -1,7 +1,7 @@
 # GDPR record of processing activities: file transfer service
 
 Template for the record of processing activities (GDPR, article 30) of an
-organisation that operates **TransTeira 2.1**. It is pre-filled from what the
+organisation that operates **TransTeira 2.3**. It is pre-filled from what the
 software does (data model, cleanup task, administration screens). Everything
 that only the organisation can decide is marked `<to be completed>`.
 

@@ -17,7 +17,7 @@ Français : [docs/compliance/fr/README.md](fr/README.md).
 > organisational measures are yours. Have the result reviewed by your data
 > protection officer (DPO) or a lawyer.
 
-The kit applies to **TransTeira 2.1**. Each new version may change what is
+The kit applies to **TransTeira 2.3**. Each new version may change what is
 stored or how: re-read the documents when you upgrade (see the
 [CHANGELOG](../../CHANGELOG.md) and the [upgrade guide](../operations/upgrade.md)).
 

@@ -6,6 +6,30 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-20
+
+The V2.3 scope of the specification (CLAUDE.md section 2, sections 22.2 and 13.2), on top of 2.2.
+The express secret is a one-time text secret of at most 10 000 characters, created without any
+authentication on the `/x` page of an entity or by script. It is sealed in the browser or by the
+client, so the server never sees the text nor the key. It is read once, lives 1 hour, 1 day or
+7 days, and carries a "third-party content" banner and a "Report an abuse" button. The service is
+**off by default in every entity**, existing ones included. The operator can close it for
+the whole instance (`TT_EXPRESS_SECRETS_DISABLED`), which also blocks the reading. Limits per
+client, per API token and on the live secrets of an entity (a delegated admin can only lower
+them); API tokens need the `expressAllowed` opt-in. The administration can look up a secret
+from its link, purge the anonymous ones and delete a reported secret. `transteira-cli secret
+create|read` and PowerShell, Python and Go examples cover scripts. The public pages and the
+administration are redesigned: two-column deposit card, download page with pills and file rows,
+administration sidebar, key figures with their trend, search of transfers across the entities of
+an administrator, and the state of the system for the super admin. Still compatible with 2.2 and
+2.1: the API stays `/api/v1` with additions only (three members are no longer required, see
+Changed). Migration 0036 is applied at start-up, and no configuration change is needed. Copy
+the fail2ban filter and the CrowdSec scenario again unless you upgrade with `install.sh
+--upgrade` (see [Upgrade](docs/operations/upgrade.md#from-22-to-23)). Threat model 2.3 in force.
+Validated by `make check` and `make check-full` (unit, integration, contract, tenant isolation,
+fuzzing, end-to-end on SQLite and PostgreSQL, race detector, automated 20 GB test, installer
+smoke test, release dry run) and by a real trial behind Caddy.
+
 ### Added
 
 - Express secret, server side (specification section 22.2): `POST /api/v1/express-secrets`
@@ -1655,7 +1679,8 @@ The detailed list of the changes made during the development of the V1 follows.
   contact your administrator."), revealing nothing about the blocklist. The "not available"
   page remains for `403 invitation-not-allowed` (depositor not internal).
 
-[Unreleased]: https://github.com/ed-fr/transteira/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/ed-fr/transteira/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/ed-fr/transteira/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/ed-fr/transteira/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/ed-fr/transteira/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/ed-fr/transteira/compare/v1.2.1...v2.0.0

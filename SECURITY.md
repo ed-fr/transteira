@@ -23,7 +23,8 @@ remain anonymous.
 
 | Version | Supported |
 |---|---|
-| 2.2.x | Yes |
+| 2.3.x | Yes |
+| 2.2.x | No |
 | 2.1.x | No |
 | 2.0.x | No |
 | 1.2.x | No |
@@ -31,11 +32,12 @@ remain anonymous.
 | 1.0.x | No |
 | < 1.0 (development builds `0.0.0-dev`) | No |
 
-Security fixes are provided for the latest minor version only, as patch releases (2.2.1,
-2.2.2...): when 2.3.0 is released, 2.2.x stops receiving fixes. 2.1.x and 2.0.x no longer receive
-fixes: upgrade to 2.2, which needs no configuration change (from 2.1 only the image changes; from
-2.0 see [Upgrade](docs/operations/upgrade.md#from-20-to-21)). Always run the latest patch
-release of the supported version.
+Security fixes are provided for the latest minor version only, as patch releases (2.3.1,
+2.3.2...): when 2.4.0 is released, 2.3.x stops receiving fixes. 2.2.x, 2.1.x and 2.0.x no longer
+receive fixes: upgrade to 2.3, which needs no configuration change (from 2.2 or 2.1 see
+[Upgrade](docs/operations/upgrade.md#from-22-to-23); from 2.0 first
+[from 2.0 to 2.1](docs/operations/upgrade.md#from-20-to-21)). Always run the latest patch release
+of the supported version.
 
 Only the provided deployment (`deploy/`, `integrations/`) is supported. The third-party images it
 pins by digest (ClamAV, PostgreSQL, reverse proxies) receive security fixes only when you update

@@ -1,7 +1,7 @@
 # Correspondance ISO/IEC 27001:2022 annexe A
 
 Correspondance entre les 93 mesures de l'**annexe A de l'ISO/IEC 27001:2022**
-et **TransTeira 2.1**, pour aider à construire la déclaration d'applicabilité
+et **TransTeira 2.3**, pour aider à construire la déclaration d'applicabilité
 (DdA) et à préparer les audits.
 
 English: [docs/compliance/iso27001-annex-a.md](../iso27001-annex-a.md).

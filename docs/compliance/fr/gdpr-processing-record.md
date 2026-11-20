@@ -1,7 +1,7 @@
 # Registre RGPD des activités de traitement : service de transfert de fichiers
 
 Modèle de fiche du registre des activités de traitement (RGPD, article 30)
-d'une organisation qui exploite **TransTeira 2.1**. Elle est pré-remplie à
+d'une organisation qui exploite **TransTeira 2.3**. Elle est pré-remplie à
 partir de ce que fait le logiciel (modèle de données, tâche de nettoyage,
 écrans d'administration). Tout ce que seule l'organisation peut décider est
 marqué `<à compléter>`.

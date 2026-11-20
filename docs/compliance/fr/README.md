@@ -19,7 +19,7 @@ English: [docs/compliance/README.md](../README.md).
 > relire le résultat par votre délégué à la protection des données (DPO) ou un
 > juriste.
 
-Le kit s'applique à **TransTeira 2.1**. Chaque nouvelle version peut changer ce
+Le kit s'applique à **TransTeira 2.3**. Chaque nouvelle version peut changer ce
 qui est stocké ou la façon de le faire : relisez les documents à chaque mise à
 jour (voir le [CHANGELOG](../../../CHANGELOG.md) et le
 [guide de mise à jour](../../operations/upgrade.md), en anglais).

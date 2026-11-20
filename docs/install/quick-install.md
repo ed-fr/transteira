@@ -63,7 +63,7 @@ The script is run as root, so verify it first. The release carries four files:
 `SHA256SUMS.sigstore.json`, and the public key `cosign.pub`.
 
 ```sh
-VERSION=2.2.0
+VERSION=2.3.0
 BASE=https://github.com/ed-fr/transteira/releases/download/v$VERSION
 mkdir transteira-install && cd transteira-install
 curl -fsSLO "$BASE/install.sh" -O "$BASE/SHA256SUMS" \
