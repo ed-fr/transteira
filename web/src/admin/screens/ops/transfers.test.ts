@@ -129,7 +129,8 @@ describe('labels and badges', () => {
     expect(originLabel('api', t)).toBe('opsTransfers.origin.api');
     expect(originLabel('reply', t)).toBe('opsTransfers.origin.reply');
     expect(originLabel('internal_remote', t)).toBe('opsTransfers.origin.internal_remote');
-    expect(originLabel('drop_link', t)).toBe('drop_link');
+    expect(originLabel('drop_link', t)).toBe('opsTransfers.origin.drop_link');
+    expect(originLabel('future_origin', t)).toBe('future_origin');
   });
 
   it('summarises the recipients', () => {

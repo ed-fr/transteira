@@ -133,6 +133,18 @@ func TestAbuseReportCategories(t *testing.T) {
 	}
 }
 
+// TestAbuseReportReporterSecret checks the reporter notice of a report on
+// an express secret: the anonymous reader, not a shared transfer link.
+func TestAbuseReportReporterSecret(t *testing.T) {
+	d := AbuseReportData{TenantName: "Entity A", SecretID: "sec_01JABCU7W8X9Y0Z1A2B3C4D5E6", Category: AbuseCategorySpam, AdminLink: goldenAdminLink}
+	for lang, want := range map[string]string{"en": "anonymous reader of the secret, unverified", "fr": "lecteur anonyme du secret, non vérifié"} {
+		m, err := Render(TemplateAbuseReport, lang, d)
+		if err != nil || !strings.Contains(m.Text, want) || !strings.Contains(m.HTML, want) || strings.Contains(m.Text, "shared link") {
+			t.Errorf("%s: %v\n%s", lang, err, m.Text)
+		}
+	}
+}
+
 func TestAbuseReportReporter(t *testing.T) {
 	d := AbuseReportData{TenantName: "Entity A", TransferID: "tr_1", SenderEmail: "a@example.com", Category: AbuseCategorySpam, AdminLink: goldenAdminLink}
 	for _, tc := range []struct {

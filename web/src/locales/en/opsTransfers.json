@@ -12,7 +12,8 @@
     "external": "External guest",
     "api": "API token",
     "internal_remote": "Internal from outside",
-    "reply": "Reply"
+    "reply": "Reply",
+    "drop_link": "Drop link"
   },
   "scan": {
     "pending": "Waiting for scan",

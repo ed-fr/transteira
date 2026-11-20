@@ -111,7 +111,11 @@ the selected profile** of the configuration file.
 | Configuration file | `--config` | `TT_CLI_CONFIG` | none |
 
 These are the same names as the scripts of the [integration guide](integration.md), so a
-script can be replaced by the client without changing its environment. Set only one of
+script can be replaced by the client without changing its environment. Two variables of the
+express secret scripts have no counterpart: `TT_EXPIRES` and `TT_LINK_FILE` are not read by the
+client. Use `--expires` for `secret create` and the `LINK` argument (or `-`) for `secret read`; a job that keeps
+`TT_EXPIRES=1h` and switches to the client silently creates secrets of 1 day, which stay
+exposed longer. Set only one of
 `TT_TOKEN` and `TT_TOKEN_FILE` (and only one of `token` and `tokenFile` in a profile).
 
 ### Configuration file
@@ -310,7 +314,7 @@ transteira-cli secret create [options] --file FILE
 |---|---|
 | `--file FILE` | Read the text from this file instead of the standard input. On Linux and macOS the file must be readable by you only (`chmod 600`), as the token and password files; it must be a regular file (for a pipe, use the standard input). |
 | `--expires 1h\|1d\|7d` | Lifetime of the secret if nobody reads it, from its creation (`1d` by default). These three durations are fixed, whatever the durations the entity offers to the other secrets. |
-| `--anonymous` | Send no API token, even when the configuration has one (not with `--token-file`). |
+| `--anonymous` | Send no API token, even when the configuration has one (not with `--token-file`). The token configuration (`TT_TOKEN`, `TT_TOKEN_FILE`, the `token` and `tokenFile` of the profile) is then neither read nor checked, so a broken or unused one does not make the command fail. |
 | `--raw` | Send the input byte for byte: keep a leading byte order mark and the final line break (see below). |
 | `--json` | Print one object instead of the link: `id`, `link`, `expiresAt`. |
 
@@ -409,7 +413,10 @@ client then warns on the error output; pass it with `-` instead.
 | `--force` | With `--output`, replace an existing file (the new file is written next to it with mode 0600, then renamed over it). |
 
 The connection options `--profile`, `--config`, `--ca-file` and `--verbose` apply; **the server is
-the origin of the link** (`--url` is not used), and **no API token is ever sent**. The requests
+the origin of the link** (`--url` is not used), and **no API token is ever sent**, and the token
+configuration (`TT_TOKEN`, `TT_TOKEN_FILE`, the profile token) is neither read nor checked: a broken
+one does not make the command fail. `--token-file` is not registered for this command (since 2.3:
+passing it is a usage error, exit code 2). The requests
 carry no `Origin` nor `Sec-Fetch-Site` header.
 
 **What it does.**

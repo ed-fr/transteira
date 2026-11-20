@@ -27,7 +27,7 @@ l'esprit de WeTransfer ou SwissTransfer, conçu pour les organisations composée
 | 🏢 **Multi-entités** | Une instance, plusieurs entités : domaine, logo, langue, SMTP et données cloisonnées pour chacune. |
 | 📦 **Très gros fichiers** | Jusqu'à 20 Go par envoi, reprise après coupure (tus), streaming de bout en bout. |
 | 🔒 **Sécurité** | Chiffrement au repos AES-256-GCM, chiffrement de bout en bout en option, antivirus, TOTP, journal prêt pour fail2ban et CrowdSec. |
-| 🤫 **Secrets à usage unique** | Mots de passe et clés scellés dans le navigateur, lus une fois puis détruits. |
+| 🤫 **Secrets à usage unique** | Mots de passe et clés scellés dans le navigateur, lus une fois puis détruits ; aussi des secrets express anonymes en texte (désactivés par défaut). |
 | 👤 **Sans compte** | Les déposants prouvent leur adresse par un code ; les externes déposent sur invitation. |
 | 🛡️ **Maîtrise du partage** | Niveaux de confidentialité, vérification du destinataire, domaines autorisés, détection des abus. |
 | 🔑 **Entreprise** | SSO Entra ID, rôle auditeur, preuves de dépôt et de remise signées en PDF. |
@@ -66,7 +66,9 @@ l'esprit de WeTransfer ou SwissTransfer, conçu pour les organisations composée
   suppression anticipée et renvoi des notifications, invitations et liste de blocage, journal
   d'audit, tableau de bord statistique, alertes de quota de stockage ; pour le super admin, mode
   maintenance avec messages par langue, alerte d'espace disque et rotation de la clé maître depuis la
-  console avec reconfirmation TOTP.
+  console avec reconfirmation TOTP. Depuis la 2.3, une recherche par adresse ou par transfert dans
+  les entités que l'on peut voir, et un encadré « État du système » pour le super admin (voir
+  « Refonte de l'interface » ci-dessous).
 - **Accessible** : interface conforme à l'esprit du RGAA en français et en anglais, thèmes clair et
   sombre (qui suivent le système, modifiables, mémorisés par un cookie technique).
 - **Respectueux du RGPD** : expiration et purges automatiques, recherche et effacement des données
@@ -125,8 +127,25 @@ l'esprit de WeTransfer ou SwissTransfer, conçu pour les organisations composée
   (en lecture seule pour les auditeurs) et création possible par l'API
   ([format](docs/architecture/e2e-format.md)). **Activé par défaut dans toutes les entités, y
   compris les existantes** ; il peut être désactivé ou restreint par entité.
+- **Secret express (V2.3)** : une page (`/x`), une zone de texte et un lien, sans authentification :
+  texte uniquement (10 000 caractères au plus), scellé dans le navigateur comme les secrets à usage
+  unique, lu une seule fois, puis détruit après 1 heure, 1 jour ou 7 jours au plus. **Désactivé par
+  défaut dans toutes les entités**, activé par l'admin de l'entité ; l'exploitant peut le fermer pour
+  toute l'instance avec `TT_EXPRESS_SECRETS_DISABLED`. Limite de débit par IP (10 par heure par
+  défaut), plafond de secrets express en attente par entité (1 000 par défaut), refus écrits dans le
+  journal de sécurité. Disponible aussi par l'API (sans jeton, ou avec un jeton d'API de l'entité qui
+  y est autorisé) et par le client en ligne de commande (`secret create`, `secret read`) ; exemples
+  en PowerShell, Python et Go ([guide](docs/api/integration.md#14-express-secrets-by-script)).
+- **Refonte de l'interface (V2.3)** : pages publiques en carte centrée sur l'image de fond, avec un
+  formulaire de dépôt en deux colonnes (zone de dépôt et cartes de fichiers, étiquettes de
+  destinataires, sélecteurs segmentés, options de sécurité repliables) et une page de
+  téléchargement à une ligne par fichier ; administration avec barre latérale, tuiles de chiffres
+  clés avec leur tendance, tableaux en cartes avec pastilles de statut et jauges de stockage,
+  recherche transversale et, pour le super admin, un encadré « État du système ». Les polices, les
+  couleurs, les contrôles de contraste et la Content Security Policy stricte sont inchangés.
 - **Client en ligne de commande (V2)** : `transteira-cli` pour déposer et télécharger depuis des
-  scripts, avec reprise automatique ([guide](docs/api/cli.md)).
+  scripts, avec reprise automatique, et, depuis la 2.3, `secret create` et `secret read` pour les
+  secrets express ([guide](docs/api/cli.md)).
 - **Publications signées (V2)** : image multi-architecture signée avec cosign et publiée avec son
   SBOM ; kit de conformité avec une fiche de registre des traitements RGPD et une correspondance
   avec l'annexe A de l'ISO 27001 ([docs/compliance](docs/compliance/fr/README.md)).
@@ -218,7 +237,10 @@ sequenceDiagram
 ### Vie d'un secret
 
 Un secret à usage unique suit un autre chemin : il est chiffré dans le navigateur, le serveur ne
-le voit jamais en clair et ne l'analyse pas.
+le voit jamais en clair et ne l'analyse pas. (Le diagramme est celui des secrets de la 2.1. Un secret
+express saute l'identification, ne se transmet que sous forme de lien, dure 1 heure, 1 jour ou
+7 jours, n'a ni phrase de passe, ni fichier, ni accusé de lecture, et sa page de lecture indique qu'il
+s'agit d'un contenu tiers.)
 
 ```mermaid
 sequenceDiagram
@@ -253,8 +275,9 @@ sequenceDiagram
 
 [![Vidéo de présentation de TransTeira 2.1 : écran titre avec le logo TransTeira et un bouton de lecture](docs/assets/presentation-2.1.png)](https://github.com/ed-fr/transteira/releases/download/v2.1.0/presentation-transteira-2.1.mp4)
 
-**Vidéo de présentation** (3 min 30 s, muette, MP4 14 Mo) : les fonctionnalités, les nouveautés de la
-2.0 et les secrets à usage unique de la 2.1, filmés sur une instance de démonstration.
+**Vidéo de présentation** (3 min 30 s, muette, texte à l'écran en français, MP4 14 Mo) : les fonctionnalités, les nouveautés de la
+2.0 et les secrets à usage unique de la 2.1, filmés sur une instance de démonstration (interface de
+la 2.1, avant la refonte de la 2.3).
 
 | | |
 |---|---|
@@ -266,6 +289,8 @@ sequenceDiagram
 | **Habillage par entité**, avec contrôles de contraste | **Statistiques** et quota de stockage |
 | ![Formulaire « Partager un secret » : un texte à sceller dans le navigateur, une durée, une phrase de passe facultative et la remise par lien ou par mail](docs/user/screenshots/fr/secret-create.png) | ![Page de lecture d'un secret à usage unique : le secret n'apparaît qu'après avoir appuyé sur le bouton, et il est détruit une fois lu](docs/user/screenshots/fr/secret-reveal.png) |
 | **Partager un secret** : scellé dans le navigateur, lu une seule fois | **Page de lecture** : rien n'est consommé avant le bouton |
+| ![Page du secret express : une zone de texte, une durée de 1 heure, 1 jour ou 7 jours, et un bouton qui scelle le texte dans le navigateur, sans connexion](docs/user/screenshots/fr/express-create.png) | ![Page de lecture d'un secret express : un avis indiquant que le texte vient d'un tiers, et le bouton qui l'affiche une seule fois](docs/user/screenshots/fr/express-read.png) |
+| **Secret express** : sans connexion, texte scellé dans le navigateur | **Lecture d'un secret express** : avis de contenu tiers, lu une fois |
 
 Les captures d'écran sont générées par les tests de bout en bout (`make screenshots`), en anglais et
 en français (les [guides utilisateur](docs/user/README.md) les présentent toutes), afin qu'elles
@@ -346,6 +371,7 @@ quotas…) se gèrent dans l'administration. Les variables essentielles :
 | `TT_SYSTEM_SMTP_HOST`, `TT_SYSTEM_SMTP_FROM`… | Serveur SMTP système pour l'alerte d'espace disque envoyée aux super admins. |
 | `TT_SETUP_TOKEN` | Jeton d'initialisation facultatif du premier super admin (sinon affiché dans les journaux). |
 | `TT_MAINTENANCE` | Démarrer en mode maintenance (nouveaux dépôts refusés). |
+| `TT_EXPRESS_SECRETS_DISABLED` | Interrupteur d'instance des secrets express (création et lecture) ; recommandé quand aucune entité n'a besoin du service. |
 | `TT_CLAMAV_MAX_SCAN_BYTES`, `TT_SCAN_WORKERS` | Limites de l'antivirus, alignées sur `deploy/clamav/clamd.conf`. |
 | `TT_BACKUP_TIME`, `TT_BACKUP_KEEP` | Copie nocturne de la base (UTC) et nombre de copies conservées. |
 
@@ -367,9 +393,13 @@ pour Docker.
 - [Spécification de l'API](api/openapi.yaml), consultable sur `https://<admin host>/api/docs` sur une
   instance en fonctionnement
 - [Guide d'intégration de l'API](docs/api/integration.md) : jetons d'API et envois scriptés et
-  reprenables avec tus (exemples bash/curl et PowerShell) ; [codes d'erreur](docs/api/errors.md)
+  reprenables avec tus (exemples bash/curl, PowerShell, Node, Python et Go, dont les
+  [secrets à usage unique](docs/api/integration.md#13-one-time-secrets-by-script) et les
+  [secrets express](docs/api/integration.md#14-express-secrets-by-script)) ; [codes d'erreur](docs/api/errors.md)
 - [Guide du client en ligne de commande](docs/api/cli.md) : `transteira-cli` dépose, télécharge (y compris
-  les transferts chiffrés de bout en bout) et vérifie des preuves depuis un terminal ou un script
+  les transferts chiffrés de bout en bout), vérifie des preuves et crée et lit des secrets express
+  ([`secret create`](docs/api/cli.md#secret-create), [`secret read`](docs/api/cli.md#secret-read))
+  depuis un terminal ou un script
 - [Guide de l'API de provisionnement](docs/api/provisioning.md) : jetons de provisionnement, création
   d'entités pour les prestataires de services managés, TLS à la demande
 - [Structure du projet](docs/architecture/project-structure.md)

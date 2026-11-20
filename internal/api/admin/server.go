@@ -151,6 +151,9 @@ type Server struct {
 	// anonymous express secrets (since 2.3); nil until
 	// WithExpressSecretService.
 	expressSvc ExpressSecretService
+	// expressDisabled is the instance kill switch of the express secrets
+	// (since 2.3), false until WithExpressKillSwitch.
+	expressDisabled bool
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the

@@ -102,6 +102,19 @@ pre-release.
 
 ## 4. Before a release: `make check-full`
 
+**Refresh the pinned dependencies of the API examples first.** Since 2.3, the examples of
+[`docs/api/examples/`](../api/examples/) (read by integrators, who are told to install them)
+pin their dependencies: the Python packages of `express-secret.py` in `requirements.txt`
+(`cryptography`, `cffi` and `pycparser`, with the SHA-256 of every file), the Python base image
+of `python/Dockerfile` and the PowerShell image of `examples_test.go`, all by digest. No gate
+checks them for published advisories (`make check` runs `npm audit` for the web code and
+`govulncheck` for Go, not these), so a vulnerability in a pin goes unnoticed until someone bumps
+it. Before each release, look for advisories on the three packages (for example
+`pip-audit` in a throwaway container, or the advisories of each package on PyPI and GitHub), and on the two
+images (the current patch release of the same tag), and bump the three versions together as
+`requirements.txt` explains (hashes from PyPI), then run `go test ./docs/api/examples/`.
+Do it before `make check-full`: any commit after it requires a new run.
+
 ```sh
 make check-full
 ```

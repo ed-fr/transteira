@@ -1,9 +1,11 @@
 // Logic of the abuse reports screen of a tenant (CLAUDE.md section 10, version 1.1), kept out of
 // the component so that it is unit tested in Node: category and status labels (the enums are
 // extensible: an unknown value is shown as is), who reported, the pseudonym of an erased address,
-// the body of the close / reopen request and the list update after it.
+// the body of the close / reopen request and the list update after it, and (since 2.3) who may
+// delete the reported express secret from the detail.
 import type { components } from '../../../shared/api/schema';
 import type { Translate } from '../../../shared/i18n/messages';
+import { isAuditor, type NavRole } from '../../shell';
 import type { StatusVariant } from '../../components/fields';
 import type { SelectOption } from '../../components/select';
 import { ABUSE_REPORT_STATUSES, type AbuseReportStatus } from './filters';
@@ -59,12 +61,16 @@ export function addressText(address: string, t: Translate): string {
 }
 
 /**
- * Who reported: the verified address; else the number of the recipient link used (unverified);
+ * Who reported: the verified address; else, for a report on an express secret (since 2.3), its
+ * anonymous reader (never verified); else the number of the recipient link used (unverified);
  * else the shared link of a transfer created before 1.1.
  */
 export function reporterText(report: AbuseReport, t: Translate): string {
   if (report.reporterVerified && report.reportedBy !== undefined && report.reportedBy !== null) {
     return t('opsAbuse.reporter.verified', { email: addressText(report.reportedBy, t) });
+  }
+  if (report.secretId !== undefined) {
+    return t('opsAbuse.reporter.secretReader');
   }
   if (report.recipientIndex !== undefined && report.recipientIndex !== null) {
     return t('opsAbuse.reporter.recipientLink', { n: report.recipientIndex });
@@ -118,4 +124,17 @@ export function reportSubject(report: Pick<AbuseReport, 'secretId' | 'transferId
   return report.transferId === undefined
     ? t('opsAbuse.subject.unknown')
     : t('opsAbuse.subject.transfer', { id: report.transferId });
+}
+
+/**
+ * Reports whether the detail of a report offers "Delete this secret": the report is on an express
+ * secret (secretId, since 2.3) and the admin may change the tenant (a delegated admin of the
+ * tenant or the super admin, never the read-only auditor). The deletion is deleteTenantSecret,
+ * the same as from the secrets list.
+ */
+export function canDeleteReportedSecret(
+  report: Pick<AbuseReport, 'secretId'> | undefined,
+  role: NavRole,
+): boolean {
+  return report?.secretId !== undefined && role !== undefined && !isAuditor(role);
 }

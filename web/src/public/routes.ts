@@ -24,7 +24,7 @@ export const routes: readonly Route<ScreenComponent>[] = [
     pattern: '/d/:token/reply',
     component: ReplyScreen,
     titleKey: 'download.reply.page.title',
-    helpTopic: 'download',
+    helpTopic: 'download-reply',
   },
   {
     pattern: '/i/:token',

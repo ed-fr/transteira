@@ -3778,7 +3778,7 @@ export interface paths {
         };
         /**
          * List abuse reports
-         * @description Since 1.1. Lists the abuse reports made from the download pages of the tenant, most recent first, optionally filtered by status. Only the reports of this tenant are returned. Readable by any admin attached to the tenant. A malformed `cursor` is `400 validation-failed`.
+         * @description Since 1.1. Lists the abuse reports made from the download pages of the tenant and, since 2.3, from the read pages of its express secrets (`secretId` instead of `transferId`, no `senderEmail`, `reportedBy` null, `reporterVerified` false), most recent first, optionally filtered by status. Only the reports of this tenant are returned. Readable by any admin attached to the tenant. A malformed `cursor` is `400 validation-failed`.
          */
         get: operations["listAbuseReports"];
         put?: never;
@@ -3809,7 +3809,7 @@ export interface paths {
         };
         /**
          * Get an abuse report
-         * @description Since 1.1. Returns one abuse report of the tenant; a report of another tenant answers `404`, like an unknown one. Readable by any admin attached to the tenant.
+         * @description Since 1.1. Returns one abuse report of the tenant (about a transfer or, since 2.3, an express secret); a report of another tenant answers `404`, like an unknown one. Readable by any admin attached to the tenant.
          */
         get: operations["getAbuseReport"];
         put?: never;
@@ -3822,7 +3822,10 @@ export interface paths {
          * @description Since 1.1. Sets the status of a report (`closed` with an optional note, or `open` again).
          *     The note is plain text; its e-mail addresses are kept (the report already names the
          *     parties) but control and bidirectional characters are removed. Closing a report does not
-         *     act on the transfer: delete it or blocklist the sender with the dedicated operations.
+         *     act on the transfer or the secret: delete the transfer or blocklist the sender with the
+         *     dedicated operations, or, for a report on an express secret (`secretId`), find it with
+         *     `lookupTenantSecret` and delete it with `deleteTenantSecret`, or purge the anonymous
+         *     ones with `purgeExpressSecrets`.
          *     Setting the current status again is a no-op. Requires the right to change the tenant.
          *     Audited as `abuse.report_closed` when closed and `abuse.report_reopened` when reopened.
          */
@@ -4211,9 +4214,11 @@ export interface paths {
          *     token. The server extracts the token (the last path segment after `/s/`, or the bare
          *     value), **ignores the fragment** (`#k=...`: the key is dropped unread and never
          *     reaches any log), ignores the host part, hashes the token with SHA-256 and looks it
-         *     up among the secrets of this tenant. A value from which no token of the form
-         *     `tts_` and 43 base62 characters can be extracted is `400 validation-failed` (`/link`,
-         *     `invalid-format`). The token is **never stored, logged nor audited**; the operation is
+         *     up among the secrets of this tenant. A `?query` part is dropped like the fragment, and
+         *     a bare `/s/<token>` path is accepted. The `/link` errors are `400 validation-failed`
+         *     with the field code `required` (empty or blank), `too-long` (above 2048 characters) or
+         *     `invalid-format` (no token of the form `tts_` and 43 base62 characters can be
+         *     extracted). The token is **never stored, logged nor audited**; the operation is
          *     a `POST` so that it never appears in a URL, a browser history or a proxy log.
          *
          *     Works for any secret of the tenant, 2.1 and express, live or tombstone (kept 30 days
@@ -4290,6 +4295,10 @@ export interface paths {
          *     `SecretSettings`). The module is on by default. Readable by the delegated admins of the
          *     tenant and the super admin; the settings are configuration, so an auditor gets
          *     `403 read-only-role`.
+         *
+         *     Since 2.3 the answer also holds the settings of the express secrets, `expressEnabled` as
+         *     stored, and `expressInstanceDisabled` (read only), true while the instance kill switch
+         *     `TT_EXPRESS_SECRETS_DISABLED` is on: the stored `expressEnabled` then has no effect.
          */
         get: operations["getSecretSettings"];
         /**
@@ -4311,15 +4320,24 @@ export interface paths {
          *     default 1000). They are **optional in a replacement**: an absent member keeps its
          *     current value (so a 2.1 client that does not know them never resets them), a `null`
          *     one is `400 validation-failed` (`not-nullable`), a value out of bounds
-         *     `400 validation-failed` (`out-of-range`). The delegated admins manage them like the other
-         *     members, `expressEnabled` included; the instance kill switch
-         *     `TT_EXPRESS_SECRETS_DISABLED` (environment) overrides `expressEnabled` without changing
-         *     it, and `getSecretSettings` still returns the stored value. Lowering `expressMaxPending`
-         *     below the current number of live express secrets deletes nothing: anonymous creations are
-         *     refused until enough of them are read or expire. In the configuration export and
-         *     import (`secretSettings`), the four members are exported; an import always sets
-         *     `expressEnabled` to false (`importTenant`) and takes the defaults for the limits it
-         *     lacks (a 2.1 or 2.2 export).
+         *     `400 validation-failed` (`out-of-range`). The delegated admins switch `expressEnabled`
+         *     like the other members. **The three limits only go down for a delegated admin:** each
+         *     limit given must be at most the greater of its default (10, 100, 1000) and its current
+         *     value. A delegated admin may thus lower a limit, set it back to its default or send back
+         *     unchanged a value the super admin raised, but a higher value is `403 forbidden` and
+         *     nothing is stored, the other members included. The express ciphertexts are kept in the
+         *     database shared by every tenant and are not counted in the storage quota: only the super
+         *     admin raises a limit, within its bounds. The body is checked first: a value out of bounds
+         *     (or any other invalid member) is `400 validation-failed` for every administrator, as
+         *     `updateTenant` checks the bounds of the transfer limit before its ceiling. The instance
+         *     kill switch `TT_EXPRESS_SECRETS_DISABLED` (environment) overrides `expressEnabled`
+         *     without changing it: the answers return the stored value, and `expressInstanceDisabled`
+         *     (read only, ignored in a replacement) tells whether the switch is on. Lowering
+         *     `expressMaxPending` below the current number of live express secrets deletes nothing:
+         *     anonymous creations are refused until enough of them are read or expire. In the
+         *     configuration export and import (`secretSettings`), the four members are exported (never
+         *     `expressInstanceDisabled`); an import always sets `expressEnabled` to false
+         *     (`importTenant`) and takes the defaults for the limits it lacks (a 2.1 or 2.2 export).
          */
         put: operations["updateSecretSettings"];
         post?: never;
@@ -4692,7 +4710,8 @@ export interface paths {
         /**
          * State of the instance components (super admin)
          * @description Since 2.3. Serves the "System status" box of the administration home: the state of the
-         *     application, the database, the antivirus and the storage, the maintenance mode and the
+         *     application, the database, the antivirus and the storage, the maintenance mode, the
+         *     instance kill switch of the express secrets (`TT_EXPRESS_SECRETS_DISABLED`) and the
          *     running version. The component states come from the same checks as `/healthz`, whose
          *     outcome is shared (run at most once every 3 seconds, concurrent callers waiting for the
          *     same run): this operation never adds a probe of its own. It adds what `/healthz`
@@ -6915,6 +6934,11 @@ export interface components {
                 enabled: boolean;
                 source: components["schemas"]["MaintenanceSource"];
             };
+            /** @description The express secrets (specification section 22.2) at the instance level. */
+            expressSecrets: {
+                /** @description The instance kill switch `TT_EXPRESS_SECRETS_DISABLED` is on (environment, read at start): no express secret can be created, anonymous or with an API token, nor read, on any tenant, whatever `SecretSettings.expressEnabled` stores. One-time secrets of 2.1 are not affected. Not a failure: `status` does not depend on it. As `SecretSettings.expressInstanceDisabled`. */
+                instanceDisabled: boolean;
+            };
             version: {
                 /** @description SemVer of the running instance, as `SystemVersion.version`. */
                 version: string;
@@ -7563,20 +7587,22 @@ export interface components {
              */
             expressEnabled?: boolean;
             /**
-             * @description Since 2.3. Anonymous express creations allowed per client (IPv4 address or IPv6 /64) in the sliding last hour, on this tenant. Default 10. Always present in answers; absent in a replacement keeps the current value.
+             * @description Since 2.3. Anonymous express creations allowed per client (IPv4 address or IPv6 /64) in the sliding last hour, on this tenant. Default 10. The super admin sets any value from 1 to 1000; a delegated admin only a value at most the greater of the default (10) and the current value (`403 forbidden` above it, see `updateSecretSettings`). Always present in answers; absent in a replacement keeps the current value.
              * @default 10
              */
             expressPerHourPerIp?: number;
             /**
-             * @description Since 2.3. Express creations allowed per API token in the sliding last hour (instead of the per-IP limit). Default 100. Always present in answers; absent in a replacement keeps the current value.
+             * @description Since 2.3. Express creations allowed per API token in the sliding last hour (instead of the per-IP limit). Default 100. The super admin sets any value from 1 to 10000; a delegated admin only a value at most the greater of the default (100) and the current value (`403 forbidden` above it, see `updateSecretSettings`). Always present in answers; absent in a replacement keeps the current value.
              * @default 100
              */
             expressPerHourPerToken?: number;
             /**
-             * @description Since 2.3. Live (`active`) express secrets the tenant may hold, anonymous and token ones together; when reached, anonymous creations are refused (`429 express-secret-limit-reached`), token creations still accepted. Default 1000. Always present in answers; absent in a replacement keeps the current value.
+             * @description Since 2.3. Live (`active`) express secrets the tenant may hold, anonymous and token ones together; when reached, anonymous creations are refused (`429 express-secret-limit-reached`), token creations still accepted. Default 1000. The super admin sets any value from 1 to 100000; a delegated admin only a value at most the greater of the default (1000) and the current value (`403 forbidden` above it, see `updateSecretSettings`). Always present in answers; absent in a replacement keeps the current value.
              * @default 1000
              */
             expressMaxPending?: number;
+            /** @description Since 2.3. Read only: the instance kill switch `TT_EXPRESS_SECRETS_DISABLED` is on (environment, read at start). Then no express secret can be created, anonymous or with an API token, nor read, on any tenant, whatever `expressEnabled` stores (it is kept, and applies again once the switch is off). Always present in the answers of `getSecretSettings` and `updateSecretSettings`; ignored in a replacement. Never part of a configuration export: `importTenant` refuses it as an unknown member. */
+            readonly expressInstanceDisabled?: boolean;
         };
         /** @description Since 2.1. Real rules of the secrets module for the creation form: the settings of the tenant (`SecretSettings`), `defaultDuration` included. */
         SecretFeatures: {
@@ -7619,7 +7645,7 @@ export interface components {
         };
         /** @description Since 2.3. Body of `lookupTenantSecret`: a secret link as received, or its bare token. The fragment (`#k=...`) is ignored and dropped unread; the token is hashed, never stored, logged nor audited. */
         SecretLookup: {
-            /** @description Full link `https://<fqdn>/s/<token>[#k=<key>]` or bare token (`tts_` and 43 base62 characters). No token extractable: `400 validation-failed` (`invalid-format`). */
+            /** @description Full link `https://<fqdn>/s/<token>[#k=<key>]` or bare token (`tts_` and 43 base62 characters). A `?query` part is dropped and a bare `/s/<token>` path accepted. Errors: `400 validation-failed` on `/link`, `required` (blank), `too-long` or `invalid-format` (no token extractable). */
             link: string;
         };
         /** @description Since 2.3. Answer of `purgeExpressSecrets`. */
@@ -16267,6 +16293,15 @@ export interface operations {
                      *           "message": "The archive contains a fake login page.",
                      *           "status": "open",
                      *           "reportedAt": "2026-10-27T08:40:00Z"
+                     *         },
+                     *         {
+                     *           "id": "abr_01JABCR3S4T5V6W7X8Y9Z0A1B3",
+                     *           "secretId": "sec_01JABCS3E4C5R6E7T8W9X0Y1Z2",
+                     *           "reporterVerified": false,
+                     *           "category": "phishing",
+                     *           "message": "The secret asks me to sign in on a fake page.",
+                     *           "status": "open",
+                     *           "reportedAt": "2026-11-18T10:15:00Z"
                      *         }
                      *       ]
                      *     }
@@ -16625,6 +16660,23 @@ export interface operations {
                      *         "deniedDomains": [
                      *           "mail.example.org"
                      *         ]
+                     *       },
+                     *       "secretSettings": {
+                     *         "enabled": true,
+                     *         "durations": [
+                     *           "1h",
+                     *           "1d",
+                     *           "7d"
+                     *         ],
+                     *         "defaultDuration": "1d",
+                     *         "fileAllowed": true,
+                     *         "fileMaxBytes": 10485760,
+                     *         "emailAllowed": true,
+                     *         "emailRequiresPassphrase": false,
+                     *         "expressEnabled": false,
+                     *         "expressPerHourPerIp": 10,
+                     *         "expressPerHourPerToken": 100,
+                     *         "expressMaxPending": 1000
                      *       }
                      *     }
                      */
@@ -17268,7 +17320,8 @@ export interface operations {
                      *       "expressEnabled": false,
                      *       "expressPerHourPerIp": 10,
                      *       "expressPerHourPerToken": 100,
-                     *       "expressMaxPending": 1000
+                     *       "expressMaxPending": 1000,
+                     *       "expressInstanceDisabled": false
                      *     }
                      */
                     "application/json": components["schemas"]["SecretSettings"];
@@ -17336,7 +17389,8 @@ export interface operations {
                      *       "expressEnabled": true,
                      *       "expressPerHourPerIp": 5,
                      *       "expressPerHourPerToken": 100,
-                     *       "expressMaxPending": 1000
+                     *       "expressMaxPending": 1000,
+                     *       "expressInstanceDisabled": false
                      *     }
                      */
                     "application/json": components["schemas"]["SecretSettings"];

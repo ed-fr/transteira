@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/ed-fr/transteira/internal/adminauth"
@@ -253,4 +254,56 @@ func TestAdminSecretBodyExpress(t *testing.T) {
 	if b.Express == nil || *b.Express || b.SenderEmail == nil {
 		t.Errorf("2.1 secret = %+v", b)
 	}
+}
+
+// TestSecretSettingsInstanceDisabled: the answers of getSecretSettings and
+// updateSecretSettings always say whether the instance kill switch is on
+// (expressInstanceDisabled, read only, since 2.3), from the server option
+// and never from the body; a limit raised by a delegated admin (service
+// ErrForbidden, T-418) is 403 forbidden.
+func TestSecretSettingsInstanceDisabled(t *testing.T) {
+	t.Parallel()
+	ctx := ctxWith(store.SessionAuthenticated, delegated)
+	raw := `{"enabled":true,"durations":["1h"],"fileAllowed":true,"fileMaxBytes":2097152,"emailAllowed":true,` +
+		`"expressInstanceDisabled":%s}`
+	for _, on := range []bool{false, true} {
+		svc := &fakeTenantService{}
+		s := tenantServer(svc)
+		if on {
+			WithExpressKillSwitch(true)(s)
+		}
+		resp, err := s.GetSecretSettings(ctx, gen.GetSecretSettingsRequestObject{TenantId: "ten_a"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if code, out := decode(t, resp); code != http.StatusOK || out["expressInstanceDisabled"] != on {
+			t.Errorf("switch %v: get = %d %v", on, code, out)
+		}
+		// The member sent is ignored: the answer tells the server switch.
+		sent := !on
+		body := &gen.SecretSettings{
+			Enabled: true, Durations: []gen.SecretDuration{"1h"}, FileAllowed: true, FileMaxBytes: 2097152, EmailAllowed: true,
+			ExpressInstanceDisabled: &sent,
+		}
+		upd, err := s.UpdateSecretSettings(context.WithValue(ctx, rawBodyKey{}, fmt.Appendf(nil, raw, strconv.FormatBool(sent))),
+			gen.UpdateSecretSettingsRequestObject{TenantId: "ten_a", Body: body})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if code, out := decode(t, upd); code != http.StatusOK || out["expressInstanceDisabled"] != on {
+			t.Errorf("switch %v: update = %d %v", on, code, out)
+		}
+	}
+
+	svc := &fakeTenantService{err: tenantadmin.ErrForbidden, errAt: "UpdateSecretSettings"}
+	pending := tenant.DefaultExpressMaxPending + 1
+	body := &gen.SecretSettings{
+		Enabled: true, Durations: []gen.SecretDuration{"1h"}, FileAllowed: true, FileMaxBytes: 2097152, EmailAllowed: true,
+		ExpressMaxPending: &pending,
+	}
+	_, err := tenantServer(svc).UpdateSecretSettings(
+		context.WithValue(ctx, rawBodyKey{}, []byte(`{"enabled":true,"durations":["1h"],"fileAllowed":true,"fileMaxBytes":2097152,`+
+			`"emailAllowed":true,"expressMaxPending":1001}`)),
+		gen.UpdateSecretSettingsRequestObject{TenantId: "ten_a", Body: body})
+	expectProblem(t, err, problem.CodeForbidden)
 }

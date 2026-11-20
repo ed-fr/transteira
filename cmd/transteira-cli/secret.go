@@ -117,12 +117,11 @@ func runSecretCreate(ctx context.Context, args []string, s streams) int {
 // client builds the client of secret create: the API token of the
 // configuration is optional, and dropped with --anonymous.
 func (f *secretCreateFlags) client(s streams) (*client.Client, error) {
-	cfg, err := client.Load(f.conn.loadOptions(false))
+	lo := f.conn.loadOptions(false)
+	lo.NoToken = f.anonymous
+	cfg, err := client.Load(lo)
 	if err != nil {
 		return nil, err
-	}
-	if f.anonymous {
-		cfg.Token = ""
 	}
 	return newClient(cfg, f.conn.clientOptions(s)...)
 }
@@ -182,7 +181,7 @@ type secretReadFlags struct {
 func runSecretRead(ctx context.Context, args []string, s streams) int {
 	var f secretReadFlags
 	fs := newFlagSet("secret read", s.err)
-	f.conn.add(fs, false)
+	f.conn.addNoToken(fs)
 	fs.StringVar(&f.output, "output", "", "write the text to this new file (mode 0600) instead of the standard output")
 	fs.BoolVar(&f.force, "force", false, "with --output, replace an existing file")
 	fs.Usage = func() {
@@ -235,12 +234,11 @@ func runSecretRead(ctx context.Context, args []string, s streams) int {
 // link, and no API token is sent.
 func (f *secretReadFlags) client(s streams, l secret.Link) (*client.Client, error) {
 	lo := f.conn.loadOptions(false)
-	lo.URL = l.Origin
+	lo.URL, lo.NoToken = l.Origin, true
 	cfg, err := client.Load(lo)
 	if err != nil {
 		return nil, err
 	}
-	cfg.Token = ""
 	return newClient(cfg, f.conn.clientOptions(s)...)
 }
 

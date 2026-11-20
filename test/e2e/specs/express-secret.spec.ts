@@ -42,6 +42,17 @@ const SECRET_LINK_API = /\/api\/v1\/secret-links\/[^/]+(\/reveal)?$/;
 const EXPRESS_API = /\/api\/v1\/express-secrets$/;
 const MAX_CHARS = 10_000;
 
+/** Files an abuse report on an express secret straight on the API (same-origin headers, like the browser). */
+async function reportSecretOnApi(serverPort: number, link: string, message: string): Promise<void> {
+  const res = await request(serverPort, 'POST', `/api/v1/secret-links/${tokenOf(link)}/abuse-reports`, {
+    host: HOSTS.a,
+    body: { category: 'phishing', message },
+    headers: { Origin: ORIGINS.a, 'Sec-Fetch-Site': 'same-origin' },
+    clientIp: externalIp(),
+  });
+  expect(res.status).toBe(202);
+}
+
 // The config runs tests in parallel: this file shares the express switch of entity A.
 test.describe.configure({ mode: 'default' });
 
@@ -448,7 +459,7 @@ test.describe('admin: express secrets', () => {
       for (const bad of ['0', '1001', 'abc']) {
         await perIp.fill(bad);
         await save.click();
-        await expect(page.getByText('Enter a whole number from 1 to 1,000.').first()).toBeVisible();
+        await expect(page.getByText('Enter a whole number from 1 to 10.').first()).toBeVisible();
       }
       await checkA11y(page);
 
@@ -474,6 +485,203 @@ test.describe('admin: express secrets', () => {
         expressPerHourPerToken: 50,
         expressMaxPending: 500,
       });
+    });
+
+    test('a delegated admin cannot raise an express limit above its default; a raised value survives a re-save', async ({
+      page,
+      state,
+      browser,
+    }) => {
+      const tenantId = state.tenants.a.id;
+      const settingsUrl = `${ORIGINS.admin}/admin/tenants/${tenantId}/secret-settings`;
+      const limitsOf = () =>
+        delegateApi().ok<Record<string, unknown>>('GET', `/admin/tenants/${tenantId}/secret-settings`);
+
+      // Above the default: field error before any request, nothing saved.
+      const puts: string[] = [];
+      page.on('request', (req) => {
+        if (req.method() === 'PUT' && req.url().endsWith('/secret-settings')) puts.push(req.url());
+      });
+      await page.goto(settingsUrl);
+      const section = page.getByRole('group', { name: 'Express secrets (anonymous)' });
+      const perIp = section.getByLabel(/^Secrets per hour and per client address/);
+      await expect(perIp).toHaveValue('10');
+      await expect(section.getByText(/You can lower these three limits/)).toBeVisible();
+      await perIp.fill('11');
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await expect(
+        page.getByText(/Enter at most 10: only a super administrator can raise/).first(),
+      ).toBeVisible();
+      await expect(perIp).toHaveAttribute('aria-invalid', 'true');
+      expect(puts).toEqual([]);
+      expect(await limitsOf()).toMatchObject({ expressPerHourPerIp: 10 });
+      await checkA11y(page);
+
+      // The server enforces the same rule on its own (403 forbidden, nothing stored).
+      const forced = await delegateApi().call('PUT', `/admin/tenants/${tenantId}/secret-settings`, {
+        ...(await limitsOf()),
+        expressPerHourPerIp: 11,
+      });
+      expect(forced.status).toBe(403);
+      expect(await limitsOf()).toMatchObject({ expressPerHourPerIp: 10 });
+
+      // The super admin raises it; the delegated admin keeps it by re-saving the form.
+      await setExpress(superAdminApi(), tenantId, { expressPerHourPerIp: 25 });
+      await page.reload();
+      const again = page.getByRole('group', { name: 'Express secrets (anonymous)' });
+      const raised = again.getByLabel(/^Secrets per hour and per client address/);
+      await expect(raised).toHaveValue('25');
+      // Another field changes (a form without change saves nothing): the raised value, untouched,
+      // is not sent and stays stored.
+      await again.getByLabel(/^Express secrets waiting at the same time/).fill('900');
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await expect(page.getByText('Secrets settings saved.').first()).toBeVisible();
+      expect(await limitsOf()).toMatchObject({ expressPerHourPerIp: 25, expressMaxPending: 900 });
+
+      // Lowering stays allowed.
+      await raised.fill('5');
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await expect(page.getByText('Secrets settings saved.').first()).toBeVisible();
+      expect(await limitsOf()).toMatchObject({ expressPerHourPerIp: 5 });
+
+      // The super admin is not bound by the default.
+      const superPage = await (await browser.newContext({ storageState: STORAGE_SUPER })).newPage();
+      await superPage.goto(settingsUrl);
+      const superIp = superPage
+        .getByRole('group', { name: 'Express secrets (anonymous)' })
+        .getByLabel(/^Secrets per hour and per client address/);
+      await expect(superIp).toHaveValue('5');
+      await expect(superPage.getByText(/You can lower these three limits/)).toHaveCount(0);
+      await superIp.fill('50');
+      await superPage.getByRole('button', { name: 'Save', exact: true }).click();
+      await expect(superPage.getByText('Secrets settings saved.').first()).toBeVisible();
+      expect(await limitsOf()).toMatchObject({ expressPerHourPerIp: 50 });
+      await superPage.context().close();
+    });
+
+    test('a stale form never writes back the express settings the super admin changed meanwhile', async ({
+      page,
+      state,
+    }) => {
+      const tenantId = state.tenants.a.id;
+      const path = `/admin/tenants/${tenantId}/secret-settings`;
+      await setExpress(superAdminApi(), tenantId, { expressEnabled: true });
+      await page.goto(`${ORIGINS.admin}${path}`);
+      const section = page.getByRole('group', { name: 'Express secrets (anonymous)' });
+      const enabled = section.getByLabel('Allow anonymous express secrets');
+      await expect(enabled).toBeChecked();
+      await expect(section.getByLabel(/^Secrets per hour and per client address/)).toHaveValue('10');
+
+      // Meanwhile, the super admin closes the anonymous mode and lowers a limit.
+      await setExpress(superAdminApi(), tenantId, { expressEnabled: false, expressPerHourPerIp: 2 });
+
+      // The delegated admin, still on the stale page, changes another express limit only.
+      await section.getByLabel(/^Express secrets waiting at the same time/).fill('900');
+      const put = page.waitForRequest(
+        (req) => req.method() === 'PUT' && req.url().endsWith('/secret-settings'),
+      );
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      const body = (await put).postDataJSON() as Record<string, unknown>;
+      expect(body).toMatchObject({ expressMaxPending: 900 });
+      for (const key of ['expressEnabled', 'expressPerHourPerIp', 'expressPerHourPerToken']) {
+        expect(key in body, key).toBe(false);
+      }
+      await expect(page.getByText('Secrets settings saved.').first()).toBeVisible();
+      expect(await delegateApi().ok<Record<string, unknown>>('GET', path)).toMatchObject({
+        expressEnabled: false,
+        expressPerHourPerIp: 2,
+        expressPerHourPerToken: 100,
+        expressMaxPending: 900,
+      });
+      // The screen shows what is stored.
+      await expect(enabled).not.toBeChecked();
+    });
+
+    test('an abuse report on a secret: its sec_ id is listed, the admin deletes the secret from the report', async ({
+      page,
+      state,
+      newContext,
+      guards,
+    }) => {
+      guards.allowHttpError(410, SECRET_LINK_API);
+      const tenantId = state.tenants.a.id;
+      await setExpress(superAdminApi(), tenantId, { expressEnabled: true });
+      const author = await (await newContext()).newPage();
+      const link = await createExpress(author, state.tenants.a.origin, expressText().text);
+      const secretId = (
+        await delegateApi().ok<{ id: string }>('POST', `/admin/tenants/${tenantId}/secrets/lookup`, { link })
+      ).id;
+      const message = `deletable secret report ${secretId}`;
+      await reportSecretOnApi(state.serverPort, link, message);
+
+      // The list shows the identifier of the row.
+      await page.goto(`${ORIGINS.admin}/admin/tenants/${tenantId}/secrets`);
+      await expect(page.getByRole('heading', { name: 'One-time secrets', level: 1 })).toBeVisible();
+      await expect(page.getByRole('row').filter({ hasText: secretId }).first()).toBeVisible();
+      await expect(page.locator('code', { hasText: secretId }).first()).toBeVisible();
+
+      // The report: anonymous reader text, then delete with a confirmation.
+      await page.goto(`${ORIGINS.admin}/admin/tenants/${tenantId}/abuse-reports?status=open`);
+      const row = page.getByRole('row').filter({ hasText: `Express secret ${secretId}` });
+      await expect(row).toHaveCount(1);
+      await expect(row).toContainText('The anonymous reader of the express secret, not verified');
+      await row.getByRole('button', { name: /^Details of the/ }).click();
+      const details = page.getByRole('dialog', { name: 'Abuse report' });
+      await expect(details.getByText(message, { exact: true })).toBeVisible();
+      const open = details.getByRole('button', { name: 'Delete this secret' });
+      await open.click();
+      const confirm = page.getByRole('dialog', { name: 'Delete this express secret?' });
+      await expect(confirm).toBeVisible();
+      await checkA11y(page);
+      // Cancel first: nothing happens and the focus goes back to the button.
+      await confirm.getByRole('button', { name: 'Cancel' }).click();
+      await expect(confirm).toBeHidden();
+      await expect(open).toBeFocused();
+      const before = await delegateApi().ok<{ state: string }>(
+        'POST',
+        `/admin/tenants/${tenantId}/secrets/lookup`,
+        { link },
+      );
+      expect(before.state).toBe('active');
+
+      await open.click();
+      const deleted = page.waitForResponse(
+        (res) => res.request().method() === 'DELETE' && res.url().endsWith(`/secrets/${secretId}`),
+      );
+      await confirm.getByRole('button', { name: 'Delete the secret' }).click();
+      expect((await deleted).status()).toBe(204);
+      await expect(confirm).toBeHidden();
+      const result = details.getByText('Secret deleted: its link no longer works.');
+      await expect(result).toBeVisible();
+      await expect(result).toBeFocused();
+      await expect(details.getByRole('button', { name: 'Delete this secret' })).toHaveCount(0);
+
+      const after = await delegateApi().ok<{ state: string }>(
+        'POST',
+        `/admin/tenants/${tenantId}/secrets/lookup`,
+        { link },
+      );
+      expect(after.state).toBe('deleted');
+      const reader = await (await newContext({ clientIp: externalIp() })).newPage();
+      await reader.goto(link);
+      await expectGone(reader, 'This secret has been deleted by its sender or by an administrator.');
+    });
+
+    test('the security log labels a refused express creation', async ({ page, state, clientIp, guards }) => {
+      guards.allowHttpError(403, EXPRESS_API);
+      const res = await request<{ code: string }>(state.serverPort, 'POST', '/api/v1/express-secrets', {
+        host: HOSTS.a,
+        body: {},
+        clientIp,
+      });
+      expect(res.status).toBe(403);
+      await waitForSecurityEvents({ ip: clientIp, event: 'express_refused', fields: { reason: 'disabled' } });
+
+      await page.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/security-events`);
+      await expect(page.getByRole('heading', { name: 'Security log', level: 1 })).toBeVisible();
+      await page.getByLabel(/^Event type/).selectOption({ label: 'Express secret refused' });
+      await expect(page.getByRole('cell', { name: 'Express secret refused' }).first()).toBeVisible();
+      await checkA11y(page);
     });
 
     test('lookup by pasted link finds the secret, the key never leaves the page, then purge', async ({
@@ -559,6 +767,18 @@ test.describe('admin: express secrets', () => {
   test.describe('super admin', () => {
     test.use({ storageState: STORAGE_SUPER });
 
+    test('the system status box of the home shows the express secrets row', async ({ page }) => {
+      await page.goto(`${ORIGINS.admin}/admin/`);
+      await expect(page.getByRole('heading', { name: 'Home', level: 1 })).toBeVisible();
+      const status = page.locator('dl.tt-home__status');
+      const row = status.locator('div', { has: page.getByText('Express secrets', { exact: true }) });
+      await expect(row).toHaveCount(1);
+      // The e2e server does not set TT_EXPRESS_SECRETS_DISABLED.
+      await expect(row.getByText('Set per entity')).toBeVisible();
+      await expect(row.getByText('Closed for the instance')).toHaveCount(0);
+      await checkA11y(page);
+    });
+
     test('the token opt-in is created, listed and honoured by the API', async ({ page, state }) => {
       const name = `e2e express token ${Math.random().toString(16).slice(2, 10)}`;
       await page.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/tokens/new`);
@@ -634,6 +854,11 @@ test.describe('admin: express secrets', () => {
     await expect(card.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Secrets settings' })).toHaveCount(0);
     await checkA11y(page);
+
+    // The report detail never offers the deletion of a secret to the auditor.
+    await page.goto(`${ORIGINS.admin}/admin/tenants/${tenantId}/abuse-reports?status=open`);
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('button', { name: 'Delete this secret' })).toHaveCount(0);
 
     // The API refuses the write operations to the auditor.
     const api = new AdminApi(state.serverPort);

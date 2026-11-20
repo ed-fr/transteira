@@ -13,6 +13,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/store/storetest"
+	"github.com/ed-fr/transteira/internal/tenant"
 )
 
 // auditorClass is what an auditor session attached to tenant A gets from
@@ -570,6 +571,72 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 			resp = h.adminCall(t, super, http.MethodGet, tenantPath(h.tenantA.ID, ""), "")
 			if resp.status != http.StatusOK || !strings.Contains(string(resp.body), `"e2ePolicy":"forbidden"`) {
 				t.Errorf("tenant A after the refused changes and B's change: %d %s, want e2ePolicy forbidden", resp.status, resp.body)
+			}
+		})
+
+		t.Run("express limits only go down for the delegated admin", func(t *testing.T) {
+			// The three express limits (since 2.3, T-418): the delegated
+			// admin of A may lower them, set them back to their defaults
+			// or send back a value the super admin raised, never raise
+			// one (403 forbidden, nothing stored); the bounds are checked
+			// first (400); B answers like an unknown tenant; the auditor
+			// stays refused (403 read-only-role); the super admin raises
+			// within the bounds. A's settings are restored afterwards.
+			deleg, super := h.session(t), h.superSession(t)
+			put := func(sess adminSession, tid tenant.ID, express string) response {
+				t.Helper()
+				body := `{"enabled":true,"durations":["1h","1d","7d"],"fileAllowed":true,"fileMaxBytes":10485760,"emailAllowed":true` +
+					express + `}`
+				return h.adminCall(t, sess, http.MethodPut, tenantPath(tid, "/secret-settings"), body)
+			}
+			limitsOf := func() string {
+				t.Helper()
+				got := h.secretSettingsOf(t, operation{id: "getSecretSettings"}, super, h.tenantA.ID)
+				return mustJSON(t, []any{got["expressEnabled"], got["expressPerHourPerIp"], got["expressPerHourPerToken"], got["expressMaxPending"]})
+			}
+			defer func() {
+				if resp := put(super, h.tenantA.ID, `,"expressEnabled":false,"expressPerHourPerIp":10,"expressPerHourPerToken":100,"expressMaxPending":1000`); resp.status != http.StatusOK {
+					t.Errorf("restoring A's settings: %d %s", resp.status, resp.body)
+				}
+			}()
+			initial := limitsOf()
+			for _, raise := range []string{`,"expressPerHourPerIp":11`, `,"expressPerHourPerToken":101`, `,"expressEnabled":true,"expressMaxPending":1001`} {
+				if resp := put(deleg, h.tenantA.ID, raise); resp.status != http.StatusForbidden || problemCode(resp) != "forbidden" {
+					t.Errorf("delegated admin %s on A: %d %s, want 403 forbidden", raise, resp.status, resp.body)
+				}
+				resp := put(deleg, h.tenantB.ID, raise)
+				wantCode(t, operation{id: "updateSecretSettings"}, hostAdmin, resp, http.StatusNotFound, "not-found")
+				h.noDataOfB(t, operation{id: "updateSecretSettings"}, "delegated admin on B", resp)
+				if resp := put(auditor, h.tenantA.ID, raise); resp.status != http.StatusForbidden || problemCode(resp) != "read-only-role" {
+					t.Errorf("auditor %s on A: %d %s, want 403 read-only-role", raise, resp.status, resp.body)
+				}
+			}
+			if got := limitsOf(); got != initial {
+				t.Errorf("A's express settings after the refusals: %s, was %s", got, initial)
+			}
+			if resp := put(deleg, h.tenantA.ID, `,"expressMaxPending":100001`); resp.status != http.StatusBadRequest || problemCode(resp) != "validation-failed" {
+				t.Errorf("delegated admin out of bounds on A: %d %s, want 400 validation-failed", resp.status, resp.body)
+			}
+			for _, c := range []struct{ who, express string }{
+				{"delegated admin lowers", `,"expressPerHourPerIp":2,"expressPerHourPerToken":20,"expressMaxPending":200`},
+				{"delegated admin back to the defaults", `,"expressPerHourPerIp":10,"expressPerHourPerToken":100,"expressMaxPending":1000`},
+				{"super admin raises", `,"expressPerHourPerIp":1000,"expressPerHourPerToken":10000,"expressMaxPending":100000`},
+				{"delegated admin sends the raised values back", `,"expressPerHourPerIp":1000,"expressPerHourPerToken":10000,"expressMaxPending":100000,"expressInstanceDisabled":true`},
+				{"delegated admin lowers a raised value", `,"expressPerHourPerIp":500`},
+			} {
+				sess := deleg
+				if strings.HasPrefix(c.who, "super") {
+					sess = super
+				}
+				if resp := put(sess, h.tenantA.ID, c.express); resp.status != http.StatusOK || !strings.Contains(string(resp.body), `"expressInstanceDisabled":false`) {
+					t.Errorf("%s on A: %d %s, want 200", c.who, resp.status, resp.body)
+				}
+			}
+			if resp := put(deleg, h.tenantA.ID, `,"expressPerHourPerIp":501`); resp.status != http.StatusForbidden || problemCode(resp) != "forbidden" {
+				t.Errorf("delegated admin raising a lowered value on A: %d %s, want 403 forbidden", resp.status, resp.body)
+			}
+			if got, want := limitsOf(), mustJSON(t, []any{false, 500, 10000, 100000}); got != want {
+				t.Errorf("A's express settings: %s, want %s", got, want)
 			}
 		})
 

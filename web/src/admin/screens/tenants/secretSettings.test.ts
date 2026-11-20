@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EXPRESS_BOUNDS,
   EXPRESS_LIMITS,
   MAX_FILE_MIB,
   MIB,
   MIN_FILE_MIB,
   SECRET_DURATIONS,
   bytesToMibText,
+  expressCeilings,
+  expressHintParams,
+  isRaiseRefused,
   parseBoundedInt,
   parseFileMib,
   purgeResultText,
+  rebaseExpress,
   secretDraftChanged,
   secretSettingsBody,
   sortDurations,
@@ -184,6 +189,111 @@ describe('express limits validation', () => {
   });
 });
 
+describe('express limits of a delegated admin (lower only, T-418)', () => {
+  const raised: SecretSettings = {
+    ...saved,
+    expressPerHourPerIp: 50,
+    expressPerHourPerToken: 20,
+    expressMaxPending: 5000,
+  };
+
+  it('keeps the bounds for the super admin', () => {
+    expect(expressCeilings(raised, true)).toEqual({
+      perHourPerIp: 1000,
+      perHourPerToken: 10000,
+      maxPending: 100000,
+    });
+    expect(EXPRESS_BOUNDS).toEqual({ perHourPerIp: 1000, perHourPerToken: 10000, maxPending: 100000 });
+  });
+
+  it('caps each limit at the greater of its default and its stored value', () => {
+    expect(expressCeilings(raised, false)).toEqual({
+      perHourPerIp: 50,
+      perHourPerToken: 100,
+      maxPending: 5000,
+    });
+    expect(expressCeilings(saved, false)).toEqual({
+      perHourPerIp: 10,
+      perHourPerToken: 100,
+      maxPending: 1000,
+    });
+    expect(expressCeilings(undefined, false)).toEqual({
+      perHourPerIp: 10,
+      perHourPerToken: 100,
+      maxPending: 1000,
+    });
+  });
+
+  it('reads a zero stored value as the default and never goes past the bound', () => {
+    expect(
+      expressCeilings(
+        { ...saved, expressPerHourPerIp: 0, expressPerHourPerToken: 99999, expressMaxPending: 3 },
+        false,
+      ),
+    ).toEqual({ perHourPerIp: 10, perHourPerToken: 10000, maxPending: 1000 });
+  });
+
+  it('accepts a lower value, the default and the stored raised value', () => {
+    const ceilings = expressCeilings(raised, false);
+    for (const [ip, token, pending] of [
+      ['3', '40', '500'],
+      ['10', '100', '1000'],
+      ['50', '20', '5000'],
+      ['30', '100', '2000'],
+    ] as const) {
+      const draft = {
+        ...toDraft(raised),
+        expressPerHourPerIpText: ip,
+        expressPerHourPerTokenText: token,
+        expressMaxPendingText: pending,
+      };
+      expect(validateSecretSettings(draft, fields, t, ceilings), `${ip} ${token} ${pending}`).toEqual([]);
+    }
+  });
+
+  it('refuses a raise above the ceiling, on its own field, before sending', () => {
+    const ceilings = expressCeilings(raised, false);
+    const draft = {
+      ...toDraft(raised),
+      expressPerHourPerIpText: '51',
+      expressPerHourPerTokenText: '101',
+      expressMaxPendingText: '5001',
+    };
+    expect(validateSecretSettings(draft, fields, t, ceilings)).toEqual([
+      { id: 'xi', label: 'Per IP', message: 'adminSecrets.settings.errors.expressLimitRaise {"max":50}' },
+      { id: 'xt', label: 'Per token', message: 'adminSecrets.settings.errors.expressLimitRaise {"max":100}' },
+      { id: 'xp', label: 'Pending', message: 'adminSecrets.settings.errors.expressLimitRaise {"max":5000}' },
+    ]);
+    // The same values are fine for the super admin.
+    expect(validateSecretSettings(draft, fields, t, expressCeilings(raised, true))).toEqual([]);
+  });
+
+  it('states the ceiling in the out-of-bounds message and in the hint', () => {
+    const ceilings = expressCeilings(saved, false);
+    const out = validateSecretSettings(
+      { ...toDraft(saved), expressPerHourPerIpText: '0' },
+      fields,
+      t,
+      ceilings,
+    );
+    expect(out[0]?.message).toBe('adminSecrets.settings.errors.expressLimit {"min":1,"max":10}');
+    expect(expressHintParams(EXPRESS_LIMITS.maxPending, ceilings.maxPending)).toEqual({
+      min: 1,
+      max: 1000,
+      def: 1000,
+    });
+    expect(expressHintParams(EXPRESS_LIMITS.perHourPerIp, 1000)).toEqual({ min: 1, max: 1000, def: 10 });
+  });
+
+  it('recognises the refusal of a raise by the server', () => {
+    expect(isRaiseRefused({ status: 403, code: 'forbidden' })).toBe(true);
+    expect(isRaiseRefused({ status: 403, code: 'read-only-role' })).toBe(false);
+    expect(isRaiseRefused({ status: 403, code: 'csrf-invalid' })).toBe(false);
+    expect(isRaiseRefused({ status: 400, code: 'validation-failed' })).toBe(false);
+    expect(isRaiseRefused({ status: undefined, code: undefined })).toBe(false);
+  });
+});
+
 describe('body and dirty state', () => {
   it('builds the body that replaces every setting', () => {
     expect(secretSettingsBody(toDraft(saved))).toEqual({
@@ -232,6 +342,62 @@ describe('body and dirty state', () => {
     expect('defaultDuration' in secretSettingsBody({ ...draft, defaultDuration: '' })).toBe(false);
   });
 
+  it('never sends the read-only state of the instance kill switch', () => {
+    const body = secretSettingsBody(toDraft({ ...saved, expressInstanceDisabled: true }));
+    expect('expressInstanceDisabled' in body).toBe(false);
+  });
+
+  it('sends only the express members that differ from the stored settings', () => {
+    const stored: SecretSettings = {
+      ...saved,
+      expressEnabled: true,
+      expressPerHourPerIp: 10,
+      expressPerHourPerToken: 100,
+      expressMaxPending: 1000,
+    };
+    const untouched = secretSettingsBody(toDraft(stored), stored);
+    for (const key of [
+      'expressEnabled',
+      'expressPerHourPerIp',
+      'expressPerHourPerToken',
+      'expressMaxPending',
+    ]) {
+      expect(key in untouched, key).toBe(false);
+    }
+    // The 2.1 members always replace the stored ones.
+    expect(untouched).toEqual({
+      enabled: true,
+      durations: ['1h', '1d', '7d'],
+      defaultDuration: '1d',
+      fileAllowed: true,
+      fileMaxBytes: 10 * MIB,
+      emailAllowed: true,
+      emailRequiresPassphrase: false,
+    });
+    // A changed member is sent, the others stay out (a stale form with another 2.1 change never
+    // reopens the anonymous mode nor restores a limit the super admin changed meanwhile).
+    const changed = secretSettingsBody(
+      { ...toDraft(stored), expressEnabled: false, expressMaxPendingText: ' 900 ' },
+      stored,
+    );
+    expect(changed).toMatchObject({ expressEnabled: false, expressMaxPending: 900 });
+    expect('expressPerHourPerIp' in changed).toBe(false);
+    expect('expressPerHourPerToken' in changed).toBe(false);
+    // The same number typed differently is no change; a missing stored limit is its default.
+    const { expressPerHourPerIp: _ip, expressEnabled: _on, ...partial } = stored;
+    const same = secretSettingsBody(
+      { ...toDraft(stored), expressEnabled: false, expressPerHourPerIpText: '010' },
+      partial,
+    );
+    expect('expressPerHourPerIp' in same).toBe(false);
+    expect('expressEnabled' in same).toBe(false);
+    expect(secretSettingsBody({ ...toDraft(stored), expressPerHourPerTokenText: '7' }, stored)).toMatchObject(
+      {
+        expressPerHourPerToken: 7,
+      },
+    );
+  });
+
   it('falls back to 10 MiB for an invalid size (validate first)', () => {
     expect(secretSettingsBody({ ...toDraft(saved), fileMibText: 'x' }).fileMaxBytes).toBe(10 * MIB);
   });
@@ -257,5 +423,70 @@ describe('body and dirty state', () => {
     for (const change of changes) {
       expect(secretDraftChanged(base, { ...base, ...change }), JSON.stringify(change)).toBe(true);
     }
+  });
+});
+
+describe('rebaseExpress', () => {
+  const stored: SecretSettings = {
+    ...saved,
+    expressEnabled: true,
+    expressPerHourPerIp: 10,
+    expressPerHourPerToken: 100,
+    expressMaxPending: 1000,
+  };
+  // Stored since: the super admin closed the anonymous mode and lowered two limits.
+  const fresh: SecretSettings = {
+    ...stored,
+    expressEnabled: false,
+    expressPerHourPerIp: 2,
+    expressPerHourPerToken: 20,
+    expressMaxPending: 1000,
+  };
+
+  it('takes the stored values for the express fields the admin did not change', () => {
+    const base = toDraft(stored);
+    const draft = {
+      ...base,
+      fileMibText: '5',
+      expressMaxPendingText: '50000',
+      expressPerHourPerTokenText: ' 100 ',
+    };
+    const next = rebaseExpress(draft, base, fresh);
+    expect(next.draft).toEqual({
+      ...draft,
+      expressEnabled: false,
+      expressPerHourPerIpText: '2',
+      expressPerHourPerTokenText: '20',
+      expressMaxPendingText: '50000',
+    });
+    expect(next.saved).toEqual({
+      ...base,
+      expressEnabled: false,
+      expressPerHourPerIpText: '2',
+      expressPerHourPerTokenText: '20',
+      expressMaxPendingText: '1000',
+    });
+    // Only the change of the admin is then sent; the dirty state follows.
+    const body = secretSettingsBody(next.draft, fresh);
+    expect(body).toMatchObject({ fileMaxBytes: 5 * MIB, expressMaxPending: 50000 });
+    for (const key of ['expressEnabled', 'expressPerHourPerIp', 'expressPerHourPerToken']) {
+      expect(key in body, key).toBe(false);
+    }
+    expect(secretDraftChanged(next.saved, next.draft)).toBe(true);
+    expect(
+      secretDraftChanged(next.saved, { ...next.draft, fileMibText: '10', expressMaxPendingText: '1000' }),
+    ).toBe(false);
+  });
+
+  it('keeps a changed switch and copies, never shares, the durations', () => {
+    const base = toDraft(stored);
+    const draft = { ...base, expressEnabled: false, expressPerHourPerIpText: '3' };
+    const next = rebaseExpress(draft, base, { ...fresh, expressEnabled: true });
+    expect(next.draft.expressEnabled).toBe(false);
+    expect(next.draft.expressPerHourPerIpText).toBe('3');
+    expect(next.saved.expressEnabled).toBe(true);
+    expect(next.draft.durations).not.toBe(draft.durations);
+    expect(next.saved.durations).not.toBe(base.durations);
+    expect(next.draft.durations).toEqual(draft.durations);
   });
 });

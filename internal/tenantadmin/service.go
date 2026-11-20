@@ -148,6 +148,10 @@ type Options struct {
 	// "none": no tenant then has its antivirus effective
 	// (TenantView.AntivirusEffective).
 	AntivirusDisabled bool
+	// ExpressKillSwitch is the instance switch TT_EXPRESS_SECRETS_DISABLED
+	// (since 2.3): the express secrets are not offered whatever a tenant
+	// stores (legal text proposals).
+	ExpressKillSwitch bool
 	// Events receives the tenant.setup_completed system event of a tenant
 	// created through the provisioning API (since V1.2); nil publishes
 	// nothing.
@@ -188,6 +192,8 @@ type Service struct {
 	smtpTests  *ratelimit.Window
 	// avDisabled is Options.AntivirusDisabled.
 	avDisabled bool
+	// expressKillSwitch is Options.ExpressKillSwitch.
+	expressKillSwitch bool
 	// admins is Options.Admins.
 	admins AdminCreator
 	// events is Options.Events, never nil.
@@ -225,24 +231,25 @@ func New(db *store.DB, opts Options) (*Service, error) {
 	}
 	r := newStoreRepo(db, opts.Vault, opts.Audit)
 	s := &Service{
-		repo:       r,
-		sso:        newSSOStore(db, opts.Vault, r.writer),
-		ssoTester:  opts.SSOTester,
-		assets:     opts.Assets,
-		eraser:     opts.Eraser,
-		mailer:     opts.Mailer,
-		resolver:   opts.Resolver,
-		cache:      opts.Cache,
-		deny:       opts.SMTPDenyNetworks,
-		logger:     opts.Logger,
-		now:        opts.Now,
-		dnsTimeout: opts.DNSTimeout,
-		avDisabled: opts.AntivirusDisabled,
-		admins:     opts.Admins,
-		events:     events.OrDiscard(opts.Events),
-		notifier:   opts.Notifier,
-		favicons:   branding.GenerateFavicons,
-		propose:    textproposals.Propose,
+		repo:              r,
+		sso:               newSSOStore(db, opts.Vault, r.writer),
+		ssoTester:         opts.SSOTester,
+		assets:            opts.Assets,
+		eraser:            opts.Eraser,
+		mailer:            opts.Mailer,
+		resolver:          opts.Resolver,
+		cache:             opts.Cache,
+		deny:              opts.SMTPDenyNetworks,
+		logger:            opts.Logger,
+		now:               opts.Now,
+		dnsTimeout:        opts.DNSTimeout,
+		avDisabled:        opts.AntivirusDisabled,
+		expressKillSwitch: opts.ExpressKillSwitch,
+		admins:            opts.Admins,
+		events:            events.OrDiscard(opts.Events),
+		notifier:          opts.Notifier,
+		favicons:          branding.GenerateFavicons,
+		propose:           textproposals.Propose,
 	}
 	for _, h := range opts.AdminHosts {
 		if n, err := tenant.NormalizeHost(h); err == nil {

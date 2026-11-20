@@ -9,7 +9,7 @@ import { auditorRedirect } from '../admin/auth/guard';
 import { notFoundRoute as adminNotFound, routes as adminRoutes } from '../admin/routes';
 import { notFoundRoute as publicNotFound, routes as publicRoutes } from '../public/routes';
 import { GUIDE_APPS, GUIDE_IDS, HELP_LANGUAGES, buildHelp, formatError, type GuideSource } from './build';
-import { AUDITOR_TOPIC_PREFIX } from './help';
+import { AUDITOR_TOPIC_PREFIX, SUPER_ADMIN_TOPICS, roleTopic } from './help';
 import type { GuideId, HelpGuideSet } from './types';
 
 const DOCS = '../../../docs/user/';
@@ -88,6 +88,27 @@ describe('user guides', () => {
         }
       }
       expect(problems).toEqual([]);
+    },
+  );
+
+  it.each(HELP_LANGUAGES)(
+    'give a super admin the super-admin version of the topics it rewrites (%s)',
+    (lang) => {
+      const set = sets.find((s) => s.lang === lang && s.app === 'admin');
+      const topics = new Set(adminRoutes.flatMap((r) => (r.helpTopic === undefined ? [] : [r.helpTopic])));
+      const problems: string[] = [];
+      for (const [topic, version] of Object.entries(SUPER_ADMIN_TOPICS)) {
+        if (!topics.has(topic)) problems.push(`${topic}: not the help topic of an admin route`);
+        if (topicGuide(set, topic) !== 'delegated-admin')
+          problems.push(`${topic}: not in the delegated-admin guide`);
+        if (topicGuide(set, version) !== 'super-admin')
+          problems.push(`${version}: not in the super-admin guide`);
+        if (roleTopic(topic, 'super_admin') !== version) problems.push(`${topic}: not opened as ${version}`);
+      }
+      expect(problems).toEqual([]);
+      // The help of the home page of the super admin opens its own section.
+      const home = adminRoutes.find((r) => r.pattern === '/');
+      expect(topicGuide(set, roleTopic(home?.helpTopic, 'super_admin') ?? '')).toBe('super-admin');
     },
   );
 

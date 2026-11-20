@@ -117,7 +117,8 @@ func TestExpressSecretsContract(t *testing.T) {
 		settings := tenantPath(o.tid, "/secret-settings")
 		get := mustStatus(t, "getSecretSettings", o.sa.call(t, http.MethodGet, settings, nil), http.StatusOK)
 		expectContract(t, "getSecretSettings", http.MethodGet, settings, get)
-		if !strings.Contains(string(get.body), `"expressEnabled":false`) || !strings.Contains(string(get.body), `"expressMaxPending":1000`) {
+		if !strings.Contains(string(get.body), `"expressEnabled":false`) || !strings.Contains(string(get.body), `"expressMaxPending":1000`) ||
+			!strings.Contains(string(get.body), `"expressInstanceDisabled":false`) {
 			t.Errorf("default settings: %s", get.body)
 		}
 
@@ -130,6 +131,21 @@ func TestExpressSecretsContract(t *testing.T) {
 		for _, bad := range []map[string]any{{"expressEnabled": nil}, {"expressPerHourPerIp": 0}, {"expressMaxPending": 100001}} {
 			resp := setExpressSettings(t, o.sa, o.tid, bad)
 			expectProblem(t, resp, http.StatusBadRequest, "validation-failed")
+		}
+		// A delegated admin only lowers the limits (T-418): a raise is 403
+		// forbidden and stores nothing, the anonymous mode of the same body
+		// included; a lower value and the default pass. The read-only
+		// expressInstanceDisabled sent back is ignored.
+		deleg := o.sa.createDelegatedOf(t, "express.deleg", o.tid, domainA, adminIP(20))
+		resp = setExpressSettings(t, deleg, o.tid, map[string]any{"expressEnabled": true, "expressPerHourPerIp": 11})
+		expectProblem(t, resp, http.StatusForbidden, "forbidden")
+		mustStatus(t, "lower", setExpressSettings(t, deleg, o.tid, map[string]any{"expressPerHourPerToken": 50}), http.StatusOK)
+		back := mustStatus(t, "default", setExpressSettings(t, deleg, o.tid,
+			map[string]any{"expressPerHourPerToken": 100, "expressInstanceDisabled": true}), http.StatusOK)
+		for _, want := range []string{`"expressEnabled":false`, `"expressPerHourPerIp":10`, `"expressPerHourPerToken":100`, `"expressInstanceDisabled":false`} {
+			if !strings.Contains(string(back.body), want) {
+				t.Errorf("after the delegated admin: no %s in %s", want, back.body)
+			}
 		}
 		mustStatus(t, "open", setExpressSettings(t, o.sa, o.tid, map[string]any{"expressEnabled": true, "expressPerHourPerIp": 2}), http.StatusOK)
 		tenantResp := s.get(t, hostA, "/api/v1/tenant")
@@ -351,10 +367,21 @@ func TestExpressKillSwitch(t *testing.T) {
 		if pub.Features.ExpressSecrets.Enabled {
 			t.Errorf("public features under the kill switch: %s", tenantResp.body)
 		}
-		// The setting is kept as stored.
+		// The setting is kept as stored, and the administration sees the
+		// switch: the secret settings and the system status say so.
 		get := mustStatus(t, "getSecretSettings", o.sa.call(t, http.MethodGet, tenantPath(o.tid, "/secret-settings"), nil), http.StatusOK)
-		if !strings.Contains(string(get.body), `"expressEnabled":true`) {
+		expectContract(t, "getSecretSettings", http.MethodGet, tenantPath(o.tid, "/secret-settings"), get)
+		if !strings.Contains(string(get.body), `"expressEnabled":true`) || !strings.Contains(string(get.body), `"expressInstanceDisabled":true`) {
 			t.Errorf("stored setting: %s", get.body)
+		}
+		saved := mustStatus(t, "updateSecretSettings", setExpressSettings(t, o.sa, o.tid, map[string]any{"expressEnabled": true}), http.StatusOK)
+		if !strings.Contains(string(saved.body), `"expressInstanceDisabled":true`) {
+			t.Errorf("saved under the switch: %s", saved.body)
+		}
+		status := mustStatus(t, "getSystemStatus", o.sa.call(t, http.MethodGet, pathSystemStatus, nil), http.StatusOK)
+		expectContract(t, "getSystemStatus", http.MethodGet, pathSystemStatus, status)
+		if !strings.Contains(string(status.body), `"expressSecrets":{"instanceDisabled":true}`) {
+			t.Errorf("system status under the switch: %s", status.body)
 		}
 		// Reporting and the administration stay open.
 		report := []byte(`{"category":"illegal_content"}`)
@@ -381,6 +408,10 @@ func TestExpressKillSwitch(t *testing.T) {
 		}
 		o.cfg.ExpressSecretsDisabled = false
 		o.server = o.restart(t)
+		get = mustStatus(t, "getSecretSettings", o.sa.call(t, http.MethodGet, tenantPath(o.tid, "/secret-settings"), nil), http.StatusOK)
+		if !strings.Contains(string(get.body), `"expressInstanceDisabled":false`) {
+			t.Errorf("settings after reopening: %s", get.body)
+		}
 		for _, sec := range []sealedExpress{anonymous, byToken} {
 			link := pathSecretLinks + sec.Token
 			mustStatus(t, "status after reopening", expressCall(t, o.server, http.MethodGet, link, expressClientIP, nil), http.StatusOK)

@@ -35,6 +35,77 @@ new proxy rule), do it by hand in `/opt/transteira/deploy/.env` or `/opt/reverse
 then `docker compose up -d` in the folder. For a rollback, see [Rollback](#rollback) with the
 same folder and the same copy. The sections below describe the manual procedure.
 
+## From 2.2 to 2.3
+
+Version 2.3 adds the express secrets (a one-time text secret created without
+any authentication) and redesigns the public pages and the administration. Version 2.2 only added
+the installer and changed nothing in the application: an upgrade **from 2.1**
+is identical, and the 2.1 notes below still apply to it. Follow the usual
+procedure below. What to know:
+
+- **Database**: migration 0036 is applied automatically at start-up. It adds
+  the express settings to `tenants` (four columns), the `express_allowed`
+  option to `api_tokens`, and widens `secrets` (express marker, anonymous
+  creator, no creator address) and `abuse_reports` (a report can name a
+  secret instead of a transfer). **With SQLite it rebuilds the `secrets` and
+  `abuse_reports` tables** (create, copy, drop, rename, in one transaction),
+  which takes longer when they hold many rows; with PostgreSQL it alters them
+  in place, and the owner role keeps the row-level security policies. As
+  always, take the database copy first.
+- **Configuration**: one new optional variable, `TT_EXPRESS_SECRETS_DISABLED`
+  (default `false`, see `.env.example`): the instance kill switch of the express
+  secrets. When `true`, no express secret can be created (with or without an
+  API token) or read, whatever the settings of the entities; the one-time
+  secrets of 2.1 are not affected. Changing it needs a restart. The state is
+  shown to the administrators (see below).
+- **Behaviour, to review before the maintenance mode is turned off**:
+  - the express secrets are **off in every entity**, existing ones included
+    (`expressEnabled` is false): nothing becomes reachable by anyone until
+    an administrator turns it on in **Secrets settings** (see
+    [Tenants](tenants.md#express-secrets));
+  - **existing API tokens get `expressAllowed` false**: they cannot create
+    express secrets until an administrator allows it on the token;
+  - a **configuration import** always sets `expressEnabled` to false in the
+    new entity, whatever the file says;
+  - a **delegated admin can only lower** the three express limits
+    (`expressPerHourPerIp`, `expressPerHourPerToken`, `expressMaxPending`):
+    above the greater of the default and the current value, the call is
+    refused with `403 forbidden` and nothing is stored. Only the super admin
+    can raise them. A delegated admin can still turn the anonymous mode on.
+- **API**: only paths, optional members and enumeration values are added to
+  `/api/v1`. `AbuseReport.transferId` and `senderEmail` and
+  `AdminSecret.senderEmail` are **no longer required**: they are absent for
+  express secrets and their reports, so a client generated from the 2.2
+  specification that assumes them must be regenerated or made tolerant. New:
+  `POST /express-secrets`, `ApiToken.expressAllowed`, the express members of
+  `SecretSettings` and `SecretSettings.expressInstanceDisabled` (read only),
+  `AbuseReport.secretId`, the `express` and `anonymous` members of the status
+  of a secret link, `AdminSecret.express` and the creator kind `anonymous`,
+  the administration operations `POST /admin/transfers/search`,
+  `GET /admin/system/status` (with `expressSecrets.instanceDisabled`),
+  `POST /admin/tenants/{tenantId}/secrets/lookup` and
+  `POST /admin/tenants/{tenantId}/express-secrets/purge`,
+  `TenantStats.previous` (trend over the previous period) and new counters in
+  the rows of the global statistics. A 2.2 server answers `404` on the new
+  paths. See [Administration](admin.md#express-secrets-since-23).
+- **Integrations**: copy again the fail2ban filter or the CrowdSec scenario
+  you use (`install.sh --upgrade` replaces the fail2ban filter by itself, not
+  the CrowdSec files): from 2.3 their ban rules ignore the `rate_limited` lines of
+  scope `express_token` (the hourly limit of an API token, a limit of an
+  authenticated integration, not of a client; without the new rule an
+  integration over its quota would get its server banned), and `express_ip`
+  (an anonymous flood) still counts. The reverse proxy configurations did not
+  change.
+- **Mail templates**: the abuse report mail (`abuse_report`) gains the variables
+  `report_intro`, `report_object` and `secret_id`, so that it can be about an
+  express secret. A customised `abuse_report` template saved before 2.3 does
+  not show them: it keeps working for the reports on transfers, and the
+  **default template is used for the reports on secrets** (the mail would
+  otherwise not say which secret was reported). Add the variables to the
+  customisation to keep it for both, see [Tenants](tenants.md#mail-templates).
+- **Monitoring**: no new metric and no new `/status` field. The express secrets are
+  counted in the existing secret counters, see [Supervision](supervision.md).
+
 ## From 2.0 to 2.1
 
 Version 2.1 adds one-time secrets. Follow the usual procedure below. What to
@@ -245,6 +316,16 @@ entries, first-download notices) and admin changes. A transfer deleted
 during that window (expiry, deletion after the first download) comes back in
 the database without its files, which have been erased: delete it from the
 administration.
+
+**From 2.3 back to 2.2.** Restoring the copy taken before the upgrade drops
+every express secret created since: their links stop working, and their
+creators cannot be told, since most of them are anonymous (the creator address
+and the IP address of an anonymous secret are not in the secret record, the
+IP address stays only in the audit log). Express secrets have no file, so
+nothing stays on disk. The settings changed since the copy (express options of
+the entities, `expressAllowed` of the tokens) are lost with it, and 2.2 knows
+none of them. `TT_EXPRESS_SECRETS_DISABLED` can stay in the environment: 2.2
+ignores it.
 
 **From 2.1 back to 2.0.** Restoring the copy taken before the upgrade drops
 every secret created since: their links stop working, and their creators

@@ -21,7 +21,8 @@ transteira/
 │   │   ├── main.go                  # Sous-commandes : serve, migrate, rotate-master-key, backup, healthcheck, version
 │   │   └── rotate.go                # rotate-master-key : rotation reprenable, -abandon, -recover-from (auditée, acteur cli)
 │   └── transteira-cli/              # Client en ligne de commande (V2, guide docs/api/cli.md) : upload, download, proof verify,
-│                                    # config check / profiles, version ; consomme l'API HTTP, pas les packages métier
+│                                    # config check / profiles, version ; consomme l'API HTTP, pas les packages métier ;
+│                                    # secret.go : secret create et secret read (secret express, V2.3)
 │
 ├── api/
 │   ├── openapi.yaml                 # Spécification OpenAPI 3.1 (source de vérité)
@@ -47,12 +48,15 @@ transteira/
 │   ├── api/
 │   │   ├── gen/                     # Code généré depuis openapi.yaml (ne pas modifier à la main)
 │   │   ├── stubs/                   # Stubs générés (tools/genstubs) : chaque opération non écrite → 404
-│   │   ├── public/                  # Handlers : meta, tenant public, sessions de dépôt, transferts, invitations, téléchargements
-│   │   ├── admin/                   # Handlers : auth admin, tenants, opérations, système
+│   │   ├── public/                  # Handlers : meta, tenant public, sessions de dépôt, transferts, invitations, téléchargements ;
+│   │   │                            # [V2.3] express.go : secrets express anonymes (création, lecture unique, état)
+│   │   ├── admin/                   # Handlers : auth admin, tenants, opérations, système ; [V2.3] search.go (recherche
+│   │   │                            # transversale), systemstatus.go (état du système, super admin), secrets_express.go
+│   │   │                            # (recherche par lien, purge des secrets express)
 │   │   ├── apiutil/                 # Aides HTTP communes aux handlers (réponse d'image d'habillage, WriteImage)
 │   │   └── problem/                 # Construction des réponses RFC 9457 et catalogue des codes d'erreur
 │   │
-│   ├── tenant/                      # Modèle Tenant, contexte (tenant.FromContext), résolution par Host
+│   ├── tenant/                      # Modèle Tenant, contexte (tenant.FromContext), résolution par Host, express.go ([V2.3] : durées et limites du secret express)
 │   ├── netpolicy/                   # Règle « utilisateur interne » (§ 6.2), pure : IP dans une plage CIDR de l'entité
 │   │                                # ET domaine de l'adresse parmi ses domaines internes ; réévaluée à chaque action
 │   │                                # (session, confirmation, invitation, transfert). Les règles sont lues via store
@@ -79,7 +83,10 @@ transteira/
 │   │   ├── client/                  # Configuration (profils, contrôle des droits), transport HTTPS sans redirection, jeton, nouvelles tentatives, erreurs RFC 9457
 │   │   ├── safepath/                # Noms et chemins sûrs, écriture confinée (os.Root), .part puis renommage
 │   │   ├── upload/                  # Déclaration, fichier d'état de reprise, tus, chemin chiffré de bout en bout
-│   │   └── download/                # Page, vérification du destinataire, déverrouillage, Range, déchiffrement
+│   │   ├── download/                # Page, vérification du destinataire, déverrouillage, Range, déchiffrement
+│   │   └── secret/                  # [V2.3] Secrets de la ligne de commande : secret express (création anonyme ou avec jeton,
+│   │                                # lecture unique) et secrets à lien de la 2.1 sans phrase de passe ni fichier ; analyse du
+│   │                                # lien (link.go), chiffrement par internal/tte2 ; 100 % de couverture
 │   ├── zipstream/                   # Écrivain ZIP64 déterministe en mode store (taille exacte calculée d'avance)
 │   ├── lifecycle/                   # Tâche périodique unique (§20, §23) : suppression après premier téléchargement,
 │   │                                # expirations, uploads abandonnés, purge des lignes (transferts terminés depuis
@@ -120,7 +127,8 @@ transteira/
 │   │                                # modèles, mentions légales, suppression
 │   ├── tenantops/                   # Opérations des entités : transferts (liste, détail, suppression, renvoi de la
 │   │                                # notification), invitations (liste, révocation), liste de blocage, journal
-│   │                                # d'audit de l'entité et journal global (super admin)
+│   │                                # d'audit de l'entité et journal global (super admin) ; [V2.3] search.go : recherche
+│   │                                # transversale des transferts (par adresse ou par identifiant trf_), limite 20 par défaut, 50 au plus
 │   ├── events/                      # Bus d'événements interne (mail, journal de sécurité ; webhooks et syslog en V1.1)
 │   ├── audit/                       # Rédacteur du journal d'audit (table audit_events, cloisonnée par tenant, purge à 12 mois),
 │   │                                # garde-fou « aucune adresse dans les détails », caviardage des textes libres
@@ -145,14 +153,18 @@ transteira/
 │   │                                # à usage unique de 10 min), envoi par mail, accusés de lecture, « Mes secrets »,
 │   │                                # limiteurs du lien (secret_link_ip, secret_link), balayages du cycle de vie.
 │   │                                # Tests de fuite : leak_store_test.go (T-375, aucun matériau secret dans les journaux),
-│   │                                # concurrence des lectures dans internal/store (T-353) ; couverture 100 % (liste critique)
+│   │                                # concurrence des lectures dans internal/store (T-353) ; couverture 100 % (liste critique).
+│   │                                # [V2.3] Secret express (data-model-v2.3.md) : express.go (création anonyme ou par jeton,
+│   │                                # événements de sécurité et d'audit), express_limit.go (fenêtres glissantes en mémoire
+│   │                                # par client, adresse IPv4 ou /64, pour les créations anonymes et les signalements), express_admin.go (recherche par lien, purge),
+│   │                                # express_report.go (signalement d'un secret express)
 │   ├── stats/                       # Statistiques par entité et globales (agrégats quotidiens, espace disque, secrets créés)
 │   ├── usage/                       # Compteurs d'activité par entité et par jour UTC, cumulés en mémoire et écrits
 │   │                                # toutes les 30 s (table tenant_daily_stats, sans donnée personnelle)
 │   ├── diskusage/                   # Taille et espace libre du système de fichiers des données (statfs / Windows)
 │   ├── i18n/                        # Négociation de langue (Accept-Language), catalogue de messages (locales/<langue>.json)
 │   ├── ratelimit/                   # Paniers par clé et fenêtres de verrouillage (bornés, horloge injectable)
-│   ├── health/                      # Vérifications /healthz (base, ClamAV, stockage)
+│   ├── health/                      # Vérifications /healthz (base, ClamAV, stockage) ; RunAt renvoie aussi l'heure du résultat, partagé avec GET /admin/system/status
 │   ├── id/                          # Identifiants préfixés (ULID) et jetons à forte entropie
 │   │
 │   ├── store/                       # Couche d'accès aux données (database/sql, SQLite et PostgreSQL)
@@ -162,10 +174,12 @@ transteira/
 │   │   ├── migrate.go               # Migrateur (checksum, verrou, refus d'une base plus récente)
 │   │   ├── tenants.go, networkrules.go, blocklist.go, … # Dépôts ; chaque méthode à portée d'entité exige un tenant.ID
 │   │   ├── secrets.go, secretfiles.go # [V2.1] Dépôt des secrets (table secrets, clés dek, fichiers dans <entité>/secrets/)
+│   │   ├── secrets_express.go       # [V2.3] Secrets express : création sous verrou d'entité avec le plafond des secrets
+│   │   │                            # en attente (expressMaxPending), limite horaire par jeton comptée dans la transaction, recherche et purge ; migration 0036_express_secrets
 │   │   ├── depositor.go             # store.Depositor (adresse, type, invitation) : l'identité d'un déposant partagée
 │   │                                # par transfer (Sender) et upload (Principal), et sa règle de propriété (Owns)
 │   │   ├── migrations/
-│   │   │   ├── sqlite/              # 0001_init.sql, … 0033_secrets, 0034_secret_mail_templates, 0035_secret_stats
+│   │   │   ├── sqlite/              # 0001_init.sql, … 0033_secrets, 0034_secret_mail_templates, 0035_secret_stats, 0036_express_secrets
 │   │   │   │                        # (versionnées, appliquées au démarrage)
 │   │   │   └── postgres/            # Mêmes versions ; ENABLE + FORCE ROW LEVEL SECURITY
 │   │   └── storetest/               # Moteurs de test (SQLite + PostgreSQL) pour les suites communes
@@ -188,7 +202,9 @@ transteira/
 │   ├── src/                         # Racine Vite
 │   │   ├── public/                  # Application publique (FQDN d'entité) : index.html, main.ts, App.svelte,
 │   │   │                            # routes, écrans (dépôt avec vérification par code, invitation,
-│   │   │                            # téléchargement, mentions légales, erreurs, maintenance)
+│   │   │                            # téléchargement, mentions légales, erreurs, maintenance) ; frame/ (cadre de la carte
+│   │   │                            # et pied de page, V2.3) ; secret/ (secrets à usage unique et secret express : écran
+│   │   │                            # screens/ExpressSecret.svelte, ExpressForm, ExpressDone, ExpressBanner, expressFlow)
 │   │   ├── admin/                   # Application d'administration (hôte admin, sous /admin/) : index.html, main.ts,
 │   │   │   │                        # App.svelte (démarrage, garde, langue), routes.ts, shell.ts, api.ts (client admin
 │   │   │   │                        # et rappels onUnauthenticated / recoverCsrf), maintenance.svelte.ts (état du
@@ -205,7 +221,7 @@ transteira/
 │   │   │   │                        # (SelectField), barre de filtres (FilterBar), chiffre clé (StatCard), jauge de
 │   │   │   │                        # quota (QuotaMeter, seuil d'avertissement réglable warningRatio), graphique en
 │   │   │   │                        # barres SVG (BarChart, géométrie par attributs), secret affiché une fois
-│   │   │   │                        # (SecretOnceModal), coque (AdminShell) et barre latérale (Sidebar, SidebarTenantBlock, SidebarSystemBlock), en-tête de page (PageHeader), carte (Card), ActionLink, jauge (Gauge), pastille de couleur d'entité (TenantSwatch), formulaire de recherche (TransferSearchForm) ; styles/admin.css ; écran de recherche screens/Search.svelte, affichage de l'audit
+│   │   │   │                        # (SecretOnceModal), coque (AdminShell) et barre latérale (Sidebar, SidebarTenantBlock, SidebarSystemBlock), en-tête de page (PageHeader), carte (Card), ActionLink, jauge (Gauge), pastille de couleur d'entité (TenantSwatch), pastille de statut (StatusBadge), formulaire de recherche (TransferSearchForm) ; styles/admin.css ; écran de recherche screens/Search.svelte (search.ts ; état de la recherche : search.svelte.ts), encadré « État du système » de l'accueil du super admin (screens/systemStatus.ts, Home.svelte), affichage de l'audit
 │   │   │   │                        # (AuditEventsTable, AuditActorCell, AuditActionCell, AuditObjectCell,
 │   │   │   │                        # AuditDetails) ; logique en .ts testée
 │   │   │   └── screens/             # Accueil (tableau de bord : home.ts), compte, aide, page introuvable
@@ -246,8 +262,8 @@ transteira/
 │   │   │   └── components/          # Composants accessibles (RGAA) partagés par les deux applications, dont
 │   │   │                            # LegalContent (mentions légales filtrées par le serveur, première exception
 │   │   │                            # {@html}, page publique et aperçu côté admin), HelpLink (lien d'aide du pied de
-│   │   │                            # page) et HelpIcon (icône d'aide contextuelle à côté du titre d'un écran)
-│   │   ├── styles/                  # tokens.css (variables de thème, clair en V1, sombre prêt pour la V1.1),
+│   │   │                            # page) et HelpIcon (icône d'aide contextuelle à côté du titre d'un écran) ; [V2.3] composants de la refonte (Badge, Pill, Button, SegmentedControl, Disclosure, Dialog, FileDrop, FileList, AbbreviatedHash, CopyButton, PageLayout, Footer, etc.)
+│   │   ├── styles/                  # tokens.css (variables de thème, clair et sombre),
 │   │   │                            # base.css, layout.css, utilities.css
 │   │   └── locales/                 # <langue>/<zone>.json (fr, en), montés sous le nom de la zone
 │   │                                # (upload.json : clés upload.*) ; administration : admin, adminAuth,
@@ -278,7 +294,7 @@ transteira/
 │   │   ├── global-teardown.ts       # Nettoyage de secours, libération du verrou
 │   │   ├── support/                 # Garde-fous (fixtures.ts : CSP, console, origines, 5xx, axe, stockage), API,
 │   │   │                            # Mailpit, TOTP, Caddy, faux clamd, données, i18n.ts, screenshots.ts (catalogue)
-│   │   ├── specs/                   # Scénarios public-*, admin-*, isolation, i18n, smoke ; screenshots.spec.ts
+│   │   ├── specs/                   # Scénarios public-*, admin-*, express-secret, help, proofs, isolation, i18n, smoke, tls-on-demand ; screenshots.spec.ts
 │   │   └── scripts/                 # lock.mjs + with-lock.mjs (une exécution à la fois), check-screenshots.mjs,
 │   │                                # browser-installed.mjs
 │   ├── bigfile/                     # Test de 20 Go à travers Caddy, coupure et reprise, mémoire stable (tag de build)
@@ -311,7 +327,7 @@ transteira/
 │
 ├── docs/
 │   ├── assets/                      # Logos TransTeira du README (fond clair, fond sombre)
-│   ├── api/                         # integration.md (jetons, dépôt tus, scripts bash/curl et PowerShell), errors.md, provisioning.md (API de provisionnement)
+│   ├── api/                         # integration.md (jetons, dépôt tus, scripts bash/curl et PowerShell, secrets à usage unique et secrets express par script), cli.md (client en ligne de commande), errors.md, provisioning.md (API de provisionnement), examples/ (secret-create.mjs et .ps1, express-secret.ps1, .py et .go, testés par examples_test.go et express_test.go)
 │   ├── user/
 │   │   ├── README.md                # Index des guides (une ligne par guide, en anglais et en français)
 │   │   ├── fr/                      # depositor.md, recipient.md, delegated-admin.md, super-admin.md (en français)
@@ -330,6 +346,9 @@ transteira/
 │   ├── security/
 │   │   └── threat-model.md          # Modèle de menaces STRIDE
 │   └── architecture/
+│       ├── data-model-v1.1.md, data-model-v1.2.md, data-model-v2.md, data-model-v2.1.md, data-model-v2.3.md
+│       │                            # Modèles de données par version (V2.3 : secret express)
+│       ├── e2e-format.md            # Format chiffré (fichiers, secrets, secret express)
 │       └── project-structure.md     # Ce document
 │
 ├── tools/
@@ -397,7 +416,8 @@ Les deux applications sont construites par `make web-build` dans `web/dist`, emb
 |---|---|---|---|
 | FQDN d'entité | `/assets/<nom>` (fichiers empreintés) | fichier, ou `404` Problem si inconnu | `public, max-age=31536000, immutable` |
 | FQDN d'entité | `/favicon.svg`, `/robots.txt` (racine du build) | fichier, ETag et `304` | `no-cache` |
-| FQDN d'entité | `/`, `/d/{jeton}`, `/i/{jeton}`, `/legal/{document}`, `/invite`, `/help/…` | page de l'application publique, `200`, ETag et `304` | `no-cache` |
+| FQDN d'entité | `/`, `/d/{jeton}`, `/i/{jeton}`, `/legal/{document}`, `/invite`, `/me`, `/help/…` | page de l'application publique, `200`, ETag et `304` | `no-cache` |
+| FQDN d'entité | `/x` (secret express, [V2.3]), `/s/{jeton}` (secret à usage unique) | page de l'application publique, `200` | `no-store` |
 | FQDN d'entité | tout autre chemin hors `/api` | page de l'application publique avec le statut `404` (écran « page introuvable ») | `no-cache` |
 | Hôte admin | `/` | `302` vers `/admin/` | `no-store` |
 | Hôte admin | `/admin/`, `/admin/…` | page de l'application d'administration, `200` | `no-store` |

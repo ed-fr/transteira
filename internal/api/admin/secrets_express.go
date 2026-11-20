@@ -33,6 +33,17 @@ func WithExpressSecretService(svc ExpressSecretService) Option {
 	return func(s *Server) { s.expressSvc = svc }
 }
 
+// WithExpressKillSwitch reports the instance kill switch of the express
+// secrets (TT_EXPRESS_SECRETS_DISABLED, since 2.3) to the administrators:
+// SecretSettings.expressInstanceDisabled in the answers of
+// getSecretSettings and updateSecretSettings, and
+// SystemStatus.expressSecrets.instanceDisabled. It only reports the
+// switch: the secret service enforces it. Without it the switch is
+// reported off.
+func WithExpressKillSwitch(disabled bool) Option {
+	return func(s *Server) { s.expressDisabled = disabled }
+}
+
 // errNoExpressSecretService reports a server built without
 // WithExpressSecretService: a wiring error, answered 500.
 var errNoExpressSecretService = errors.New("admin: no express secret service configured")

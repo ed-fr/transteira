@@ -76,8 +76,8 @@ All names start with `transteira_`.
 | `downloads_total` | counter | `tenant` | Downloads started. |
 | `downloaded_bytes_total` | counter | `tenant` | Bytes of files downloaded. |
 | `antivirus_detections_total` | counter | `tenant` | Infected files detected (and deleted). |
-| `secrets_created_total` | counter | `tenant` | Since 2.1. One-time secrets created. |
-| `secrets_read_total` | counter | `tenant` | Since 2.1. One-time secrets read. |
+| `secrets_created_total` | counter | `tenant` | Since 2.1. One-time secrets created; since 2.3, express secrets included (no separate counter). |
+| `secrets_read_total` | counter | `tenant` | Since 2.1. One-time secrets read; since 2.3, express secrets included. |
 | `secrets_locked_total` | counter | `tenant` | Since 2.1. One-time secrets locked after 5 wrong passphrase proofs. |
 | `secret_file_bytes` | gauge | `tenant` | Since 2.1. Bytes of the stored one-time secret files (already counted in `storage_used_bytes`). |
 | `storage_used_bytes` | gauge | `tenant` | Storage used by the tenant. |
@@ -118,10 +118,24 @@ A JSON object (schema `InstanceStatus`), simpler to read than the Prometheus tex
 | `disk` | `totalBytes`, `usedBytes`, `usedRatio`, `alertThreshold`, `alertActive`. |
 | `antivirus` | `engine`, `queuedFiles`, `alertActive`. |
 | `lifecycle` | End time of the last successful run of each periodic task. |
-| `tenants` | One row per active tenant: `id`, `name`, `storageUsedBytes`, `storageQuotaBytes`, `storageUsedRatio`, `activeTransfers`, `transfersLast24h` and, since 2.1, `secretFileBytes`, `secretsCreatedLast24h`, `secretsReadLast24h`, `secretsLockedLast24h` (taken from the database among the secrets still present: an unfinished secret is deleted after 1 hour and ended ones are purged 30 days after their end). |
+| `tenants` | One row per active tenant: `id`, `name`, `storageUsedBytes`, `storageQuotaBytes`, `storageUsedRatio`, `activeTransfers`, `transfersLast24h` and, since 2.1, `secretFileBytes`, `secretsCreatedLast24h`, `secretsReadLast24h`, `secretsLockedLast24h` (express secrets are counted with the others since 2.3; taken from the database among the secrets still present: an unfinished secret is deleted after 1 hour and ended ones are purged 30 days after their end). |
 
 `/status` carries the tenant names, `/metrics` does not: give the status token only to tools you
 would trust with the list of your entities.
+
+## Express secrets (since 2.3)
+
+The express secrets add no metric and no `/status` field: they are counted in
+`secrets_created_total`, `secrets_read_total`, `secretsCreatedLast24h` and
+`secretsReadLast24h` together with the one-time secrets of 2.1, so a flood of
+anonymous creations raises these figures without telling which kind it is. To
+tell them apart, look at the audit log (`secret.created` with
+`details.express`). Nothing alerts you either when an entity reaches its cap of live express secrets
+(`expressMaxPending`): the only trace is the `express_refused` event with
+`reason="limit"` in the [security log](security-log.md) (or in the SIEM, through
+[syslog](syslog.md)); watch it if you open the anonymous service. The state of
+the instance kill switch `TT_EXPRESS_SECRETS_DISABLED` is shown in the **System
+status** box of the super admin home, not in the metrics.
 
 ## Tools
 

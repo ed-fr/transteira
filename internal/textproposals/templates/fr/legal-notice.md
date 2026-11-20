@@ -21,6 +21,8 @@ Le service de transfert de fichiers {{TENANT}}, accessible à l'adresse {{FQDN}}
 
 Pour toute question relative à ce service : [À compléter : adresse mail ou postale de contact]
 
+Signalement d'un abus : [À compléter : contact pour les signalements d'abus]
+
 ## Propriété intellectuelle
 
 Les fichiers transférés restent la propriété de leurs auteurs. Le service n'en acquiert aucun droit et ne les utilise que pour les acheminer à leurs destinataires.

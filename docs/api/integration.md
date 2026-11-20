@@ -935,7 +935,8 @@ curl -sS -X DELETE "$TT_ADMIN_URL/api/v1/admin/tenants/$TT_TENANT_ID/api-tokens/
 - The audit log of the tenant records `api_token.created`, `api_token.updated` and
   `api_token.revoked` (by the admin), and `api_token.used` once per transfer or one-time secret
   created with a token (for a secret, `details.object` is `secret`), with the sender address
-  (`senderEmail`) as actor and the token as object; the transfer events (`transfer.created`,
+  (`senderEmail`) as actor and the token as object (since 2.3, for an express secret, which has
+  no sender address, the token itself is the actor); the transfer events (`transfer.created`,
   `transfer.finalized`...) and the `secret.*` events name the token (`tok_...`) as actor. The
   token's own secret (its value) never appears in it. Like every depositor address, the sender address of
   `api_token.used` is pseudonymised by the erasure of the person's data.
@@ -1153,7 +1154,10 @@ Invoke-Admin POST /admin/tenants/import @{
   only, and the webhooks by name, kind and events only (disabled). With `includeBranding=true`,
   the logo and the background image. **Never exported:** the SMTP user name and password, the
   webhook URLs and secrets, API tokens, admins, provisioning data, transfers, one-time secrets, addresses,
-  invitations, audit and the single sign-on configuration.
+  invitations, audit and the single sign-on configuration. The express settings of
+  `secretSettings` are exported (`expressEnabled`, `expressPerHourPerIp`,
+  `expressPerHourPerToken`, `expressMaxPending`); the read-only `expressInstanceDisabled` is
+  not, and an import that carries it is refused (`422 import-invalid`, `unknown-member`).
 - **Personal data:** the file holds the blocklist addresses and the contacts of the legal texts.
   Store it as a confidential document, and delete it when the new entity exists.
 - **Import is strict and all or nothing**, in one transaction, body limited to 32 MiB
@@ -1165,6 +1169,10 @@ Invoke-Admin POST /admin/tenants/import @{
   answers `422`
   [`import-schema-unsupported`](errors.md#import-schema-unsupported); an FQDN already used
   answers `409`. An optional `delegatedAdmin` is created as for `createTenant`.
+- **After the import, express secrets are off:** since 2.3 an import forces
+  `secretSettings.expressEnabled` to `false` whatever the file says. Enable them again
+  deliberately with `PUT /admin/tenants/{tenantId}/secret-settings` (the other express limits
+  are imported as written).
 - **After the import** the new entity is in the setup state: complete and test the SMTP
   (user name and password), recreate the webhooks with their URLs, configure single sign-on
   again. The network ranges and domains are imported as written but must be confirmed: the
@@ -1548,6 +1556,13 @@ with a terminal as output; the containers reach the fake server through the host
 Linux Docker Engine, or through `host.docker.internal` with Docker Desktop. Rootless Docker
 reaches neither: these parts then fail under `make check` (and are skipped by a plain `go test`).
 
+**Tested on.** The examples were run in Linux containers only: PowerShell 7.5 (Ubuntu image),
+Python 3.13 (Alpine image) and Go 1.27 (the toolchain of the repository). They were not run on
+Windows or macOS, and the Docker Desktop path (`host.docker.internal`) has never run. The
+minimum versions stated above (PowerShell 7.4, Python 3.11, Go 1.24) are declared, not
+exercised; the Go file was only checked to compile with Go 1.24. Report any difference on your
+platform.
+
 ### Express prerequisites and limits
 
 - **Off by default.** Read `GET /api/v1/tenant` (no authentication): `features.expressSecrets`
@@ -1566,7 +1581,19 @@ reaches neither: these parts then fail under `make check` (and are skipped by a 
   (`401 invalid-credentials`), never downgraded to an anonymous creation.
 - **Instance switch.** The operator can disable express secrets for the whole instance
   (`TT_EXPRESS_SECRETS_DISABLED=true`): every creation is refused, with or without a token, and
-  the existing express secrets cannot be read until the switch is lifted.
+  the existing express secrets cannot be read until the switch is lifted. Administrators can see
+  it: `GET` and `PUT /admin/tenants/{tenantId}/secret-settings` always answer the read-only
+  `expressInstanceDisabled` (ignored when sent), and `GET /admin/system/status` (super admin)
+  answers `expressSecrets.instanceDisabled`. While it is on, the stored `expressEnabled` has no
+  effect.
+- **Who sets the limits.** The limits of the table below are set per entity with
+  `PUT /admin/tenants/{tenantId}/secret-settings`. A delegated admin can only **lower** them:
+  a limit above the larger of its default and the value currently stored is refused with
+  `403 forbidden` and the whole replacement is dropped (sending back a value the super admin
+  raised is accepted). The super admin has the full bounds (1 to 1 000, 1 to 10 000, 1 to
+  100 000). A delegated admin may still turn the anonymous mode on. Current limit: the number of
+  live express secrets created with a token is not capped, and several tokens with
+  `expressAllowed` add up.
 - **Independent of section 13.** The switch of the one-time secrets (`features.secrets.enabled`),
   their durations and their per-token limits do not apply to express secrets.
 - **Same-origin rule.** The creation, the reveal and the abuse report refuse cross-site browser
@@ -1695,6 +1722,11 @@ byte order mark** (its `--raw` option sends the input byte for byte): the same f
 different secrets, a password that differs by its final line break, if one tool creates and the
 other expects the text as is. Use one rule on both sides: `--raw` with the scripts' files, or
 files without a final line break.
+**The client does not read `TT_EXPIRES` nor `TT_LINK_FILE`**: `--expires` and the `LINK` argument
+replace them (a job that sets `TT_EXPIRES=1h` and switches to the client would silently create
+secrets of 1 day). Since 2.3, `secret read` and `secret create --anonymous` ignore the token
+configuration altogether (`TT_TOKEN`, `TT_TOKEN_FILE`, the profile), and `secret read` has no
+`--token-file` option.
 The link is written on the **standard output only**, followed by a line break; errors and
 notices go to the standard error, never with the link, the token or the key.
 
@@ -1742,8 +1774,8 @@ $secret = ./express-secret.ps1 read -PassThru     # the exact text, as a string
 Remove-Item -LiteralPath $linkFile
 ```
 
-`New-TemporaryFile` creates each file readable by you only (mode 0600 on Linux and macOS, your
-own temporary folder on Windows), whereas `>` creates a file with the default permissions, which
+`New-TemporaryFile` creates each file readable by you only (mode 0600 on Linux and macOS; on
+Windows it uses your own temporary folder, which was not tested), whereas `>` creates a file with the default permissions, which
 other users of a Linux or macOS host can often read: never redirect the link or the text into a
 new file with `>` without `umask 077` first. `read` writes the text to the standard output of the
 process: from a Bash shell, `umask 077; pwsh -File ./express-secret.ps1 read > ./received.txt`
@@ -1764,7 +1796,10 @@ TT_LINK_FILE=./secret-link.txt python express-secret.py status
 python express-secret.py read < ./secret-link.txt > ./received.txt
 ```
 
-**Go 1.24** (one file, standard library only, kept out of the module by `//go:build ignore`):
+**Go 1.24** (one file, standard library only; the `//go:build ignore` tag only keeps it out of
+`./...` builds of the repository. Inside a clone, `go run` uses the `go.mod` of the repository
+and so its Go version (1.27): to use an older toolchain, copy `express-secret.go` to a folder
+outside the repository):
 
 ```bash
 export TT_URL=https://transfer.entity-a.example.com TT_EXPIRES=1d

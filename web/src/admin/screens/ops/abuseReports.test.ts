@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   addressText,
   afterUpdate,
+  canDeleteReportedSecret,
   categoryLabel,
   isErasedAddress,
+  loadedText,
   noteTooLong,
   reportStatusView,
   reporterText,
@@ -62,6 +64,17 @@ describe('reporter', () => {
     expect(reporterText(report({ recipientIndex: null }), t)).toBe('opsAbuse.reporter.sharedLink');
   });
 
+  it('names the anonymous reader of an express secret, never the shared link of a transfer', () => {
+    const secret = report({
+      transferId: undefined,
+      senderEmail: undefined,
+      secretId: 'sec_1',
+      reportedBy: null,
+    });
+    expect(reporterText(secret, t)).toBe('opsAbuse.reporter.secretReader');
+    expect(reporterText({ ...secret, recipientIndex: null }, t)).toBe('opsAbuse.reporter.secretReader');
+  });
+
   it('recognises erased addresses', () => {
     expect(isErasedAddress('erased-0123456789abcdef')).toBe(true);
     expect(addressText('erased-0123456789abcdef', t)).toBe('opsAbuse.erasedAddress');
@@ -87,6 +100,29 @@ describe('update', () => {
     expect(afterUpdate(list, closed, undefined).items[0]?.status).toBe('closed');
     expect(afterUpdate(list, closed, 'open').items).toEqual([]);
     expect(afterUpdate(list, closed, 'closed').items).toHaveLength(1);
+  });
+});
+
+describe('result text', () => {
+  it('counts the reports loaded, and says when more are available', () => {
+    expect(loadedText(2, false, t)).toBe('opsAbuse.loaded:2');
+    expect(loadedText(25, true, t)).toBe('opsAbuse.loadedMore:25');
+  });
+});
+
+describe('deletion of the reported secret', () => {
+  const secret = report({ transferId: undefined, secretId: 'sec_1' });
+
+  it('is offered to an admin who may change the tenant, on a secret report only', () => {
+    expect(canDeleteReportedSecret(secret, 'delegated_admin')).toBe(true);
+    expect(canDeleteReportedSecret(secret, 'super_admin')).toBe(true);
+    expect(canDeleteReportedSecret(report(), 'super_admin')).toBe(false);
+    expect(canDeleteReportedSecret(undefined, 'super_admin')).toBe(false);
+  });
+
+  it('is never offered to the auditor, nor before the profile is known', () => {
+    expect(canDeleteReportedSecret(secret, 'auditor')).toBe(false);
+    expect(canDeleteReportedSecret(secret, undefined)).toBe(false);
   });
 });
 

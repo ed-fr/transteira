@@ -78,7 +78,9 @@ func adminSecretBody(sec store.Secret) gen.AdminSecret {
 }
 
 // GetSecretSettings returns the one-time secrets settings of a tenant
-// (since 2.1): configuration, closed to the auditor.
+// (since 2.1): configuration, closed to the auditor. Since 2.3 the answer
+// says whether the instance kill switch of the express secrets is on
+// (expressInstanceDisabled).
 func (s *Server) GetSecretSettings(ctx context.Context, req gen.GetSecretSettingsRequestObject) (gen.GetSecretSettingsResponseObject, error) {
 	svc, p, err := s.tenantSession(ctx)
 	if err != nil {
@@ -88,7 +90,7 @@ func (s *Server) GetSecretSettings(ctx context.Context, req gen.GetSecretSetting
 	if err != nil {
 		return nil, tenantError(err)
 	}
-	return gen.GetSecretSettings200JSONResponse(secretSettingsBody(in)), nil
+	return gen.GetSecretSettings200JSONResponse(s.secretSettingsBody(in)), nil
 }
 
 // secretSettingsMembers lists the members the SecretSettings schema
@@ -133,7 +135,9 @@ var errNoSecretSettingsBody = errors.New("admin: raw body of the secret settings
 // missing boolean would silently become false), and the members of the
 // express secrets (since 2.3), optional, must not be null: the raw body
 // kept by CaptureRawBody is checked, after the access to the tenant is
-// probed. An absent express member keeps its stored value.
+// probed. An absent express member keeps its stored value, and the read-only
+// expressInstanceDisabled is ignored (the decoded body never reaches the
+// service with it).
 func (s *Server) UpdateSecretSettings(ctx context.Context, req gen.UpdateSecretSettingsRequestObject) (gen.UpdateSecretSettingsResponseObject, error) {
 	svc, p, err := s.tenantSession(ctx)
 	if err != nil {
@@ -169,17 +173,19 @@ func (s *Server) UpdateSecretSettings(ctx context.Context, req gen.UpdateSecretS
 	if err != nil {
 		return nil, tenantError(err)
 	}
-	return gen.UpdateSecretSettings200JSONResponse(secretSettingsBody(out)), nil
+	return gen.UpdateSecretSettings200JSONResponse(s.secretSettingsBody(out)), nil
 }
 
 // secretSettingsBody renders in as the OpenAPI SecretSettings, the
-// express members as the service set them (always, since 2.3).
-func secretSettingsBody(in tenantadmin.SecretSettingsInput) gen.SecretSettings {
+// express members as the service set them (always, since 2.3), with the
+// state of the instance kill switch (expressInstanceDisabled, always).
+func (s *Server) secretSettingsBody(in tenantadmin.SecretSettingsInput) gen.SecretSettings {
 	out := gen.SecretSettings{
 		Enabled: in.Enabled, Durations: make([]gen.SecretDuration, len(in.Durations)), FileAllowed: in.FileAllowed,
 		FileMaxBytes: in.FileMaxBytes, EmailAllowed: in.EmailAllowed, EmailRequiresPassphrase: new(in.EmailRequiresPassphrase),
 		ExpressEnabled: in.ExpressEnabled, ExpressPerHourPerIp: in.ExpressPerHourPerIP,
 		ExpressPerHourPerToken: in.ExpressPerHourPerToken, ExpressMaxPending: in.ExpressMaxPending,
+		ExpressInstanceDisabled: new(s.expressDisabled),
 	}
 	for i, d := range in.Durations {
 		out.Durations[i] = gen.SecretDuration(d)

@@ -306,6 +306,8 @@ func (s *Service) TextProposal(ctx context.Context, p adminauth.Principal, tid t
 		InvitationRetentionMonths: store.InvitationValidityMonths,
 		LogRetentionMonths:        lifecycle.AuditRetentionMonths,
 		AntivirusEnabled:          s.AntivirusEffective(t),
+		ExpressOffered:            t.Express.Enabled && !s.expressKillSwitch,
+		SecretsEnabled:            t.Secrets.Enabled,
 	})
 	if err != nil {
 		// checkLegal already refused what textproposals does not know: a

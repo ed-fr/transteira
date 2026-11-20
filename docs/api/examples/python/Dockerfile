@@ -1,4 +1,4 @@
-# Image of the express-secret.py self-test (docs/api/examples/examples_test.go): the pinned
+# Image of the express-secret.py self-test (docs/api/examples/express_test.go): the pinned
 # Python with the packages of requirements.txt, installed from wheels checked against their
 # hashes. Built by the test with the folder docs/api/examples as context; the self-test then
 # runs without network.

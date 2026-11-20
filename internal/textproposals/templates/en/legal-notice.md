@@ -21,6 +21,8 @@ The file transfer service {{TENANT}}, available at {{FQDN}}, is published by the
 
 For any question about this service: [To complete: contact email or postal address]
 
+Reporting an abuse: [To complete: contact for abuse reports]
+
 ## Intellectual property
 
 Transferred files remain the property of their authors. The service acquires no right over them and only uses them to deliver them to their recipients.

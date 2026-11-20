@@ -592,7 +592,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	tenants, err := tenantadmin.New(db, tenantadmin.Options{
 		AdminHosts: cfg.AdminHosts, SMTPDenyNetworks: cfg.SMTPDenyNetworks,
 		Vault: vault, Assets: assetStore{files: files}, Eraser: sweeper, Mailer: smtpSender, Cache: resolver,
-		Logger: logger, Audit: auditLog, AntivirusDisabled: avDisabled, Admins: admins,
+		Logger: logger, Audit: auditLog, AntivirusDisabled: avDisabled, ExpressKillSwitch: cfg.ExpressSecretsDisabled, Admins: admins,
 		Events: bus, Notifier: provisioningNotices, SSOTester: ssoClient,
 	})
 	if err != nil {
@@ -749,7 +749,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			admin.WithWebhookService(busOut.hooks), admin.WithAntivirusTest(selfTests),
 			admin.WithUpdateCheck(updates), admin.WithProvisioningService(provisioner),
 			admin.WithSecurityEventsService(securityEventsService), admin.WithProofService(proofs),
-			admin.WithExpressSecretService(secrets),
+			admin.WithExpressSecretService(secrets), admin.WithExpressKillSwitch(cfg.ExpressSecretsDisabled),
 			admin.WithSystemStatus(healthChecks, string(cfg.DBDriver), antivirusEngine(cfg))),
 		AdminSessions:       admins,
 		Provisioning:        httpserver.NewProvisioningAuthenticator(provisioner),

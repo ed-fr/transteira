@@ -31,6 +31,7 @@
   "reporter": {
     "verified": "{email} (adresse vérifiée)",
     "recipientLink": "Via le lien du destinataire n° {n}, non vérifié",
+    "secretReader": "Le lecteur anonyme du secret express, non vérifié",
     "sharedLink": "Via le lien partagé (transfert antérieur à la version 1.1), non vérifié"
   },
   "open": {
@@ -54,13 +55,20 @@
     "note": "Note",
     "noteLabel": "Note de clôture (facultative)",
     "noteHint": "Clore un signalement n’agit pas sur le transfert : supprimez-le ou bloquez l’expéditeur depuis les autres écrans.",
+    "noteHintSecret": "Clore un signalement n’agit pas sur le secret : supprimez-le avec le bouton ci-dessus.",
     "close": "Clore le signalement",
     "reopen": "Rouvrir le signalement",
     "cancel": "Fermer",
     "closedDone": "Signalement clos.",
     "reopenedDone": "Signalement rouvert.",
     "secretLink": "Ouvrir les secrets de cette entité",
-    "secretHint": "Pour le retrouver, collez son lien dans la recherche de cet écran. Les secrets express peuvent aussi tous être supprimés depuis les réglages des secrets."
+    "secretHint": "La liste des secrets de cette entité affiche cet identifiant sous la date de création. Supprimer le secret le détruit aussitôt s’il n’a pas encore été lu ; le signalement reste en l’état jusqu’à ce que vous le fermiez.",
+    "deleteSecret": "Supprimer ce secret",
+    "deleteSecretTitle": "Supprimer ce secret express ?",
+    "deleteSecretText": "Le secret express {id} sera détruit s’il n’a pas encore été lu, et son lien cessera de fonctionner. Un secret déjà lu ou expiré reste en l’état. Cette action est irréversible.",
+    "deleteSecretConfirm": "Supprimer le secret",
+    "deleteSecretBusy": "Suppression…",
+    "secretDeleted": "Secret supprimé : son lien ne fonctionne plus."
   },
   "subject": {
     "secret": "Secret express {id}",

@@ -113,8 +113,10 @@ administrators, not by the firewall.
   `scope="express_token"` line (hourly creation limit of an API token on
   express secrets) is ignored the same way, and the `express_refused` event
   is not in `_events` (a state of the tenant, not a client fault), while
-  `scope="express_ip"` (anonymous flood) still counts. Every other
-  `rate_limited` scope still counts.
+  `scope="express_ip"` (anonymous flood) still counts. The hourly deposit cap of
+  a permanent drop link (`scope="drop_link"`, since 2.0, a limit of the link and
+  not of the client) is ignored the same way. Every other `rate_limited` scope
+  still counts.
 - Since 2.1 the `secret_invalid` (unknown one-time secret link) and `secret_proof_invalid` (wrong
   key or passphrase proof, with a `reason`) events count as failures like the other ones: the
   256-bit tokens cannot be guessed, so repeated failures mean probing.

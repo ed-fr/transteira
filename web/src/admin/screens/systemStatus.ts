@@ -1,8 +1,9 @@
 // "System status" card of the home of the super admin (CLAUDE.md section 13.2): getSystemStatus
 // (GET /admin/system/status, super admin only) turned into labelled rows: application, database
 // (engine and status), antivirus (engine and status, or disabled), file storage, maintenance mode
-// (inactive, or active with its source) and version (up to date, update available, not checked,
-// check off). Every text comes from a closed list of values: an unknown value (a newer server)
+// (inactive, or active with its source), express secrets (since 2.3: closed for the instance by
+// TT_EXPRESS_SECRETS_DISABLED, or set per entity) and version (up to date, update available, not
+// checked, check off). Every text comes from a closed list of values: an unknown value (a newer server)
 // shows the "Unknown" text, never the raw value, and the server never returns the cause of a
 // failed check (threat model T-415: the engines are disclosed to the super admin only).
 import type { ApiClient } from '../../shared/api/client';
@@ -25,7 +26,7 @@ export async function loadSystemStatus(api: Pick<ApiClient, 'get'>): Promise<Sys
 
 /** One row of the card: a label and its value, as a status pill or as plain text. */
 export interface StatusRow {
-  id: 'application' | 'database' | 'antivirus' | 'storage' | 'maintenance' | 'version';
+  id: 'application' | 'database' | 'antivirus' | 'storage' | 'maintenance' | 'expressSecrets' | 'version';
   label: string;
   /** Text of the value (the pill text, or the plain text when variant is undefined). */
   value: string;
@@ -110,6 +111,7 @@ export function systemStatusRows(status: SystemStatus, t: Translate): StatusRow[
   const storage = pill(COMPONENT, status.storage.status);
   const maintenanceOn = status.maintenance.enabled;
   const source = status.maintenance.source;
+  const expressClosed = status.expressSecrets.instanceDisabled;
   const version = versionValue(status.version, t);
   return [
     {
@@ -152,6 +154,14 @@ export function systemStatusRows(status: SystemStatus, t: Translate): StatusRow[
         maintenanceOn && MAINTENANCE_SOURCES.includes(source)
           ? t(`adminHome.system.source.${source}`)
           : undefined,
+    },
+    {
+      // The kill switch is an environment setting, never a failure (status does not depend on it).
+      id: 'expressSecrets',
+      label: t('adminHome.system.expressSecrets'),
+      value: t(expressClosed ? 'adminHome.system.express.closed' : 'adminHome.system.express.perTenant'),
+      variant: expressClosed ? 'warning' : 'neutral',
+      detail: expressClosed ? t('adminHome.system.source.environment') : undefined,
     },
     {
       id: 'version',

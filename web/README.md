@@ -277,12 +277,18 @@ that mark.
 ### Adding a help topic
 
 1. Give the route its topic: `helpTopic: 'some-topic'` in `src/public/routes.ts` or
-   `src/admin/routes.ts` (lower-case words separated by hyphens). The footer help link of the
-   screen then opens `/help/some-topic`. An auditor reads only the auditor guide, and a topic is
-   unique across the guides: for a screen an auditor can open (`AUDITOR_TENANT_SECTIONS` in
-   `src/admin/shell.ts`, home, account, entities), also write the section for the auditor under
-   the topic `auditor-some-topic` (`resolveHelp` opens it in place of `some-topic` for an auditor,
-   `src/help/guides.test.ts` checks it).
+   `src/admin/routes.ts` (lower-case words separated by hyphens). The help links of the screen
+   (header and footer on public pages, footer in the administration) then open
+   `/help/some-topic`. An auditor reads only the auditor guide, and a topic is unique across the
+   guides: for a screen an auditor can open (`AUDITOR_TENANT_SECTIONS` in `src/admin/shell.ts`,
+   home, account, entities), also write the section for the auditor under the topic
+   `auditor-some-topic` (`resolveHelp` opens it in place of `some-topic` for an auditor,
+   `src/help/guides.test.ts` checks it). A screen that the super admin sees differently from a
+   delegated admin works the other way round: write the super-admin section under its own topic
+   and map the route topic to it in `SUPER_ADMIN_TOPICS` (`src/help/help.ts`); `roleTopic`, read
+   by `src/admin/screens/Help.svelte`, then opens that section for a signed-in super admin,
+   whatever link led there (today `admin` → `admin-home-super`, the home page;
+   `src/help/guides.test.ts` checks that each mapped topic is in the super-admin guide).
 2. Put `<!-- topic: some-topic -->` right before the heading of the section that explains the
    screen, in a guide of the right application (public: depositor or recipient; admin:
    delegated-admin or super-admin), **in both languages**. A screen a delegated admin can open
@@ -310,8 +316,9 @@ and opens a section of that application's guides in both languages:
 </PageHeader>
 ```
 
-The footer help link (`HelpLink`, through `Footer`) also navigates in the application when it
-receives the router (`nav`), which both applications pass.
+The help links (`HelpLink`: through `Footer` in the administration, `PublicFooter` and
+`HeaderActions` on public pages) also navigate in the application when they receive the router
+(`nav`), which both applications pass.
 
 ### Rendering without HTML
 
@@ -458,8 +465,9 @@ and by `scripts/check-dist.mjs` on the build output:
 The theme lives in `document.documentElement.dataset.theme` (`light` or `dark`). The classic script
 `static/theme-init.js`, loaded synchronously in the `<head>` of both pages (no inline script, CSP
 unchanged), sets it before the first paint from the closed-list cookie `tt_theme` or from
-`prefers-color-scheme`; `src/shared/theme/mode.svelte.ts` then manages it (system changes, the footer
-`ThemeSwitch` button, cookie write or deletion). `src/styles/tokens.css` holds both palettes plus the
+`prefers-color-scheme`; `src/shared/theme/mode.svelte.ts` then manages it (system changes, the
+`ThemeSwitch` button of the public header and of the administration footer, cookie write or
+deletion). `src/styles/tokens.css` holds both palettes plus the
 tokens `--tt-graphic`, `--tt-logo-surface` and `--tt-logo-text`; `tokens.test.ts` checks every
 text/background pair (4.5:1) and border/focus pair (3:1) in both themes. Entity colors are applied per
 theme (`--tt-brand-*`), `check-dist` only accepts the allowlisted root script `/theme-init.js`.

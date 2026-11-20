@@ -39,6 +39,7 @@ const status: SystemStatus = {
   antivirus: { engine: 'clamd', status: 'ok' },
   storage: { status: 'ok' },
   maintenance: { enabled: false, source: 'none' },
+  expressSecrets: { instanceDisabled: false },
   version: { version: '2.3.0', updateCheckEnabled: true, latestVersion: '2.3.0', updateAvailable: false },
 };
 
@@ -65,6 +66,13 @@ describe('systemStatusRows', () => {
         variant: 'neutral',
         detail: undefined,
       },
+      {
+        id: 'expressSecrets',
+        label: 'Express secrets',
+        value: 'Set per entity',
+        variant: 'neutral',
+        detail: undefined,
+      },
       { id: 'version', label: 'Version', value: '2.3.0 · up to date', variant: undefined, detail: undefined },
     ]);
   });
@@ -78,6 +86,7 @@ describe('systemStatusRows', () => {
         antivirus: { engine: 'none', status: 'disabled' },
         storage: { status: 'unavailable' },
         maintenance: { enabled: true, source: 'environment' },
+        expressSecrets: { instanceDisabled: true },
       },
       real,
     );
@@ -87,6 +96,13 @@ describe('systemStatusRows', () => {
       ['antivirus', 'Antivirus', 'Disabled', 'neutral', undefined],
       ['storage', 'File storage', 'Unavailable', 'error', undefined],
       ['maintenance', 'Maintenance mode', 'Active', 'warning', 'Forced by the environment'],
+      [
+        'expressSecrets',
+        'Express secrets',
+        'Closed for the instance',
+        'warning',
+        'Forced by the environment',
+      ],
       ['version', 'Version', '2.3.0 · up to date', undefined, undefined],
     ]);
     const admin = systemStatusRows({ ...status, maintenance: { enabled: true, source: 'admin' } }, real);
@@ -109,6 +125,7 @@ describe('systemStatusRows', () => {
       ['Antivirus', 'Unknown', 'neutral', undefined],
       ['File storage', 'Unknown', 'neutral', undefined],
       ['Maintenance mode', 'Active', 'warning', undefined],
+      ['Express secrets', 'Set per entity', 'neutral', undefined],
       ['Version', '2.3.0 · up to date', undefined, undefined],
     ]);
     expect(JSON.stringify(rows)).not.toMatch(/weird|oracle|odd|other|strange/);
@@ -153,7 +170,7 @@ describe('versionValue', () => {
       { ...status, version: { ...version, latestVersion: '2.4.0', updateAvailable: true } },
       t,
     );
-    expect(rows[5]?.variant).toBe('info');
+    expect(rows.find((r) => r.id === 'version')?.variant).toBe('info');
   });
 });
 
@@ -173,6 +190,8 @@ describe('translations of the keys built at runtime', () => {
       ...['sqlite', 'postgres', 'clamd', 'icap', 'http'].map((k) => `system.engines.${k}`),
       'system.source.environment',
       'system.source.admin',
+      'system.express.closed',
+      'system.express.perTenant',
     ];
     for (const key of keys) {
       expect(message(en, key), `en ${key}`).toBeTypeOf('string');

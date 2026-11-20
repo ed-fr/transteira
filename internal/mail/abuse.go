@@ -26,6 +26,7 @@ type abuseLabels struct {
 	reporterVerif  string // %s: address
 	reporterLink   string // %d: recipient number
 	reporterShared string
+	reporterSecret string // anonymous reader of an express secret
 	// reportIntro is the first sentence of the abuse_report mail, by kind
 	// of reported object; %s is the entity name.
 	reportIntroTransfer string
@@ -63,6 +64,7 @@ var allAbuseLabels = map[string]*abuseLabels{
 		reporterVerif:  "Reported by %s, whose address was verified by a code.",
 		reporterLink:   "Reported via the link of recipient #%d, unverified.",
 		reporterShared: "Reported via the shared link of the transfer, unverified.",
+		reporterSecret: "Reported by the anonymous reader of the secret, unverified.",
 
 		reportIntroTransfer: "A transfer of %s was reported as abusive.",
 		reportIntroSecret:   "A one-time secret of %s was reported as abusive.",
@@ -96,6 +98,7 @@ var allAbuseLabels = map[string]*abuseLabels{
 		reporterVerif:  "Signalé par %s, dont l'adresse a été vérifiée par un code.",
 		reporterLink:   "Signalé via le lien du destinataire n° %d, non vérifié.",
 		reporterShared: "Signalé via le lien partagé du transfert, non vérifié.",
+		reporterSecret: "Signalé par le lecteur anonyme du secret, non vérifié.",
 
 		reportIntroTransfer: "Un transfert de %s a été signalé comme abusif.",
 		reportIntroSecret:   "Un secret à usage unique de %s a été signalé comme abusif.",
@@ -212,6 +215,8 @@ func abuseReportValues(lb *labels, lang string, data any) (map[string]value, boo
 		reporter = fmt.Sprintf(l.reporterVerif, d.ReporterEmail)
 	case d.RecipientIndex > 0:
 		reporter = fmt.Sprintf(l.reporterLink, d.RecipientIndex)
+	case d.SecretID != "":
+		reporter = l.reporterSecret
 	default:
 		reporter = l.reporterShared
 	}

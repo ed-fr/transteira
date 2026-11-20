@@ -36,7 +36,22 @@ English: [docs/compliance/gdpr-processing-record.md](../gdpr-processing-record.m
   détection des abus, journaux d'audit et de sécurité.
 - Prouver un dépôt ou une remise en cas de litige (déclarations signées).
 - Partager des secrets à usage unique (depuis la 2.1) : un texte d'au plus 10 000 caractères et un fichier facultatif, chiffrés dans le navigateur, lisibles une seule fois, pour une durée limitée.
-- Administrer le service (comptes d'administrateurs et d'auditeurs).
+- Partager des secrets express (depuis la 2.3) : un texte seul, d'au plus 10 000 caractères, chiffré dans le navigateur et transformé en un lien lisible une seule fois, pour 1 heure, 1 jour ou 7 jours, créé **sans authentification** par toute personne qui atteint l'adresse de l'entité, quand l'entité ouvre ce mode anonyme (désactivé par défaut), ou par un script muni d'un jeton d'API autorisé pour cela (autorisation désactivée par défaut).
+- Administrer le service (comptes d'administrateurs et d'auditeurs), y compris la recherche de transferts dans les entités d'un administrateur et l'état du système (depuis la 2.3).
+
+> **Secrets express : l'entité hébergeur (modèle de menaces H24).** Une entité
+> qui ouvre le secret express héberge, avec l'exploitant, des textes écrits
+> par des inconnus, qu'aucun des deux ne peut lire. Avant de l'ouvrir,
+> l'entité complète ses mentions légales avec un responsable et un contact de
+> signalement des abus, et sa politique de confidentialité avec la
+> conservation des adresses IP des auteurs (12 mois dans le journal d'audit,
+> section 8). Elle traite les signalements (recherche du secret par son lien,
+> suppression, purge, section 12) et conserve les adresses IP du journal
+> d'audit pour les réquisitions des autorités. Les textes que propose
+> l'administration (**Utiliser le texte proposé** de l'écran Mentions légales)
+> comprennent toujours une ligne de contact pour les signalements d'abus à
+> compléter dans les mentions légales ; quand le secret express est proposé, la
+> politique de confidentialité a en plus une phrase sur les secrets express.
 
 ## 3. Base légale (article 6)
 
@@ -48,6 +63,7 @@ Choisissez une base par finalité et supprimez les autres.
 | Sécurité, journaux d'audit et de sécurité, détection des abus | Intérêt légitime (art. 6.1.f) / obligation légale (art. 6.1.c) | `<à compléter>` |
 | Preuves de dépôt et de remise | Intérêt légitime (art. 6.1.f) / contrat (art. 6.1.b) | `<à compléter>` |
 | Secrets à usage unique (2.1) | Intérêt légitime (art. 6.1.f) / exécution d'un contrat (art. 6.1.b) | `<à compléter>` |
+| Secrets express (2.3) ; les adresses IP de leurs auteurs et lecteurs relèvent de la finalité de sécurité ci-dessus | Intérêt légitime (art. 6.1.f) | `<à compléter>` |
 | Administration du service | Intérêt légitime (art. 6.1.f) | `<à compléter>` |
 
 TransTeira ne demande jamais de consentement et n'a aucun traitement fondé sur
@@ -65,6 +81,8 @@ le consentement.
 | Auditeurs | Comptes en lecture seule (RSSI, auditeurs). |
 | Créateurs de secrets à usage unique (2.1) | Utilisateurs internes, personnes externes invitées et expéditeurs déclarés par un jeton d'API, qui créent un secret. |
 | Destinataires d'un secret envoyé par mail (2.1) | Personnes à qui un secret est envoyé par mail. |
+| Créateurs de secrets express (2.3) | Toute personne qui atteint l'adresse d'une entité dont le mode anonyme est activé : ni compte, ni adresse, ni vérification ; seule son adresse IP est enregistrée. Scripts munis d'un jeton d'API autorisé pour les secrets express (`expressAllowed`) : le jeton est enregistré, sans adresse. |
+| Lecteurs d'un secret express (2.3) | Celui qui ouvre le lien, jamais identifié : seule son adresse IP est enregistrée, à la lecture et dans le signalement d'abus s'il signale le secret. |
 | Autres personnes citées en texte libre | Personnes mentionnées dans le message d'un transfert, un nom de fichier ou un signalement d'abus. |
 
 ## 5. Catégories de données personnelles
@@ -72,18 +90,20 @@ le consentement.
 | Donnée | Détail | Où elle est conservée |
 |---|---|---|
 | Adresses mail | Expéditeur, destinataires, invités, déposants, auteurs de signalements d'abus ; adresses des administrateurs et auditeurs. | Base de données (transferts, destinataires, invitations, adresses vérifiées, preuves, liens de dépôt, administrateurs). |
-| Adresses IP | De l'expéditeur au dépôt, à la vérification d'adresse (première vérification, et première vérification en interne), des demandes de vérification, des auteurs de signalements ; IP du client dans les journaux d'audit et de sécurité. | Base de données et fichiers de journaux. |
+| Adresses IP | De l'expéditeur au dépôt, à la vérification d'adresse (première vérification, et première vérification en interne), des demandes de vérification, des auteurs de signalements ; IP du client dans les journaux d'audit et de sécurité. Pour un secret express (2.3), l'adresse IP de son auteur anonyme et celle de son lecteur sont les seules traces : dans le journal d'audit pour une création et une lecture (`secret.created`, acteur `anonymous` ; `secret.revealed`), dans le journal de sécurité pour une création refusée ou limitée (`express_refused`, `rate_limited`), jamais sur le secret lui-même. | Base de données et fichiers de journaux. |
 | Noms, tailles et empreintes SHA-256 des fichiers | De chaque fichier déposé ; les noms sont un texte libre choisi par l'expéditeur. | Base de données ; les empreintes figurent aussi dans les mails de notification et les preuves. |
 | Messages des transferts | Texte libre facultatif de l'expéditeur. | Base de données. |
 | Contenu des fichiers | Peut contenir toute donnée, y compris sensible. Chiffré sur disque (AES-256-GCM, une clé par fichier). Pour un transfert chiffré de bout en bout, le navigateur chiffre et le serveur ne détient jamais la clé : **l'exploitant ne peut pas le lire** ; l'analyse antivirus est alors impossible et la page de téléchargement l'indique. | Volume de données (chiffré) ; clés, chiffrées par la clé maître, en base. |
 | Contenu des secrets à usage unique (2.1) | Le texte (au plus 10 000 caractères) et le fichier facultatif d'un secret. Connaissance nulle : le navigateur les scelle, la clé reste dans le fragment du lien et seules des empreintes de vérification SHA-256 sont stockées, donc **l'exploitant ne peut pas les lire**, sauf si l'envoi par mail porte la clé dans le lien d'un secret sans phrase secrète (voir la section 7). Jamais analysés par l'antivirus. | Base de données (texte scellé) ; volume de données (fichier scellé) ; clés, chiffrées par la clé maître, en base. |
 | Métadonnées des secrets à usage unique (2.1) | Adresse du créateur, adresse du destinataire (envoi par mail seulement), type de créateur, mode de livraison, dates, état, motif de fin, taille déclarée du fichier, choix d'un accusé de lecture. Les accusés de lecture sont des mails au créateur. | Base de données. |
+| Contenu des secrets express (2.3) | Un texte seul (10 000 caractères, limite contrôlée par le navigateur ou le client ; le serveur borne le texte scellé à environ 40 000 octets). Ni fichier, ni phrase secrète, ni envoi par mail, ni accusé de lecture. Connaissance nulle **sans exception** : le navigateur ou le client scelle le texte et compose le lien, dont le fragment porte la clé, et le serveur ne reçoit ni l'un ni l'autre, donc **ni l'exploitant ni l'entité ne peuvent le lire**. Jamais analysé par l'antivirus. | Base de données (texte scellé) ; clé, chiffrée par la clé maître, en base. |
+| Métadonnées des secrets express (2.3) | Type de créateur (`anonymous`, ou `api_token` avec l'identifiant du jeton), durée, dates, état, motif de fin, empreinte du jeton du lien. **Ni adresse ni adresse IP** : la limite par IP est comptée en mémoire seulement. | Base de données. |
 | Événements des transferts | Dates de dépôt, de premier téléchargement, téléchargements par destinataire et par fichier (liens par destinataire). | Base de données. |
 | État de vérification | Codes (stockés sous forme de MAC, jamais en clair), tentatives, sessions de dépôt, date de dernière utilisation d'une adresse vérifiée. | Base de données. |
-| Journal d'audit | Horodatage, entité, acteur (adresse ou administrateur), IP, action, objet. | Base de données. |
+| Journal d'audit | Horodatage, entité, acteur (adresse, administrateur ou jeton d'API ; `anonymous` pour l'auteur d'un secret express, dont l'adresse IP est alors la seule trace), IP, action, objet. | Base de données. |
 | Journal de sécurité | Horodatage, type d'événement, IP réelle du client, entité. Aucune adresse mail. | Fichier de journal et base de données. |
 | Preuves de dépôt et de remise | Déclarations signées nommant l'expéditeur, les destinataires, les fichiers et leurs empreintes, les dates. Aucune adresse IP. | Base de données. |
-| Signalements d'abus | Catégorie, message en texte libre, IP de l'auteur. | Base de données. |
+| Signalements d'abus | Catégorie, message en texte libre, IP de l'auteur. Un signalement sur un secret express (2.3) désigne le secret par son identifiant `sec_` et ne contient aucune adresse : le secret n'a pas d'adresse de créateur et l'auteur du signalement n'est jamais vérifié ; seulement l'IP de l'auteur. | Base de données. |
 | Comptes d'administrateurs | Identifiant, mail, rôle, haché du mot de passe (argon2id), secret TOTP (scellé par la clé maître), codes de secours (hachés), enregistrements de sessions. | Base de données. |
 | Identifiants d'authentification unique (si utilisée) | Émetteur, identifiant client et sujet (`sub`) du compte du fournisseur d'identité lié à un administrateur. | Base de données. |
 | Cookies techniques | Strictement nécessaires uniquement, voir la section 9. | Navigateur. |
@@ -98,9 +118,10 @@ domaines destinataires).
 
 | Destinataire | Détail |
 |---|---|
-| En interne | Expéditeur et destinataires de chaque transfert ; admins délégués de l'entité (métadonnées, jamais le contenu des fichiers : décision P18 ; pour les secrets à usage unique, les métadonnées dont l'adresse du destinataire, jamais le contenu) ; auditeurs (lecture seule, liste des secrets) ; super admin. Le créateur d'un secret reçoit ses accusés de lecture. |
+| En interne | Expéditeur et destinataires de chaque transfert ; admins délégués de l'entité (métadonnées, jamais le contenu des fichiers : décision P18 ; pour les secrets à usage unique, les métadonnées dont l'adresse du destinataire, jamais le contenu) ; auditeurs (lecture seule, liste des secrets) ; super admin. Le créateur d'un secret reçoit ses accusés de lecture. Pour les secrets express (2.3), les admins délégués et les auditeurs voient les mêmes métadonnées, sans adresse, et peuvent retrouver un secret par un lien collé ; les signalements d'abus, qui désignent l'identifiant `sec_`, vont aux admins délégués (aux super admins si l'entité n'en a pas). |
+| Administrateurs qui recherchent des transferts (2.3) | Depuis l'accueil de l'administration, le super admin trouve les transferts d'une adresse mail complète (expéditeur ou destinataire) dans toutes les entités actives, et un admin délégué dans toutes les entités actives auxquelles il est rattaché, en une seule recherche ; l'auditeur ne recherche que par identifiant de transfert, jamais par adresse. Métadonnées seulement, comme dans la liste des transferts de chaque entité. L'adresse passe dans le corps de la requête, jamais dans une URL (décision P93), et un administrateur peut lancer 30 recherches par minute. **Cette recherche n'est pas inscrite au journal d'audit** (décision P95), comme le filtre par adresse de la liste des transferts ; seul l'écran « Données personnelles » garde son propre audit (`data_subject.searched`, section 10). |
 | Sous-traitants et prestataires | Voir la section 7. |
-| Tiers autorisés par la loi | `<à compléter>` (autorités, sur réquisition) |
+| Tiers autorisés par la loi | `<à compléter>` (autorités, sur réquisition). Pour un secret express, seuls les adresses IP et les horodatages du journal d'audit peuvent être remis : son contenu est illisible. |
 
 ## 7. Sous-traitants et transferts hors UE
 
@@ -139,13 +160,14 @@ Quand l'exploitant peut agir, la dernière colonne dit où.
 | Invitations | Valables 12 mois à partir de la création ou de la dernière utilisation ; invitations inactives purgées ensuite. | Un admin peut révoquer une invitation à tout moment. |
 | Liens de dépôt permanents | Les liens expirés ou révoqués sont purgés 12 mois après, une fois leurs transferts supprimés. | Un admin peut désactiver, révoquer ou fixer une date d'expiration. |
 | Secrets à usage unique (2.1) | Un secret en attente (non terminé) est supprimé après **1 heure**, sans trace. Un secret actif dure jusqu'à la durée choisie par son créateur (1 heure à 30 jours, parmi celles que l'entité propose), jusqu'à sa lecture, sa suppression, ou son verrouillage après 5 phrases secrètes erronées. La clé de son fichier est détruite au premier téléchargement complet ou 10 minutes après la révélation. Une trace (adresses, dates, état, taille du fichier ; ni contenu, ni vérificateur, ni sel) est purgée **30 jours** après la fin. Entrées d'audit `secret.*` : 12 mois. | Les durées proposées par entité (réglages des secrets). Pas les délais de purge. |
+| Secrets express (2.3) | Actifs dès leur création, jusqu'à leur lecture ou jusqu'à la durée choisie par leur créateur parmi **1 heure, 1 jour et 7 jours** (fixes), ou jusqu'à ce qu'un administrateur les supprime (depuis la liste, depuis une recherche par lien ou depuis un signalement d'abus) ou purge tous les secrets express anonymes vivants de l'entité. La fermeture du service (le réglage de l'entité pour les anonymes, la coupure d'instance pour tous) les rend illisibles sans arrêter leur expiration. Le texte et sa clé sont détruits à la lecture, à l'expiration ou à la suppression. Une trace (dates, état, motif de fin, empreinte du jeton du lien ; ni contenu, ni adresse, ni adresse IP) est purgée **30 jours** après la fin. Entrées d'audit `secret.*` (création et lecture avec l'adresse IP) : 12 mois. | L'ouverture du service (réglages des secrets de l'entité ; `TT_EXPRESS_SECRETS_DISABLED` pour l'instance). Ni les durées ni les délais de purge. |
 | Codes de vérification | Supprimés après usage ou expiration (les lignes servant à la limitation de débit sont gardées une heure). | Non |
 | Sessions de dépôt, compteurs d'échecs de mot de passe, liens d'accès « Mes envois » | Purgés après leur courte validité (quelques heures). | Durée d'une session de dépôt : `TT_DEPOSIT_SESSION_TTL`. |
 | Journal d'audit | **12 mois**, puis purge. Aucune modification ni suppression par l'application, sauf la pseudonymisation d'un effacement. | Non |
 | Journal de sécurité, copie en base | **12 mois** (purge en base). Le **fichier** de journal est tourné par l'exploitant : gardez-le 12 mois aussi ([journal de sécurité](../../operations/security-log.md)). | Rotation des journaux (exploitant). |
 | Export syslog | Selon la conservation de votre collecteur. | Exploitant. |
 | Preuves de dépôt et de remise | **12 mois** après leur création, même si le transfert est supprimé. | Non |
-| Signalements d'abus | 12 mois. | Non |
+| Signalements d'abus | 12 mois, y compris les signalements sur des secrets express (ils survivent au secret et à sa trace). | Non |
 | Alertes d'abus (données de dédoublonnage) | 2 jours. | Non |
 | Compteurs de statistiques (volumes, nombres, aucune donnée personnelle) | 13 mois. | Non |
 | Sessions d'administration | Inactivité de 30 minutes et durée maximale de 12 heures par défaut. | `TT_ADMIN_SESSION_IDLE_TIMEOUT`, `TT_ADMIN_SESSION_MAX_AGE` |
@@ -172,6 +194,8 @@ flux de connexion, en `Lax`).
 | `__Host-tt_oidc` | Flux d'authentification unique en cours | 10 minutes, usage unique |
 | `tt_theme` | Thème clair ou sombre choisi par l'utilisateur (écrit par le navigateur, jamais lu par le serveur) | 1 an |
 
+La création ou la lecture d'un secret express (2.3) ne pose aucun cookie.
+
 ## 10. Droits des personnes
 
 Les droits d'accès, de rectification, d'effacement, de limitation,
@@ -196,7 +220,20 @@ TransTeira fournit :
   expéditeurs qui mentionne la personne (jusqu'à l'expiration de ce
   transfert). Détails : [guide d'administration](../../operations/admin.md).
 - L'effacement est **par entité** : répétez-le dans chaque entité où la
-  personne apparaît.
+  personne apparaît. La recherche de l'accueil de l'administration (2.3)
+  trouve les transferts d'une adresse dans toutes les entités de
+  l'administrateur (toutes les entités actives pour le super admin), ce qui
+  montre où le répéter ; elle ne couvre que les transferts, ni les secrets,
+  ni les invitations, ni les adresses vérifiées.
+- **Les secrets express (2.3)** ne portent aucune adresse : la recherche par
+  adresse ne trouve ni ces secrets ni les signalements qui les visent, et
+  l'effacement ne les touche pas (modèle de menaces T-404). Leurs seules
+  données personnelles sont les adresses IP des journaux d'audit et de
+  sécurité et des signalements, conservées 12 mois ; une demande portant sur
+  une adresse IP est traitée par le responsable de traitement à partir de ces
+  journaux. Leur contenu est illisible, il ne peut donc pas être communiqué ;
+  un administrateur peut supprimer un secret express vivant à partir de son
+  lien.
 - Accès et portabilité : le responsable de traitement extrait les données
   trouvées par l'écran de recherche et le journal d'audit, car aucun service
   en libre accès n'existe pour les personnes concernées. `<à compléter>`
@@ -232,6 +269,13 @@ rotation de la clé maître suivie de la destruction de l'ancienne clé réduise
 ce risque ([sauvegarde](../../operations/backup.md#crypto-erase-and-copies),
 modèle de données D3, T-355, décision P71).
 
+**Les secrets express (2.3)** n'ont jamais de phrase secrète : une copie
+prise pendant qu'un secret express était actif suffit, avec la clé maître et
+le lien, à le lire. Le serveur n'envoie jamais le lien par mail : seul un lien
+conservé par son auteur ou son lecteur ouvre une telle copie ; les durées sont
+courtes (7 jours au plus), et la rotation de la clé maître réduit ce risque
+comme ci-dessus.
+
 ## 12. Mesures de sécurité (article 32)
 
 Résumé ; la correspondance complète est dans le document
@@ -250,9 +294,30 @@ Résumé ; la correspondance complète est dans le document
 - **Contrôle d'accès** : administrateurs avec mot de passe argon2id et TOTP
   obligatoire pour le super admin ; OpenID Connect en option ; admins délégués
   limités à leurs entités ; rôle auditeur en lecture seule ; jetons d'API
-  hachés, par entité, révocables.
+  hachés, par entité, révocables. La recherche de transferts dans plusieurs
+  entités (2.3) ne lit que les entités de l'administrateur, par les mêmes
+  lectures cloisonnées que la liste des transferts (T-409 à T-414) ; l'état
+  du système est réservé au super admin (T-415).
 - **Vérification d'identité** : code à usage unique par mail, avec limitation
   de débit ; vérification par destinataire en option.
+- **Secrets express (2.3)**, un service sans authentification (modèle de
+  menaces T-389 à T-408 et T-418, décisions P85 à P92 et P96) : désactivés par défaut
+  dans chaque entité, existantes comprises, et pour chaque jeton d'API
+  (`expressAllowed`) ; coupure d'instance `TT_EXPRESS_SECRETS_DISABLED`,
+  affichée dans l'administration (encadré « État du système » du super admin,
+  alerte dans les réglages des secrets de chaque entité) ; la fermeture du
+  service bloque aussi la lecture des secrets express concernés (décision
+  P90) ; limites par adresse IP du client (10 par heure par défaut), par jeton
+  d'API (100 par heure) et sur les secrets express vivants de l'entité
+  (1 000), qu'un admin délégué ne peut fixer qu'à leur valeur par défaut ou en
+  dessous, ou laisser à la valeur enregistrée, le super admin gardant toutes
+  les bornes (T-418) ; créations sans jeton et signalements venus d'un autre
+  site refusés (P85) ; texte seul, lu une seule fois, 7 jours au plus ;
+  bandeau « contenu créé par un tiers non vérifié » sur la page de lecture,
+  texte affiché en texte brut ; signalement d'abus par le lecteur ; recherche
+  d'un secret par son lien, suppression depuis la liste ou depuis le
+  signalement, purge d'urgence des secrets express anonymes vivants ; chaque
+  création et chaque lecture auditées avec l'adresse IP, jamais le contenu.
 - **Réseau** : aucun port publié par le conteneur, réseau Docker interne,
   proxys de confiance, plages IP par entité.
 - **Analyse antivirus** de chaque fichier (ClamAV, moteur ICAP ou API HTTP).
@@ -261,7 +326,11 @@ Résumé ; la correspondance complète est dans le document
   déclarations sans IP ; jetons des liens de secret masqués dans les journaux
   du proxy.
 - **Traçabilité** : journal d'audit, journal de sécurité (fail2ban et
-  CrowdSec), export syslog, métriques.
+  CrowdSec), export syslog, métriques. Pour les secrets express,
+  `express_refused` et `rate_limited` (portées `express_ip` et
+  `express_token`) au journal de sécurité, dont les règles fail2ban et
+  CrowdSec fournies ne comptent que `express_ip` (P87) ; `secret.looked_up` et
+  `secret.express_purged` au journal d'audit.
 - **Résilience** : copie nocturne de la base, restauration documentée.
 - **Développement sécurisé** : tests, fuzzing, `govulncheck`, analyse des
   secrets, modèle de menaces ; images signées avec SBOM.

@@ -45,8 +45,9 @@ func WithSystemStatus(checks ComponentChecks, dbEngine, antivirusEngine string) 
 var errNoSystemStatus = errors.New("admin: no system status sources configured")
 
 // GetSystemStatus returns the state of the instance components (super
-// admin): the shared health checks, the engines, the maintenance mode and
-// the last outcome of the update check, which it never starts. It answers
+// admin): the shared health checks, the engines, the maintenance mode, the
+// instance kill switch of the express secrets (WithExpressKillSwitch, since
+// 2.3) and the last outcome of the update check, which it never starts. It answers
 // 200 whatever the components' state: statuses only, the cause of a failed
 // check stays in the application log. The session and the role are checked
 // before anything.
@@ -85,6 +86,7 @@ func (s *Server) GetSystemStatus(ctx context.Context, _ gen.GetSystemStatusReque
 	body.Storage.Status = componentHealth(report.Storage)
 	body.Maintenance.Enabled = maint.Enabled
 	body.Maintenance.Source = gen.MaintenanceSource(maint.Source)
+	body.ExpressSecrets.InstanceDisabled = s.expressDisabled
 	body.Version.Version = s.version().Version
 	body.Version.UpdateCheckEnabled = upd.Enabled
 	body.Version.UpdateAvailable = upd.UpdateAvailable

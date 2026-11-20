@@ -31,6 +31,7 @@
   "reporter": {
     "verified": "{email} (verified address)",
     "recipientLink": "Through the link of recipient no. {n}, not verified",
+    "secretReader": "The anonymous reader of the express secret, not verified",
     "sharedLink": "Through the shared link (transfer created before 1.1), not verified"
   },
   "open": {
@@ -54,13 +55,20 @@
     "note": "Note",
     "noteLabel": "Closing note (optional)",
     "noteHint": "Closing a report does not act on the transfer: delete it or block the sender from the other screens.",
+    "noteHintSecret": "Closing a report does not act on the secret: delete it with the button above.",
     "close": "Close the report",
     "reopen": "Reopen the report",
     "cancel": "Close",
     "closedDone": "Report closed.",
     "reopenedDone": "Report reopened.",
     "secretLink": "Open the secrets of this entity",
-    "secretHint": "To find it, paste its link in the search of that screen. Express secrets can also all be deleted from the secrets settings."
+    "secretHint": "The secrets list of this entity shows this identifier under the creation date. Deleting the secret destroys it at once if it has not been read yet; the report stays as it is until you close it.",
+    "deleteSecret": "Delete this secret",
+    "deleteSecretTitle": "Delete this express secret?",
+    "deleteSecretText": "The express secret {id} will be destroyed if it has not been read yet, and its link will stop working. A secret already read or expired stays as it is. This cannot be undone.",
+    "deleteSecretConfirm": "Delete the secret",
+    "deleteSecretBusy": "Deleting…",
+    "secretDeleted": "Secret deleted: its link no longer works."
   },
   "subject": {
     "secret": "Express secret {id}",

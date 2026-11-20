@@ -199,6 +199,13 @@ decision P71). Keep the durations short, send a passphrase through another
 channel, and rely on a master key rotation followed by the destruction of the
 old key, which makes such copies unreadable, as for transfers (P25).
 
+**Express secrets (since 2.3).** The residual risk is higher than for the
+secrets above, because an express secret never has a passphrase: a copy, the
+master key **and the link** always read the text, and there is no channel
+left to protect it. Most of their creators are anonymous, so nobody can be
+told. Keep the durations short (1 hour, 1 day or 7 days at most) and rely on
+the master key rotation followed by the destruction of the old key, as above.
+
 ## Restore
 
 You need, from the **same point in time** as far as possible:
@@ -275,6 +282,20 @@ taken**:
   second time**;
 - the file of a secret deleted after the copy may be missing from the volume;
 - read receipts may be sent again (the sent mark is restored empty).
+
+The **express secrets** (since 2.3) come back the same way, and the ones that
+were read, deleted by an admin or purged for abuse after the copy are readable
+again by whoever holds the link. Their anonymous creators cannot be told. Before
+reopening the service, **turn `expressEnabled` off** on the entities (it blocks
+the reading of the anonymous express secrets at once, see
+[Express secrets](admin.md#express-secrets-since-23)) or run the **emergency
+purge** (`POST /admin/tenants/{tenantId}/express-secrets/purge`) of each entity,
+then reopen. The express secrets created with an API token are not removed by
+the purge: delete them from the secrets list if needed. With the whole instance
+in doubt, the kill switch `TT_EXPRESS_SECRETS_DISABLED=true` blocks every
+creation and reading until you have done it. A restore also resets the
+`expressAllowed` option and the express limits of the entities and tokens to
+what they were when the copy was taken: review them as the tokens below.
 
 Right after the restore, before reopening the service if you can, list the
 secrets in the `active` state of every tenant

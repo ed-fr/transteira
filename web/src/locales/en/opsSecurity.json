@@ -47,6 +47,7 @@
     "sso_failed": "Failed single sign-on",
     "drop_link_invalid": "Invalid drop link",
     "secret_invalid": "Unknown secret link",
-    "secret_proof_invalid": "Wrong secret proof"
+    "secret_proof_invalid": "Wrong secret proof",
+    "express_refused": "Express secret refused"
   }
 }

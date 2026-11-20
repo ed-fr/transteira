@@ -86,11 +86,11 @@ Remplissez les champs :
 - **Supprimer le transfert après le premier téléchargement** (Options de sécurité) : le transfert est supprimé pour tous les destinataires dès que l’un d’eux a téléchargé tous les fichiers, soit en une archive ZIP, soit fichier par fichier. La suppression intervient quelques minutes plus tard.
 - **Limiter le nombre de téléchargements** (Options de sécurité) : facultatif. Activer l’interrupteur fait apparaître le champ **Nombre maximal de téléchargements**, de 1 à 1000. Le transfert compte chaque début de téléchargement, tous destinataires confondus (un téléchargement interrompu puis repris compte une fois). Une fois le nombre atteint, le transfert ne peut plus être téléchargé et il est supprimé quelques minutes plus tard. Avec l’interrupteur désactivé, il n’y a pas de limite, sauf si le niveau choisi impose un plafond : l’interrupteur est alors activé et verrouillé.
 - **Chiffrer de bout en bout dans mon navigateur** (Options de sécurité) : proposé si votre organisation l’autorise (ou imposé, ou absent si elle l’interdit). Vos fichiers sont chiffrés avant de quitter votre ordinateur : voir [Chiffrer de bout en bout](topic:deposit-e2e). Cette option n’existe pas pour un envoi par lien de dépôt.
-- **Fichiers à envoyer** : faites glisser vos fichiers sur la zone de dépôt, ou cliquez sur **Choisir des fichiers**. Pour retirer un fichier de la liste, utilisez le bouton de retrait de sa carte. Une jauge sous la liste indique le nombre de fichiers et leur taille totale par rapport à la limite du transfert ; si vous la dépassez, la jauge devient rouge et affiche **Limite dépassée**.
+- **Zone de dépôt** (intitulée **Glissez-déposez vos fichiers ici**, ou **… vos fichiers ou dossiers ici** quand les dossiers sont acceptés ; les lecteurs d’écran l’annoncent comme **Fichiers à envoyer**) : faites glisser vos fichiers dessus, ou cliquez sur **Choisir des fichiers**. Pour retirer un fichier de la liste, utilisez le bouton de retrait de sa carte. Une jauge sous la liste indique le nombre de fichiers et leur taille totale par rapport à la limite du transfert ; si vous la dépassez, la jauge devient rouge et affiche **Limite de … dépassée** avec la limite.
 
 <!-- rules: levels -->
 
-Un transfert peut contenir jusqu’à 20 Go au total ; votre organisation a pu fixer une limite plus basse. L’indication sous **Fichiers à envoyer** donne les limites réelles (taille totale et nombre de fichiers).
+Un transfert peut contenir jusqu’à 20 Go au total ; votre organisation a pu fixer une limite plus basse. L’indication sous la zone de dépôt (**Jusqu’à … au total et … fichiers par transfert.**) donne les limites réelles (taille totale et nombre de fichiers).
 
 <!-- rules: limits -->
 
@@ -140,7 +140,7 @@ Chaque fichier reçoit l’un des résultats suivants :
 - **aucune menace détectée** : le fichier est remis ;
 - **menace détectée, fichier supprimé** : le fichier n’est pas remis et vous recevez une alerte par mail ;
 - **non analysé (fichier trop volumineux)** ou **non analysé (archive chiffrée)** : le fichier est remis, vous en êtes informé par mail et les destinataires sont avertis sur la page de téléchargement ;
-- **non analysé (antivirus désactivé)** : l’antivirus est désactivé pour votre entité (ou pour tout le service), le fichier est donc remis sans contrôle ; vous en êtes informé par mail (motif « antivirus désactivé ») et les destinataires sont avertis sur la page de téléchargement ;
+- **non analysé : antivirus désactivé** : l’antivirus est désactivé pour votre entité (ou pour tout le service), le fichier est donc remis sans contrôle ; vous en êtes informé par mail (motif « antivirus désactivé ») et les destinataires sont avertis sur la page de téléchargement ;
 - **échec de l’analyse, fichier retenu** : le fichier n’est pas remis.
 
 Si aucun fichier ne peut être remis, la page affiche **Transfert refusé** et les destinataires ne sont pas prévenus.
@@ -184,7 +184,7 @@ L’option **Lien seul** (sans envoi de mail aux destinataires) vous permet de t
 Dans le formulaire [Nouveau transfert](topic:deposit-options), activez l’interrupteur **Lien seul (aucun mail aux destinataires)**, sous les destinataires :
 
 - les **Destinataires** deviennent facultatifs. S’ils sont renseignés, ils sont enregistrés mais **ne reçoivent aucun mail** ;
-- l’option est incompatible avec la vérification du destinataire : activer l’une désactive l’autre ;
+- l’option est incompatible avec la vérification du destinataire : activer **Lien seul** désactive la vérification et verrouille son interrupteur (**Non disponible pour un transfert par lien seul.**). Inversement, quand le niveau de confidentialité choisi impose la vérification du destinataire, l’interrupteur **Lien seul** est verrouillé (**Non disponible : le niveau de confidentialité choisi impose la vérification des destinataires.**) ;
 - l’analyse antivirus et les autres règles s’appliquent comme d’habitude.
 
 Quand vous cliquez sur **Envoyer**, le lien s’affiche **une seule fois**, à la fin du dépôt. Cliquez sur **Copier le lien** et conservez-le avant de quitter la page : il ne figure ni dans le mail de confirmation, ni dans [Mes envois](topic:my-transfers). Le lien ne fonctionne que lorsque l’analyse antivirus est terminée ; le mail de confirmation vous prévient alors. Comme toute personne qui détient le lien peut télécharger, transmettez-le par un canal de confiance et protégez le transfert par un mot de passe communiqué séparément.
@@ -200,7 +200,7 @@ Si vous perdez le lien, ouvrez [Mes envois](topic:my-transfers) et cliquez sur *
 
 Le chiffrement de bout en bout protège vos fichiers même contre le serveur. Vos fichiers sont chiffrés **dans votre navigateur**, avant l’envoi. La clé n’est jamais transmise au serveur : lui-même ne peut donc pas les lire. Seules les personnes à qui vous donnez la clé peuvent les ouvrir.
 
-Dans le formulaire [Nouveau transfert](topic:deposit-options), ouvrez **Options de sécurité** et activez l’interrupteur **Chiffrer de bout en bout dans mon navigateur**. Selon les règles de votre organisation et du niveau de confidentialité choisi, l’interrupteur est proposé, déjà activé et verrouillé (chiffrement imposé), ou absente (chiffrement interdit). Elle n’est jamais proposée pour un envoi par lien de dépôt.
+Dans le formulaire [Nouveau transfert](topic:deposit-options), ouvrez **Options de sécurité** et activez l’interrupteur **Chiffrer de bout en bout dans mon navigateur**. Selon les règles de votre organisation et du niveau de confidentialité choisi, l’interrupteur est proposé, déjà activé et verrouillé (chiffrement imposé), ou absent (chiffrement interdit). Il n’est jamais proposé pour un envoi par lien de dépôt.
 
 ![Formulaire Nouveau transfert avec le bloc Options de sécurité ouvert et l’interrupteur Chiffrer de bout en bout dans mon navigateur activé](../screenshots/fr/deposit-e2e-option.png)
 
@@ -210,9 +210,9 @@ Quand vous cliquez sur **Envoyer** :
 2. Il chiffre ensuite les fichiers **pendant l’envoi**. Votre ordinateur travaille un peu plus que d’habitude : gardez la page ouverte.
 3. Les noms des fichiers, les dossiers, les types, les tailles, les empreintes et votre message sont chiffrés eux aussi. Le serveur ne voit que des noms génériques.
 
-À la fin, l’écran **Transfert envoyé** affiche la **clé de chiffrement**. Elle n’est affichée **qu’une seule fois** : copiez-la avant de quitter la page. Les mails envoyés aux destinataires contiennent le lien, mais **jamais la clé**. Envoyez-la vous-même **par un autre canal** que le mail du lien (téléphone, SMS, autre messagerie). Sans elle, personne ne peut ouvrir les fichiers, pas même vous ni votre administrateur.
+À la fin, l’écran **Transfert envoyé** affiche la **clé de déchiffrement**. Elle n’est affichée **qu’une seule fois** : copiez-la avant de quitter la page. Les mails envoyés aux destinataires contiennent le lien, mais **jamais la clé**. Envoyez-la vous-même **par un autre canal** que le mail du lien (téléphone, SMS, autre messagerie). Sans elle, personne ne peut ouvrir les fichiers, pas même vous ni votre administrateur.
 
-![Écran Transfert envoyé avec la clé de chiffrement à transmettre par un autre canal et le bouton Copier la clé](../screenshots/fr/deposit-e2e-key.png)
+![Écran Transfert envoyé avec la clé de déchiffrement à transmettre par un autre canal et le bouton Copier la clé](../screenshots/fr/deposit-e2e-key.png)
 
 Pour un envoi en [lien seul](topic:link-only), l’écran affiche le **lien complet**, qui se termine par `#k=` suivi de la clé. Ce lien suffit à ouvrir les fichiers : transmettez-le avec soin.
 
@@ -220,7 +220,7 @@ Pour un envoi en [lien seul](topic:link-only), l’écran affiche le **lien comp
 
 À savoir :
 
-- **Pas d’analyse antivirus.** Le serveur ne peut pas lire les fichiers : ils ne sont jamais analysés. Ils sont marqués « non analysé : chiffré de bout en bout », pour vous et pour les destinataires.
+- **Pas d’analyse antivirus.** Le serveur ne peut pas lire les fichiers : ils ne sont jamais analysés. Le récapitulatif de l’expéditeur les indique « non analysé (chiffré de bout en bout) », et la page de téléchargement des destinataires les marque **Non analysé : chiffré de bout en bout**.
 - **Pas d’archive ZIP côté serveur.** Les destinataires déchiffrent dans leur navigateur, qui construit l’archive lui-même.
 - Le serveur voit toujours la taille et le nombre des fichiers, l’expéditeur, les destinataires et les dates.
 - Un navigateur récent est nécessaire (chiffrement, tâches en arrière-plan et flux de données). Sans lui, l’interrupteur n’est pas utilisable.
@@ -254,11 +254,11 @@ Avec **Je copie le lien moi-même**, l’écran **Secret créé** affiche le lie
 
 **Préférez des durées courtes.** Une fois le secret lu, le serveur détruit son contenu et ses clés. Une sauvegarde du serveur faite pendant que le secret attendait encore conserve en revanche le texte chiffré, et ne peut plus être effacée ensuite. Ce qui protège alors le secret, c’est sa clé (la fin du lien) et la phrase de passe. Choisissez donc la **durée la plus courte** qui vous convient, et utilisez une phrase de passe, surtout pour la remise par mail.
 
-**Secret express.** Si votre organisation le propose, une page distincte **Secret express** (un lien dans l’en-tête des pages publiques) partage un court texte sans aucune identification ; elle n’a aucune des options ci-dessus.
+**Secret express.** Si votre organisation le propose, une page distincte **Secret express** (un lien dans l’en-tête des pages publiques ; **1 jour** est présélectionné) partage un court texte sans aucune identification ; elle n’a aucune des options ci-dessus.
 
 **Personnes externes invitées.** Si vous avez été invité, vous pouvez aussi partager un secret, uniquement par mail et uniquement à la personne qui vous a invité : le formulaire affiche **Le lien sera envoyé par mail à…** suivi de son adresse, et il n’y a rien à choisir. L’onglet est absent si votre organisation n’autorise pas les secrets par mail. Voir [Envoyer des fichiers avec une invitation](topic:invitation).
 
-**Depuis un script.** Un jeton d’API peut créer des secrets par l’API (voir `docs/api/` dans le dépôt TransTeira). Le client en ligne de commande `transteira-cli` ne gère pas les secrets.
+**Depuis un script.** Un jeton d’API peut créer des secrets par l’API (voir `docs/api/` dans le dépôt TransTeira). Le client en ligne de commande `transteira-cli` crée des **secrets express** (`transteira-cli secret create`, de façon anonyme avec `--anonymous` ou avec un jeton que l’administrateur de votre entité a autorisé à créer des secrets express, même quand la page Secret express est désactivée) et lit un lien de secret **une seule fois** (`transteira-cli secret read`). Il ne gère pas les secrets avec phrase secrète ou fichier : ouvrez leur lien dans un navigateur. Une configuration de jeton cassée ou inutile ne bloque plus `secret create --anonymous` ni `secret read`. Voir `docs/api/cli.md` dans le dépôt TransTeira.
 
 ### Mes secrets
 
@@ -290,7 +290,7 @@ L’écran **Secret créé** affiche alors le **lien complet**, clé comprise, a
 - Ne placez pas le lien dans un ticket, un wiki ou tout endroit lu par beaucoup de monde.
 - Ne transférez jamais un lien reçu : transmettez le secret lui-même.
 
-Votre organisation ne sait pas qui vous êtes : elle conserve seulement l’adresse d’où vient votre connexion, dans son journal d’audit, pendant 12 mois, jamais le contenu. Le destinataire voit un bandeau indiquant que le contenu a été créé par un tiers non vérifié, et peut signaler un abus.
+Votre organisation ne sait pas qui vous êtes : elle conserve seulement l’adresse d’où vient votre connexion, dans son journal d’audit, et dans son journal de sécurité quand une création est refusée, pendant 12 mois, jamais le contenu. Le destinataire voit un bandeau indiquant que le contenu a été créé par un tiers non vérifié, et peut signaler un abus.
 
 **Quand préférer un autre outil.** Utilisez plutôt [Partager un secret](topic:secret-share) si vous voulez une phrase de passe, un petit fichier, un envoi par mail avec accusé de lecture, ou si vous voulez retrouver vos secrets dans [Mes envois](topic:my-transfers).
 
@@ -301,7 +301,10 @@ Votre organisation ne sait pas qui vous êtes : elle conserve seulement l’adre
 - **Le texte contient des caractères invalides** : retirez les caractères qu’un clavier ou un copier-coller a ajoutés par erreur, puis réessayez.
 - **Trop de secrets créés depuis votre connexion. Réessayez à partir de …** : la limite horaire est atteinte pour l’adresse de votre réseau. Le bouton reste désactivé jusqu’à l’heure indiquée.
 - **Trop de secrets express attendent d’être lus sur ce service. Réessayez plus tard.** : le service est plein pour le moment.
-- **… ne propose plus les secrets express.** : le service a été fermé par votre organisation pendant votre saisie.
+- **Le secret express n’est plus proposé par …** : le service a été fermé par votre organisation pendant votre saisie.
+- **Le secret n’a pas pu être chiffré dans ce navigateur. Réessayez avec un navigateur à jour.** : utilisez un navigateur récent.
+- **Le service a refusé ce secret. Rechargez la page et réessayez.** : rechargez la page, puis saisissez de nouveau le texte.
+- **Navigateur non pris en charge** : la page remplace le formulaire quand le navigateur ne dispose d’aucune cryptographie. Utilisez un navigateur à jour, sur une connexion sécurisée (HTTPS).
 - **Le service est en maintenance** : réessayez plus tard, voir [Service en maintenance](topic:maintenance).
 
 Si la page indique que votre organisation ne propose pas les secrets express, le service est désactivé pour cette entité.
@@ -313,10 +316,10 @@ Sans créer de compte, vous pouvez gérer les transferts que vous avez envoyés 
 
 ### Obtenir votre lien d’accès
 
-1. Ouvrez la page **Mes envois** du site d’envoi (l’adresse se termine par `/me` ; le mail de confirmation de chaque transfert contient aussi le lien).
+1. Cliquez sur **Mes envois** dans l’en-tête du site d’envoi, ou ouvrez sa page `/me` (le mail de confirmation de chaque transfert contient aussi le lien). Sur un écran étroit, les liens **Mes envois** et **Secret express** de l’en-tête se réduisent à une icône (une liste et un cadenas) et gardent leur nom en infobulle.
 1. Saisissez votre adresse mail et cliquez sur le bouton pour recevoir un lien.
 
-![Page Mes envois avec le champ Votre adresse mail et le bouton pour recevoir un lien d’accès](../screenshots/fr/my-transfers-request.png)
+![Page Mes envois avec le champ Votre adresse e-mail et le bouton pour recevoir un lien d’accès](../screenshots/fr/my-transfers-request.png)
 
 La page affiche toujours le même message, qu’un lien ait été envoyé ou non. Un lien n’est envoyé que si votre adresse a déjà été vérifiée une première fois par un code, lors d’un envoi de fichiers. Il arrive dans votre boîte mail en quelques minutes.
 
@@ -415,9 +418,9 @@ Si la page indique que le lien est introuvable, il est incomplet, désactivé, r
 
 Pour envoyer des fichiers automatiquement (un export nocturne, un outil qui dépose des fichiers), le formulaire de transfert n’est pas nécessaire : demandez un **jeton d’API** à l’administrateur de votre entité. Un jeton permet à un script de déposer des fichiers sans qu’une personne vérifie une adresse, dans les limites fixées par l’administrateur (adresses réseau et expéditeurs autorisés).
 
-Un jeton peut aussi créer des secrets à usage unique par l’API, mais le client en ligne de commande décrit plus bas ne les gère pas : voir [Partager un secret](topic:secret-share).
+Un jeton peut aussi créer des secrets à usage unique par l’API. Il ne crée des secrets express que si l’administrateur a activé **Autorisé à créer des secrets express** pour lui, même quand la page Secret express est désactivée pour les visiteurs anonymes : voir [Partager un secret](topic:secret-share).
 
-Votre administrateur peut aussi vous fournir le client en ligne de commande `transteira-cli`, qui dépose et télécharge depuis un terminal ou un script, avec le jeton, et reprend de lui-même un envoi interrompu. Ses binaires sont publiés avec chaque version sur GitHub, avec une signature à vérifier avant de les exécuter. Le guide complet est `docs/api/cli.md` dans le dépôt TransTeira. Ne collez jamais un jeton dans un message ou un document partagé : il donne le même accès qu’un script de votre entité.
+Votre administrateur peut aussi vous fournir le client en ligne de commande `transteira-cli`, qui dépose et télécharge depuis un terminal ou un script, avec le jeton, et reprend de lui-même un envoi interrompu. Il crée aussi un secret express (`secret create`, avec le jeton s’il est autorisé pour les secrets express, ou sans jeton avec `--anonymous`) et lit un lien de secret une seule fois (`secret read`, qui n’a jamais besoin de jeton et est refusé pour un secret avec phrase secrète ou fichier). Ses binaires sont publiés avec chaque version sur GitHub, avec une signature à vérifier avant de les exécuter. Le guide complet est `docs/api/cli.md` dans le dépôt TransTeira. Ne collez jamais un jeton dans un message ou un document partagé : il donne le même accès qu’un script de votre entité.
 
 <!-- topic: deposit-problems -->
 ## Problèmes courants
@@ -452,9 +455,9 @@ Votre organisation rédige les documents légaux du service.
 
 En bas de page, les liens **Mentions légales** et **Politique de confidentialité** ouvrent ces documents (un lien n’apparaît que si le document a été rédigé). Si un document manque, la page affiche **Ce document n’a pas été publié par ce service.**
 
-![Page Mentions légales de l’entité, avec en bas les liens Mentions légales et Aide, et dans l’en-tête les boutons Langue, Thème sombre et Aide](../screenshots/fr/legal-notice.png)
+![Page Mentions légales de l’entité, avec en bas les liens Mentions légales et Aide, et dans l’en-tête les liens et boutons Mes envois, Secret express (quand il est proposé), Langue, Thème sombre et Aide](../screenshots/fr/legal-notice.png)
 
-Le service n’utilise que des cookies techniques, sans aucune mesure d’audience. L’en-tête contient la liste **Langue**, le bouton **Thème sombre** et un lien rond **Aide** (**?**) vers l’aide de l’écran en cours ; le bas de page répète un lien **Aide** et affiche « Propulsé par TransTeira ».
+Le service n’utilise que des cookies techniques, sans aucune mesure d’audience. L’en-tête contient le lien **Mes envois**, le lien **Secret express** (quand votre organisation le propose), la liste **Langue**, le bouton **Thème sombre** et un lien rond **Aide** (**?**) vers l’aide de l’écran en cours ; le bas de page répète un lien **Aide** et affiche « Propulsé par TransTeira ».
 
 ### Thème sombre
 

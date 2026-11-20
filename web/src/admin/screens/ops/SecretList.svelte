@@ -10,7 +10,9 @@
   // marker and the creator kind "Anonymous" (no creator address), and a field finds a secret
   // from its pasted link (POST …/secrets/lookup, also for an auditor: read only). The link goes
   // only in the body, without its "#k=" key part, is cleared from the field after the search and
-  // is never kept (T-408); the result shows the metadata of the list row.
+  // is never kept (T-408); the result shows the metadata of the list row. Each row shows the
+  // identifier (sec_…) under its creation date, in small monospace text, so that the secret of an
+  // abuse report (which only gives that identifier) can be found in the list.
   import { tick, untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, HelpIcon, TextField, announce } from '../../../shared/components';
@@ -228,6 +230,9 @@
 
 {#snippet createdCell(row: AdminSecret)}
   {dateTime(row.createdAt)}
+  <span class="tt-secretlist__id"
+    ><span class="visually-hidden">{t('adminSecrets.list.idLabel')} </span><code>{row.id}</code></span
+  >
 {/snippet}
 
 {#snippet creatorCell(row: AdminSecret)}
@@ -453,5 +458,17 @@
     display: block;
     color: var(--tt-muted);
     font-size: var(--tt-font-size-sm);
+  }
+
+  .tt-secretlist__id {
+    display: block;
+    color: var(--tt-muted);
+    font-size: var(--tt-font-size-sm);
+    overflow-wrap: anywhere;
+  }
+
+  .tt-secretlist__id code {
+    color: inherit;
+    font-size: inherit;
   }
 </style>

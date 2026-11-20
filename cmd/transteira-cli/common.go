@@ -62,8 +62,20 @@ type connFlags struct {
 
 // add registers the connection flags on fs; withSender adds --sender.
 func (c *connFlags) add(fs *flag.FlagSet, withSender bool) {
+	c.addFlags(fs, withSender, true)
+}
+
+// addNoToken registers the connection flags except --token-file, for the
+// commands that never send an API token.
+func (c *connFlags) addNoToken(fs *flag.FlagSet) {
+	c.addFlags(fs, false, false)
+}
+
+func (c *connFlags) addFlags(fs *flag.FlagSet, withSender, withToken bool) {
 	fs.StringVar(&c.url, "url", "", "tenant URL https://host[:port] (else "+client.EnvURL+" or the profile)")
-	fs.StringVar(&c.tokenFile, "token-file", "", "file holding the API token (else "+client.EnvTokenFile+", "+client.EnvToken+" or the profile)")
+	if withToken {
+		fs.StringVar(&c.tokenFile, "token-file", "", "file holding the API token (else "+client.EnvTokenFile+", "+client.EnvToken+" or the profile)")
+	}
 	if withSender {
 		fs.StringVar(&c.sender, "sender", "", "default sender address (else "+client.EnvSender+" or the profile)")
 	}

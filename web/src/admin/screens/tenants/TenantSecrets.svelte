@@ -10,6 +10,15 @@
   // (POST …/express-secrets/purge, after a confirmation). An auditor has no access (403
   // read-only-role, shown as a load error); the fields and the purge are also disabled for the
   // read-only role in case the screen is shown.
+  // The three express limits only go down for a delegated admin (threat model T-418): each field
+  // accepts at most the greater of its default and its stored value (expressCeilings), checked
+  // before sending; a 403 forbidden (the stored limits changed meanwhile) refreshes the ceilings
+  // and the express fields the admin did not change, the changed ones are kept (rebaseExpress).
+  // The PUT only carries the express members that differ from the last answer of the server, so
+  // a stale form never writes back the anonymous mode or a limit that the super admin changed
+  // meanwhile (an absent member keeps its stored value). The super admin keeps the bounds. While
+  // the instance kill switch TT_EXPRESS_SECRETS_DISABLED is on (expressInstanceDisabled, read
+  // only), a warning heads the express section: the stored switch then has no effect.
   // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { describeError } from '../../../shared/api/problem';
   import {
@@ -36,7 +45,11 @@
     MAX_FILE_MIB,
     MIN_FILE_MIB,
     SECRET_DURATIONS,
+    expressCeilings,
+    expressHintParams,
+    isRaiseRefused,
     purgeResultText,
+    rebaseExpress,
     secretDraftChanged,
     secretSettingsBody,
     toDraft,
@@ -62,6 +75,9 @@
   let loading = $state(true);
   let loadError = $state('');
   let saved = $state.raw<SecretSettingsDraft | undefined>(undefined);
+  // Settings of the last answer of the server: the ceilings of the express limits and the state
+  // of the instance kill switch come from it.
+  let loaded = $state.raw<SecretSettings | undefined>(undefined);
   let draft = $state<SecretSettingsDraft>({
     enabled: true,
     durations: [],
@@ -80,6 +96,9 @@
   let purgeDone = $state('');
 
   const readOnly = $derived(isAuditor(adminSession.me?.role));
+  const superAdmin = $derived(adminSession.me?.role === 'super_admin');
+  const ceilings = $derived(expressCeilings(loaded, superAdmin));
+  const instanceDisabled = $derived(loaded?.expressInstanceDisabled === true);
 
   const tenantId = $derived(params['id'] ?? '');
   const fields = $derived({
@@ -96,6 +115,7 @@
   );
 
   function show(settings: SecretSettings): void {
+    loaded = settings;
     const next = toDraft(settings);
     saved = next;
     draft = { ...next, durations: [...next.durations] };
@@ -118,6 +138,24 @@
     void load(tenantId);
   });
 
+  // After a refused raise: the stored settings are read again for the ceilings; the express
+  // fields the admin did not change show the stored values, the changed ones are kept.
+  async function refreshCeilings(id: string): Promise<void> {
+    try {
+      const res = await adminApi.get('/admin/tenants/{tenantId}/secret-settings', { path: { tenantId: id } });
+      if (id === tenantId) {
+        loaded = res.data;
+        if (saved !== undefined) {
+          const next = rebaseExpress(draft, saved, res.data);
+          saved = next.saved;
+          draft = next.draft;
+        }
+      }
+    } catch {
+      // The ceilings stay as they were; the server still refuses a raise.
+    }
+  }
+
   function toggle(duration: SecretDuration, on: boolean): void {
     draft = { ...draft, ...toggleDuration(draft, duration, on) };
   }
@@ -138,12 +176,16 @@
     try {
       const res = await adminApi.put('/admin/tenants/{tenantId}/secret-settings', {
         path: { tenantId },
-        body: secretSettingsBody(draft),
+        body: secretSettingsBody(draft, loaded),
       });
       show(res.data);
       return { ok: true, message: t('adminSecrets.settings.saved') };
     } catch (err) {
       const view = describeError(i18n, err);
+      if (isRaiseRefused(view)) {
+        void refreshCeilings(tenantId);
+        return { ok: false, message: t('adminSecrets.settings.errors.raiseRefused') };
+      }
       const mapped = summaryFromFields(view.fields, fields);
       const message = mapped.errors.length === 0 || mapped.unmatched.length > 0 ? view.message : undefined;
       return message === undefined
@@ -169,7 +211,7 @@
     intro={t('adminTenants.secrets.intro')}
     {dirty}
     addGuard={(guard) => nav.addGuard(guard)}
-    validate={() => validateSecretSettings(draft, fields, t)}
+    validate={() => validateSecretSettings(draft, fields, t, ceilings)}
     onsubmit={save}
     bind:errors
   >
@@ -239,6 +281,13 @@
 
     <fieldset class="tt-secrets__group" id="{uid}-express">
       <legend>{t('adminSecrets.express.legend')}</legend>
+      {#if instanceDisabled}
+        <div class="tt-secrets__reminder" id="{uid}-express-closed">
+          <Alert severity="warning" live={false} title={t('adminSecrets.express.instanceDisabled.title')}>
+            <p>{t('adminSecrets.express.instanceDisabled.text')}</p>
+          </Alert>
+        </div>
+      {/if}
       <p class="tt-text-sm tt-text-muted">{t('adminSecrets.express.intro')}</p>
       <Checkbox
         label={t('adminSecrets.express.enabled.label')}
@@ -258,10 +307,18 @@
           </Alert>
         </div>
       {/if}
+      {#if !superAdmin && !readOnly}
+        <p class="tt-text-sm tt-text-muted" id="{uid}-express-lower-only">
+          {t('adminSecrets.express.lowerOnly')}
+        </p>
+      {/if}
       <TextField
         id={ids.expressPerIp}
         label={t('adminSecrets.express.perIp.label')}
-        hint={t('adminSecrets.express.perIp.hint', EXPRESS_LIMITS.perHourPerIp)}
+        hint={t(
+          'adminSecrets.express.perIp.hint',
+          expressHintParams(EXPRESS_LIMITS.perHourPerIp, ceilings.perHourPerIp),
+        )}
         inputmode="numeric"
         autocomplete="off"
         disabled={readOnly}
@@ -271,7 +328,10 @@
       <TextField
         id={ids.expressPerToken}
         label={t('adminSecrets.express.perToken.label')}
-        hint={t('adminSecrets.express.perToken.hint', EXPRESS_LIMITS.perHourPerToken)}
+        hint={t(
+          'adminSecrets.express.perToken.hint',
+          expressHintParams(EXPRESS_LIMITS.perHourPerToken, ceilings.perHourPerToken),
+        )}
         inputmode="numeric"
         autocomplete="off"
         disabled={readOnly}
@@ -281,7 +341,10 @@
       <TextField
         id={ids.expressPending}
         label={t('adminSecrets.express.maxPending.label')}
-        hint={t('adminSecrets.express.maxPending.hint', EXPRESS_LIMITS.maxPending)}
+        hint={t(
+          'adminSecrets.express.maxPending.hint',
+          expressHintParams(EXPRESS_LIMITS.maxPending, ceilings.maxPending),
+        )}
         inputmode="numeric"
         autocomplete="off"
         disabled={readOnly}

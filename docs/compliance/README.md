@@ -25,8 +25,8 @@ stored or how: re-read the documents when you upgrade (see the
 
 | Document | Use |
 |---|---|
-| [GDPR processing record](gdpr-processing-record.md) | One pre-filled processing activity, "File transfer service", with its second purpose since 2.1, one-time secrets: purposes, data subjects, data categories, recipients, retention, security measures. Fill the `<to be completed>` placeholders and attach it to your register. |
-| [ISO/IEC 27001:2022 Annex A mapping](iso27001-annex-a.md) | The 93 controls of Annex A, with for each one who provides it (TransTeira, shared, operator), the mechanism and the reference. Use it for the Statement of Applicability (SoA) and for audits. |
+| [GDPR processing record](gdpr-processing-record.md) | One pre-filled processing activity, "File transfer service", with its second purpose since 2.1, one-time secrets, and its third since 2.3, express secrets created without authentication, for which the entity acts as a host: purposes, data subjects, data categories, recipients (including the transfer search across entities, which is not audited), retention, security measures. Fill the `<to be completed>` placeholders and attach it to your register. |
+| [ISO/IEC 27001:2022 Annex A mapping](iso27001-annex-a.md) | The 93 controls of Annex A, with for each one who provides it (TransTeira, shared, operator), the mechanism and the reference. Since 2.3, it also covers the express secrets, the transfer search across entities and the system status. Use it for the Statement of Applicability (SoA) and for audits. |
 | [Threat model](../security/threat-model.md) (French) | STRIDE analysis: assets, trust boundaries, threats `T-xxx`, decisions `Pxx`. The two documents above cite it. |
 
 ## How to use it
@@ -53,7 +53,7 @@ stored or how: re-read the documents when you upgrade (see the
 - [Antivirus](../operations/antivirus.md), [single sign-on](../operations/sso.md),
   [proofs of deposit and delivery](../operations/proofs.md)
 - [Administration guide](../operations/admin.md), [tenants](../operations/tenants.md)
-- [Secret format](../architecture/e2e-format.md) (section 3.3), and the [depositor](../user/en/depositor.md) and [recipient](../user/en/recipient.md) guides for one-time secrets
+- [Secret format](../architecture/e2e-format.md) (section 3.3, and 3.3.9 for express secrets), and the [depositor](../user/en/depositor.md) and [recipient](../user/en/recipient.md) guides for one-time and express secrets
 - [Delegated admin guide](../user/en/delegated-admin.md), including the
-  "Personal data (GDPR)" screen
+  "Personal data (GDPR)" screen and the administration of the express secrets
 - [Releasing](../operations/release.md) (maintainer guide: signed tags and images)

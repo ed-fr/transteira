@@ -53,8 +53,7 @@ use to ban the client IP.
   The `errors` member lists each invalid field with a reason code and, when relevant, the
   accepted values (for example `expiryDays` with `allowed: [1, 7, 30]`). Since 2.1, a missing or malformed `TransTeira-Secret-Grant` header on
   `GET /secret-links/{secretToken}/file` is also `400` (field `TransTeira-Secret-Grant`), not `404`. Since 1.1, on
-  transfer creation: `maxDownloads` outside 1 to 1000 and `recipientVerification: true` (not
-  offered until per-recipient links are available) are reported as `not-allowed`, a malformed
+  transfer creation: `maxDownloads` outside 1 to 1000 is reported as `not-allowed`, a malformed
   `confidentialityLevel` as `invalid-format` and an unknown one as `not-allowed`. A file name
   refused by the file name policy is reported as `invalid-file-name` on `/files/<n>/name` and,
   since 1.1, a refused folder `path` as `invalid-file-path` on `/files/<n>/path`. A mail address that
@@ -97,6 +96,18 @@ use to ban the client IP.
   `@` that is not a bare mail address (`/q`, `invalid-email`), a `limit` outside 1 to 50
   (`/limit`, `invalid-format`) and an unknown member (`invalid-format` naming it). An auditor
   sending a `q` holding `@` gets `403 read-only-role` before the address is checked.
+  Also since 2.3, `POST /express-secrets` reports `/encryptedText` as `required`, `too-long` or
+  `invalid-format`, `/expiresIn` as `required` or `not-allowed` (with `allowed` always listing
+  the fixed express durations `1h`, `1d` and `7d`, whatever durations the entity offers to the
+  one-time secrets), and each member outside the schema as
+  `not-allowed` on its own pointer (at most 16 are named); a body that is not a JSON object of
+  strings is answered without any field. `POST /admin/tenants/{tenantId}/secrets/lookup` reports
+  `/link` as `required` (empty or blank), `too-long` (above 2048 characters) or
+  `invalid-format` (no token found); a `?query` part and a bare `/s/<token>` path are accepted.
+  On `PUT /admin/tenants/{tenantId}/secret-settings`, the express settings follow the same
+  rules (`null`: `not-nullable`; outside the bounds: `out-of-range` on `/expressPerHourPerIp`,
+  `/expressPerHourPerToken` or `/expressMaxPending`). The bounds check comes before the
+  `forbidden` rule of the lower-only limits: an out-of-range value is `400` even for a delegated admin.
 - **Typical endpoints:** any endpoint accepting a body or query parameters.
 - **What to do:** fix the listed fields and send the request again. Do not retry unchanged.
 
@@ -105,7 +116,9 @@ use to ban the client IP.
 - **HTTP status:** 401 Unauthorized
 - **Meaning:** credentials are missing or expired: no admin session, expired deposit session,
   or, on an operation that also accepts an API token, neither a deposit session nor an
-  `Authorization` header (a present but invalid token gives `invalid-credentials` instead);
+  `Authorization` header (a present but invalid token gives `invalid-credentials` instead; the
+  exception, since 2.3, is `POST /express-secrets`, where a missing header is an anonymous
+  creation, not a `401`);
   on those operations the response carries `WWW-Authenticate: Bearer`. On the admin host, it
   also answers an expired or revoked session
   (logout, password change, TOTP re-enrollment or disabling from another session, account
@@ -134,7 +147,8 @@ use to ban the client IP.
 - **Typical endpoints:** `POST /admin/auth/login`, `POST /admin/auth/totp`,
   `POST /admin/me/totp` (from an authenticated session), `POST /admin/me/totp/confirm`,
   `PUT /admin/me/password`, `DELETE /admin/me/totp`, `POST /admin/system/master-key/rotations`,
-  any endpoint called with an API token (since 2.1 also `POST /secrets` and its file and send operations).
+  any endpoint called with an API token (since 2.1 also `POST /secrets` and its file and send operations,
+  and since 2.3 `POST /express-secrets`).
 - **What to do:** check the credentials. Repeated failures lead to `rate-limited` and may get
   the client IP banned.
 
@@ -145,12 +159,19 @@ use to ban the client IP.
   example a delegated admin calling a super admin endpoint, or a super admin trying to disable
   the TOTP that is mandatory for them). A delegated admin changing the name, FQDN, storage quota
   or transfer ceiling of its entity, or setting its transfer limit above the ceiling set by the
-  super admin, also gets `forbidden`, and nothing is changed. The global statistics and the
+  super admin, also gets `forbidden`, and nothing is changed. Since 2.3, so does a delegated
+  admin who raises an express secret limit (`expressPerHourPerIp`, `expressPerHourPerToken`,
+  `expressMaxPending`) above the larger of its default (10, 100, 1 000) and the value
+  currently stored: the whole replacement of `PUT /admin/tenants/{tenantId}/secret-settings`
+  is refused and nothing is stored. Lowering a limit, setting it back to its default or sending
+  back a value the super admin raised is accepted. The refusal is neither audited nor written
+  to the security log; the super admin keeps the full bounds. The global statistics and the
   instance-wide audit log are reserved to the super admin as well; a delegated admin reads the
   statistics and the audit log of its own entities instead. Since 2.3, so is the state of the
   instance components shown on the administration home (`GET /admin/system/status`).
 - **Typical endpoints:** `/admin/system/*`, `/admin/admins`, `POST /admin/tenants`,
-  `PATCH /admin/tenants/{tenantId}`, `DELETE /admin/tenants/{tenantId}`, `DELETE /admin/me/totp`.
+  `PATCH /admin/tenants/{tenantId}`, `DELETE /admin/tenants/{tenantId}`, `DELETE /admin/me/totp`,
+  and since 2.3 `PUT /admin/tenants/{tenantId}/secret-settings` (raised express limit).
 - **What to do:** do not retry; ask a super admin if the access is legitimately needed.
 
 ### csrf-invalid
@@ -164,7 +185,7 @@ use to ban the client IP.
   `Origin` header is present and differs from `https://<entity host>` (`https://<admin host>`
   on the admin host), or when its `Sec-Fetch-Site` header is present and is not `same-origin`.
   These two header checks alone (no token yet) also protect `POST /admin/setup`,
-  `POST /admin/auth/login`, `POST /admin/activation`, `POST /downloads/{linkToken}/unlock` and, since 2.1, `POST /secret-links/{secretToken}/reveal` (a refusal there comes before any proof is read, so nothing is counted). Requests without these headers (scripts) are not affected, and no CSRF token is needed. With a deposit session, the secret creator operations (`POST /secrets`, `PUT /secrets/{secretId}/file`, `POST /secrets/{secretId}/send`, `DELETE /me/secrets/{secretId}`) also need the `X-CSRF-Token` header.
+  `POST /admin/auth/login`, `POST /admin/activation`, `POST /downloads/{linkToken}/unlock` and, since 2.1, `POST /secret-links/{secretToken}/reveal` (a refusal there comes before any proof is read, so nothing is counted). Since 2.3, the same two header checks protect `POST /express-secrets` without an API token (a request with a valid token is not checked) and `POST /secret-links/{secretToken}/abuse-reports`. Requests without these headers (scripts) are not affected, and no CSRF token is needed. With a deposit session, the secret creator operations (`POST /secrets`, `PUT /secrets/{secretId}/file`, `POST /secrets/{secretId}/send`, `DELETE /me/secrets/{secretId}`) also need the `X-CSRF-Token` header.
 - **What to do:** send the `csrfToken` returned in the session payload in the `X-CSRF-Token`
   header; reload the page to obtain a fresh one, then retry. On the admin host, the token is
   derived from the session with a key of the current master key: after a master key rotation
@@ -200,7 +221,8 @@ use to ban the client IP.
 - **Typical endpoints:** any endpoint called with an API token: `POST /transfers`,
   `GET` and `DELETE /transfers/{transferId}`, `POST /transfers/{transferId}/finalize`, and
   `HEAD`, `PATCH` and `DELETE /uploads/{uploadId}`, and since 2.1 `POST /secrets`,
-  `PUT /secrets/{secretId}/file` and `POST /secrets/{secretId}/send`.
+  `PUT /secrets/{secretId}/file` and `POST /secrets/{secretId}/send`, and since 2.3
+  `POST /express-secrets` called with a token.
 - **What to do:** call from an allowed address, or ask an admin to update the token's allowed
   ranges.
 
@@ -263,7 +285,10 @@ use to ban the client IP.
   grant (`TransTeira-Secret-Grant`) that is well-formed but wrong, already used or expired, or a
   secret without a file, answers `not-found` with no security event (a missing or malformed
   grant is `400 validation-failed`); a `secretToken` in `send` that is not the token of this
-  secret; and a secret created with a token answers it to a session, and the reverse.
+  secret; and a secret created with a token answers it to a session, and the reverse. Since
+  2.3, an abuse report on the token of a one-time secret that is not an express one also
+  answers `not-found`, with no security event, and so does a `POST /admin/tenants/{tenantId}/secrets/lookup`
+  whose link matches no secret of the entity.
 - **Typical endpoints:** any endpoint with an identifier in its path, `/admin/*` on an entity
   host, `POST /admin/activation`.
 - **What to do:** check the identifier or link. Do not retry unchanged.
@@ -479,7 +504,9 @@ use to ban the client IP.
   the message up (for example the HTML `lang` attribute).
 - **Typical endpoints:** `POST /deposit-sessions`, `POST /transfers`,
   `PATCH /uploads/{uploadId}`, `POST /transfers/{transferId}/finalize`, `POST /invitations`, and since 2.1 `POST /secrets`,
-  `PUT /secrets/{secretId}/file` and `POST /secrets/{secretId}/send`.
+  `PUT /secrets/{secretId}/file` and `POST /secrets/{secretId}/send`, and since 2.3
+  `POST /express-secrets` (with or without a token; the reading of a secret and the abuse
+  reports stay available).
 - **What to do:** retry after `Retry-After`; show `detail` (as text, never as HTML) to the user.
 
 ### mail-unavailable

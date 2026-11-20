@@ -267,6 +267,13 @@ func TestImportTenantStrict(t *testing.T) {
 			strings.Replace(validImport, `"network"`, `"smtp":{"host":"h","port":25,"security":"none","fromAddress":"a@b.example","password":"p"},"network"`, 1),
 			problem.CodeImportInvalid, "/config/smtp/password", "unknown-member",
 		},
+		// The read-only state of the instance kill switch (since 2.3) is
+		// never part of a configuration.
+		"read-only kill switch state": {
+			withConfig(`"secretSettings":{"enabled":true,"durations":["1h"],"fileAllowed":true,"fileMaxBytes":1048576,` +
+				`"emailAllowed":true,"expressInstanceDisabled":false}`),
+			problem.CodeImportInvalid, "/config/secretSettings/expressInstanceDisabled", "unknown-member",
+		},
 		"case variant": {
 			strings.Replace(validImport, `"name"`, `"Name"`, 1),
 			problem.CodeImportInvalid, "/Name", "unknown-member",
@@ -507,6 +514,12 @@ func reduce(t *testing.T, doc, s map[string]any) specNode {
 		}
 		if props, ok := s["properties"].(map[string]any); ok {
 			for name, child := range props {
+				// A read-only member is server state, never part of an
+				// import: the strict check refuses it as unknown (since
+				// 2.3, SecretSettings.expressInstanceDisabled).
+				if child.(map[string]any)["readOnly"] == true {
+					continue
+				}
 				n.members[name] = child.(map[string]any)
 			}
 		} else if add, ok := s["additionalProperties"].(map[string]any); ok {

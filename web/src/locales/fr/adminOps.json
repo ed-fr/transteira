@@ -53,7 +53,7 @@
   },
   "abuseReports": {
     "title": "Signalements d’abus",
-    "intro": "Signalements faits par les destinataires depuis la page de téléchargement. Le message est un simple texte, à lire avec prudence."
+    "intro": "Signalements faits par les destinataires depuis la page de téléchargement, et par les lecteurs d’un secret express depuis sa page de lecture. Le message est un simple texte, à lire avec prudence."
   },
   "security": {
     "title": "Journal de sécurité",

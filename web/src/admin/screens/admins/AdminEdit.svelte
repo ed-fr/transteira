@@ -374,7 +374,11 @@
 {/snippet}
 
 {#if loading}
-  <PageHeader title={t('adminAccounts.list.title')} />
+  <PageHeader title={t('adminAccounts.list.title')}>
+    {#snippet help()}
+      <HelpIcon topic="admins" title={t('adminAccounts.list.title')} {nav} />
+    {/snippet}
+  </PageHeader>
   <p>{t('admin.common.loading')}</p>
 {:else if notFound}
   <PageHeader title={t('adminAccounts.notFound.title')} description={t('adminAccounts.notFound.text')}>
@@ -383,7 +387,11 @@
     {/snippet}
   </PageHeader>
 {:else if admin === undefined || form === undefined || actions === undefined}
-  <PageHeader title={t('adminAccounts.list.title')} />
+  <PageHeader title={t('adminAccounts.list.title')}>
+    {#snippet help()}
+      <HelpIcon topic="admins" title={t('adminAccounts.list.title')} {nav} />
+    {/snippet}
+  </PageHeader>
   <Alert severity="error">
     <p>{loadError}</p>
     <Button variant="secondary" small onclick={() => void load()}>{t('common.retry')}</Button>

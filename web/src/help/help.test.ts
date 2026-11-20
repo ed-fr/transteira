@@ -3,12 +3,14 @@ import {
   ADMIN_GUIDES,
   MAX_SHOWN_TOPIC_LENGTH,
   PUBLIC_GUIDES,
+  SUPER_ADMIN_TOPICS,
   adminGuides,
   featureOn,
   guideTopic,
   helpPageTitle,
   plainClick,
   resolveHelp,
+  roleTopic,
   sectionDomId,
   shownTopic,
   tableOfContents,
@@ -144,6 +146,22 @@ describe('resolveHelp for an auditor', () => {
   it('keeps the delegated-admin guide for the other roles', () => {
     expect(resolveHelp(set, 'tenants', ['delegated-admin'])).toMatchObject({ guide: delegated });
     expect(resolveHelp(set, 'tenants', ADMIN_GUIDES)).toMatchObject({ guide: delegated });
+  });
+});
+
+describe('roleTopic', () => {
+  it('opens the super-admin version of a topic for a signed-in super admin', () => {
+    expect(SUPER_ADMIN_TOPICS).toEqual({ admin: 'admin-home-super' });
+    expect(roleTopic('admin', 'super_admin')).toBe('admin-home-super');
+  });
+
+  it('keeps the topic for the other roles, a visitor and the other topics', () => {
+    expect(roleTopic('admin', 'delegated_admin')).toBe('admin');
+    expect(roleTopic('admin', 'auditor')).toBe('admin');
+    expect(roleTopic('admin', undefined)).toBe('admin');
+    expect(roleTopic('tenants', 'super_admin')).toBe('tenants');
+    expect(roleTopic('toString', 'super_admin')).toBe('toString');
+    expect(roleTopic(undefined, 'super_admin')).toBeUndefined();
   });
 });
 

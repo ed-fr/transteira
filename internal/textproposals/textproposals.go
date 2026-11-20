@@ -61,6 +61,12 @@ type Facts struct {
 	LogRetentionMonths        int
 	// AntivirusEnabled tells that the files are scanned by an antivirus.
 	AntivirusEnabled bool
+	// ExpressOffered tells that the anonymous express secrets are really
+	// offered (enabled by the entity and not closed by the instance kill
+	// switch).
+	ExpressOffered bool
+	// SecretsEnabled tells that the one-time secrets module is on.
+	SecretsEnabled bool
 }
 
 //go:embed templates/*/*.md
@@ -74,6 +80,9 @@ var markerPrefixes = []string{"[À compléter", "[To complete"}
 // languageTexts are the words and sentences built in code, per language.
 type languageTexts struct {
 	and, day, days, antivirus, validityMarker string
+	// oneTime and express are the optional paragraphs of the one-time
+	// secrets and of the express secrets.
+	oneTime, express string
 }
 
 var texts = map[string]languageTexts{
@@ -81,11 +90,15 @@ var texts = map[string]languageTexts{
 		and: "et", day: "jour", days: "jours",
 		antivirus:      "Chaque fichier déposé est analysé par un antivirus avant d'être mis à disposition. Un fichier infecté est supprimé.",
 		validityMarker: "[À compléter : durées de validité des envois]",
+		oneTime:        "Les secrets à usage unique sont chiffrés dans votre navigateur : le service ne voit jamais leur contenu en clair. Un secret est détruit à sa première lecture ou à son expiration.",
+		express:        "Les secrets express sont créés sans authentification : le texte est chiffré dans le navigateur de son auteur et l'entité ne peut pas le lire. Il est détruit à la première lecture ou à son expiration, au plus tard au bout de 7 jours. L'adresse IP de son auteur est conservée {{LOG_MONTHS}} mois dans le journal d'audit ; aucune adresse mail n'est collectée.",
 	},
 	"en": {
 		and: "and", day: "day", days: "days",
 		antivirus:      "Each uploaded file is scanned by an antivirus before it is made available. An infected file is deleted.",
 		validityMarker: "[To complete: validity periods of the transfers]",
+		oneTime:        "One-time secrets are encrypted in your browser: the service never sees their content in clear. A secret is destroyed when it is first read or when it expires.",
+		express:        "Express secrets are created without authentication: the text is encrypted in the browser of its author and the entity cannot read it. It is destroyed at first read or at expiry, after 7 days at most. The IP address of its author is kept for {{LOG_MONTHS}} months in the audit log; no email address is collected.",
 	},
 }
 
@@ -105,7 +118,16 @@ func Propose(document, language string, f Facts) (string, error) {
 	if f.AntivirusEnabled {
 		antivirus = tx.antivirus
 	}
-	return strings.NewReplacer(
+	oneTime, express := "", ""
+	if f.SecretsEnabled {
+		oneTime = tx.oneTime
+	}
+	if f.ExpressOffered {
+		express = strings.ReplaceAll(tx.express, "{{LOG_MONTHS}}", months(f.LogRetentionMonths))
+	}
+	out := strings.NewReplacer(
+		"{{SECRETS}}", oneTime,
+		"{{EXPRESS}}", express,
 		"{{TENANT}}", EscapeValue(f.TenantName),
 		"{{FQDN}}", EscapeValue(f.FQDN),
 		"{{VALIDITY}}", validity(f.ValidityDays, tx),
@@ -113,7 +135,12 @@ func Propose(document, language string, f Facts) (string, error) {
 		"{{INVITATION_MONTHS}}", months(f.InvitationRetentionMonths),
 		"{{LOG_MONTHS}}", months(f.LogRetentionMonths),
 		"{{ANTIVIRUS}}", antivirus,
-	).Replace(string(raw)), nil
+	).Replace(string(raw))
+	// An absent optional paragraph must not leave a run of blank lines.
+	for strings.Contains(out, "\n\n\n") {
+		out = strings.ReplaceAll(out, "\n\n\n", "\n\n")
+	}
+	return strings.TrimRight(out, "\n") + "\n", nil
 }
 
 // months formats a retention in months, defaultRetentionMonths when not

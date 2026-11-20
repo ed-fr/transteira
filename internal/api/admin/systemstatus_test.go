@@ -59,18 +59,20 @@ func TestGetSystemStatusStates(t *testing.T) {
 	t.Parallel()
 	ok, bad := health.StatusOK, health.StatusUnavailable
 	for name, c := range map[string]struct {
-		report   health.Report
-		db, av   string
-		state    maintenance.State
-		upd      updatecheck.Status
-		wantBody string
+		report health.Report
+		db, av string
+		state  maintenance.State
+		upd    updatecheck.Status
+		// killSwitch is TT_EXPRESS_SECRETS_DISABLED (WithExpressKillSwitch).
+		killSwitch bool
+		wantBody   string
 	}{
 		"all ok, never checked": {
 			report: allOK(), db: "sqlite", av: "clamd", state: maintenance.State{Source: maintenance.SourceNone},
 			upd: updatecheck.Status{Enabled: true},
 			wantBody: `{"status":"ok","checkedAt":"2026-11-18T09:00:00Z","database":{"engine":"sqlite","status":"ok"},` +
 				`"antivirus":{"engine":"clamd","status":"ok"},"storage":{"status":"ok"},` +
-				`"maintenance":{"enabled":false,"source":"none"},` +
+				`"maintenance":{"enabled":false,"source":"none"},"expressSecrets":{"instanceDisabled":false},` +
 				`"version":{"version":"2.3.0","updateCheckEnabled":true,"latestVersion":null,"updateAvailable":false}}`,
 		},
 		"database down": {
@@ -78,7 +80,7 @@ func TestGetSystemStatusStates(t *testing.T) {
 			state: maintenance.State{Source: maintenance.SourceNone},
 			wantBody: `{"status":"degraded","checkedAt":"2026-11-18T09:00:00Z","database":{"engine":"postgres","status":"unavailable"},` +
 				`"antivirus":{"engine":"icap","status":"ok"},"storage":{"status":"ok"},` +
-				`"maintenance":{"enabled":false,"source":"none"},` +
+				`"maintenance":{"enabled":false,"source":"none"},"expressSecrets":{"instanceDisabled":false},` +
 				`"version":{"version":"2.3.0","updateCheckEnabled":false,"latestVersion":null,"updateAvailable":false}}`,
 		},
 		"antivirus down, maintenance by the super admin": {
@@ -87,7 +89,7 @@ func TestGetSystemStatusStates(t *testing.T) {
 			upd:   updatecheck.Status{Enabled: true, LatestVersion: "2.4.0", UpdateAvailable: true},
 			wantBody: `{"status":"degraded","checkedAt":"2026-11-18T09:00:00Z","database":{"engine":"sqlite","status":"ok"},` +
 				`"antivirus":{"engine":"http","status":"unavailable"},"storage":{"status":"ok"},` +
-				`"maintenance":{"enabled":true,"source":"admin"},` +
+				`"maintenance":{"enabled":true,"source":"admin"},"expressSecrets":{"instanceDisabled":false},` +
 				`"version":{"version":"2.3.0","updateCheckEnabled":true,"latestVersion":"2.4.0","updateAvailable":true}}`,
 		},
 		"storage down, maintenance by the environment": {
@@ -95,14 +97,14 @@ func TestGetSystemStatusStates(t *testing.T) {
 			state: maintenance.State{Enabled: true, Source: maintenance.SourceEnvironment},
 			wantBody: `{"status":"degraded","checkedAt":"2026-11-18T09:00:00Z","database":{"engine":"sqlite","status":"ok"},` +
 				`"antivirus":{"engine":"clamd","status":"ok"},"storage":{"status":"unavailable"},` +
-				`"maintenance":{"enabled":true,"source":"environment"},` +
+				`"maintenance":{"enabled":true,"source":"environment"},"expressSecrets":{"instanceDisabled":false},` +
 				`"version":{"version":"2.3.0","updateCheckEnabled":false,"latestVersion":null,"updateAvailable":false}}`,
 		},
-		"engine none is disabled, not a failure": {
-			report: allOK(), db: "sqlite", av: "none", state: maintenance.State{Source: maintenance.SourceNone},
+		"engine none is disabled, not a failure; express kill switch on, not a failure either": {
+			report: allOK(), db: "sqlite", av: "none", state: maintenance.State{Source: maintenance.SourceNone}, killSwitch: true,
 			wantBody: `{"status":"ok","checkedAt":"2026-11-18T09:00:00Z","database":{"engine":"sqlite","status":"ok"},` +
 				`"antivirus":{"engine":"none","status":"disabled"},"storage":{"status":"ok"},` +
-				`"maintenance":{"enabled":false,"source":"none"},` +
+				`"maintenance":{"enabled":false,"source":"none"},"expressSecrets":{"instanceDisabled":true},` +
 				`"version":{"version":"2.3.0","updateCheckEnabled":false,"latestVersion":null,"updateAvailable":false}}`,
 		},
 		"everything down": {
@@ -110,7 +112,7 @@ func TestGetSystemStatusStates(t *testing.T) {
 			state: maintenance.State{Source: maintenance.SourceNone},
 			wantBody: `{"status":"degraded","checkedAt":"2026-11-18T09:00:00Z","database":{"engine":"postgres","status":"unavailable"},` +
 				`"antivirus":{"engine":"clamd","status":"unavailable"},"storage":{"status":"unavailable"},` +
-				`"maintenance":{"enabled":false,"source":"none"},` +
+				`"maintenance":{"enabled":false,"source":"none"},"expressSecrets":{"instanceDisabled":false},` +
 				`"version":{"version":"2.3.0","updateCheckEnabled":false,"latestVersion":null,"updateAvailable":false}}`,
 		},
 	} {
@@ -118,6 +120,7 @@ func TestGetSystemStatusStates(t *testing.T) {
 			t.Parallel()
 			checks := &fakeChecks{report: c.report, at: checkedAt}
 			s := statusServer(checks, c.db, c.av, &fakeMaintenance{state: c.state}, &fakeUpdateCheck{status: c.upd})
+			WithExpressKillSwitch(c.killSwitch)(s)
 			expectJSON(t, []byte(statusBody(t, s)), c.wantBody)
 			if checks.runs.Load() != 1 {
 				t.Errorf("the shared checks ran %d times, want 1", checks.runs.Load())

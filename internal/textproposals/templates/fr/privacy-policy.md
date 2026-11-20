@@ -34,6 +34,10 @@ Les fichiers sont chiffrés sur les disques du serveur. À la suppression d'un t
 
 {{ANTIVIRUS}}
 
+{{SECRETS}}
+
+{{EXPRESS}}
+
 ## Cookies
 
 Le service n'utilise que des cookies strictement techniques, nécessaires à son fonctionnement. Il n'utilise aucun cookie de mesure d'audience ni cookie tiers, c'est pourquoi aucun bandeau de consentement n'est affiché.

@@ -14,10 +14,10 @@ Ouvrez le lien du mail, ou scannez le QR code avec l’appareil photo de votre t
 - **Message de l’expéditeur** : le message rédigé par l’expéditeur, s’il y en a un, dans une bulle ;
 - un bandeau d’avertissement quand certains fichiers n’ont pas pu être analysés par l’antivirus (voir [Fichiers non analysés par l’antivirus](topic:download-not-scanned)) ;
 - le bouton **Télécharger tous les fichiers (ZIP)**, avec la taille approximative de l’archive ;
-- la liste des fichiers, une ligne par fichier : son type, son nom, un badge antivirus (**Analysé** ou **Non analysé**), sa taille, son empreinte SHA-256 abrégée avec un bouton **Copier**, et un bouton de téléchargement ;
-- en bas de la carte, les liens **Répondre avec des fichiers** (quand l’expéditeur l’autorise) et **Signaler un abus**.
+- la liste des fichiers, une ligne par fichier : son type, son nom, un badge antivirus (**Analysé**, ou **Non analysé : trop volumineux**, **Non analysé : chiffré**, **Non analysé : antivirus désactivé** ou **Non analysé : chiffré de bout en bout**), sa taille, son empreinte SHA-256 abrégée avec un bouton **Copier**, et un bouton de téléchargement ;
+- en bas de la carte, les liens **Répondre avec des fichiers** (quand l’organisation l’autorise, voir la section Répondre à un transfert) et **Signaler un abus**.
 
-![La page de téléchargement : le titre avec le nombre de fichiers, l’expéditeur, les pastilles d’information (expiration, niveau de confidentialité, taille totale), le message de l’expéditeur dans une bulle, le bouton pour télécharger tous les fichiers en archive ZIP, et une ligne par fichier avec son badge Analysé, sa taille, son empreinte SHA-256 abrégée avec un bouton Copier et un bouton de téléchargement ; en bas, les liens Répondre avec des fichiers et Signaler un abus](../screenshots/fr/download.png)
+![La page de téléchargement : le titre avec le nombre de fichiers, l’expéditeur, les pastilles d’information (expiration, niveau de confidentialité, téléchargements restants, taille totale), le message de l’expéditeur dans une bulle, un bandeau d’avertissement sur un fichier qui n’a pas pu être analysé, le bouton pour télécharger tous les fichiers en archive ZIP, et une ligne par fichier avec son badge Analysé ou Non analysé : trop volumineux, sa taille, son empreinte SHA-256 abrégée avec un bouton Copier et un bouton de téléchargement](../screenshots/fr/download.png)
 
 La page est disponible en français et en anglais : utilisez le menu **Langue** dans l’en-tête de la page pour en changer. Le bouton rond **Aide** (**?**) de l’en-tête, et le lien **Aide** du bas de page, ouvrent ce guide.
 
@@ -27,9 +27,13 @@ L’expéditeur peut avoir demandé à chaque destinataire de confirmer son adre
 
 Avant toute chose, la page **Confirmez votre adresse** affiche votre adresse en partie masquée, par exemple `j***@example.com`.
 
+![La page Confirmez votre adresse avec l’adresse en partie masquée et le bouton pour envoyer un code](../screenshots/fr/download-verify.png)
+
 1. Cliquez sur **Envoyez-moi un code**. Un code à 6 chiffres est envoyé à votre adresse ; vérifiez vos courriers indésirables s’il n’arrive pas.
 2. Saisissez le code dans le champ **Code de vérification**, puis cliquez sur **Vérifier**. Le code est valable 15 minutes.
 3. Le formulaire du mot de passe s’affiche si le transfert est aussi protégé par un mot de passe, sinon la liste des fichiers.
+
+![Le formulaire de saisie du code avec le champ Code de vérification et le bouton Vérifier](../screenshots/fr/download-verify-code.png)
 
 Si le code est faux, la page affiche **Le code n’est pas correct.** et le nombre d’essais restants. Vous avez 2 essais : ensuite, ou si le code a expiré, la page vous demande un nouveau code avec **Envoyez-moi un code** (ou **Envoyer un nouveau code**). Le nombre de codes demandés par heure est limité : si la page vous demande de patienter, réessayez à la fin du décompte.
 
@@ -105,7 +109,7 @@ Si les empreintes diffèrent, le fichier a été abîmé pendant le télécharge
 
 Chaque fichier est analysé par un antivirus avant d’être mis à disposition. Un fichier dans lequel une menace est détectée est supprimé et ne vous parvient jamais.
 
-Certains fichiers ne peuvent toutefois pas être analysés. Dans ce cas, la page affiche un bandeau d’avertissement **N fichiers n’ont pas pu être analysés par l’antivirus** (**Ne les ouvrez que si vous faites confiance à l’expéditeur.**), et chaque fichier concerné porte un badge **Non analysé** (celui des autres fichiers indique **Analysé**) avec l’une de ces mentions, énoncées en entier pour les lecteurs d’écran :
+Certains fichiers ne peuvent toutefois pas être analysés. Dans ce cas, la page affiche un bandeau d’avertissement **N fichiers n’ont pas pu être analysés par l’antivirus** (**Ne les ouvrez que si vous faites confiance à l’expéditeur.**), et chaque fichier concerné porte un badge **Non analysé : trop volumineux**, **Non analysé : chiffré** ou **Non analysé : antivirus désactivé** (celui des autres fichiers indique **Analysé**), avec l’une de ces mentions énoncées en entier pour les lecteurs d’écran :
 
 - **Non analysé par l’antivirus : ce fichier est trop volumineux pour être analysé.** Le fichier dépasse la taille que l’antivirus peut contrôler.
 - **Non analysé par l’antivirus : ce fichier est chiffré ou protégé par un mot de passe.** L’antivirus ne peut pas examiner le contenu d’un fichier ou d’une archive chiffrés.
@@ -138,7 +142,7 @@ Le téléchargement se passe comme d’habitude, avec quelques différences :
 - **Le navigateur déchiffre pendant le téléchargement.** Le fichier est contrôlé au fur et à mesure (taille et empreinte SHA-256). S’il est abîmé ou modifié, le téléchargement échoue : n’utilisez pas ce qui a pu être enregistré et recommencez.
 - **Tous les fichiers en une archive ZIP** : c’est votre navigateur qui construit l’archive. Elle n’est pas compressée.
 - **Deux empreintes** sont affichées. L’empreinte du fichier d’origine est annoncée par l’expéditeur et vérifiée pendant le téléchargement. L’empreinte du fichier chiffré est calculée par le serveur.
-- **Aucune analyse antivirus** : les fichiers sont marqués « non analysé : chiffré de bout en bout ». Appliquez les précautions de la section [Fichiers non analysés par l’antivirus](topic:download-not-scanned).
+- **Aucune analyse antivirus** : les fichiers portent le badge **Non analysé : chiffré de bout en bout**. Appliquez les précautions de la section [Fichiers non analysés par l’antivirus](topic:download-not-scanned).
 - Si le nombre de téléchargements est limité, l’archive ZIP compte pour **un seul** téléchargement, et non un par fichier.
 
 Il faut un navigateur récent, avec les services en arrière-plan (« Service Workers ») autorisés. Dans certains modes de navigation privée, ils sont désactivés : le navigateur déchiffre alors en mémoire, jusqu’à 512 Mio. Au-delà, la page vous propose d’utiliser un autre navigateur (Firefox, Chrome, Edge ou Safari, hors navigation privée).
@@ -148,11 +152,11 @@ Il faut un navigateur récent, avec les services en arrière-plan (« Service Wo
 
 Si ce transfert vous paraît suspect (fichier malveillant, hameçonnage, contenu illégal, courrier indésirable, expéditeur inconnu), cliquez sur **Signaler un abus** en bas de la page de téléchargement.
 
-1. Choisissez la catégorie : **Logiciel malveillant**, **Hameçonnage**, **Contenu illégal**, **Courrier indésirable**, **Expéditeur inconnu** ou **Autre**.
+1. Choisissez le **Motif du signalement** : **Virus ou logiciel malveillant**, **Hameçonnage (fausse page de connexion, arnaque)**, **Contenu illégal**, **Courrier indésirable**, **Expéditeur inconnu ou inattendu** ou **Autre motif**.
 1. Ajoutez si vous le souhaitez un message de 1 000 caractères au plus, en texte simple.
 1. Envoyez le signalement.
 
-![La fenêtre Signaler un abus : liste des catégories, champ du message facultatif avec son compteur de caractères et bouton Envoyer](../screenshots/fr/download-report.png)
+![La fenêtre Signaler un abus : liste des motifs, champ du message facultatif avec son compteur de caractères et bouton Envoyer le signalement](../screenshots/fr/download-report.png)
 
 Les administrateurs de l’entité sont alertés et décident de la suite : **le signalement ne supprime ni ne bloque rien automatiquement**. Ne vous servez pas du bouton pour demander la suppression d’un transfert légitime : contactez plutôt l’expéditeur.
 
@@ -180,6 +184,8 @@ Pour répondre :
 1. Choisissez la durée de disponibilité parmi celles proposées, ajoutez un message et les fichiers, puis envoyez, comme décrit dans [Envoyer des fichiers](topic:deposit).
 
 Les règles habituelles s’appliquent à votre réponse : taille maximale par envoi, quotas réservés aux personnes externes, analyse antivirus (un fichier infecté est supprimé et vous en êtes prévenu) et détection des abus. Votre réponse doit être terminée avant l’expiration du transfert d’origine : si celui-ci expire ou est supprimé pendant l’envoi, la réponse est refusée avec le message **Transfert plus disponible**. Elle est aussi refusée si l’expéditeur d’origine ne peut plus la recevoir (adresse bloquée ou n’appartenant plus à l’organisation).
+
+![Le formulaire de réponse : l’avis Votre réponse sera envoyée à suivi de l’adresse de l’expéditeur d’origine, le message, la durée et la zone de dépôt](../screenshots/fr/reply-form.png)
 
 L’expéditeur reçoit votre réponse par mail, avec un avertissement lui indiquant qu’elle vient de l’extérieur et que votre adresse a été vérifiée par code.
 
@@ -214,13 +220,13 @@ Les pages d’erreur possibles :
 
 ### Secrets express
 
-Un secret créé depuis la page **Secret express**, ou avec un jeton par un script, n’a pas d’auteur identifié : n’importe qui peut en créer un. La page affiche alors, sous le titre, un bandeau **Contenu créé par un tiers non vérifié : {votre organisation} n’en est pas l’auteur.** Il reste visible après l’affichage du secret.
+Un secret express, créé depuis la page **Secret express** ou par un script (avec ou sans jeton), n’a pas d’auteur identifié : n’importe qui peut en créer un. La page affiche alors, sous le titre, un bandeau **Contenu créé par un tiers non vérifié : {votre organisation} n’en est pas l’auteur.** Il reste visible après l’affichage du secret.
 
 ![Page Lire un secret d’un secret express, avec le bandeau sur le contenu créé par un tiers non vérifié](../screenshots/fr/express-read.png)
 
 L’organisation n’a ni écrit ni vérifié ce texte. **Ne suivez pas les instructions qu’il contient** (un lien à ouvrir, un paiement à faire, un mot de passe à saisir quelque part) sans les vérifier par un autre moyen, par exemple en appelant la personne dont vous pensez qu’elle l’a envoyé. Le texte est toujours affiché comme du texte brut : un lien qui s’y trouve n’est pas cliquable et rien de ce qu’il contient n’est exécuté.
 
-Si le secret vous paraît frauduleux ou illicite, cliquez sur **Signaler un abus** avant ou après l’avoir lu : choisissez un motif, ajoutez un message facultatif, puis envoyez. Les administrateurs de l’organisation sont alertés ; ni le texte du secret ni sa clé ne leur sont transmis, et un signalement ne supprime rien à lui seul. Le même bouton est présent sur la page qui indique que le service est temporairement indisponible.
+Si le secret vous paraît frauduleux ou illicite, cliquez sur **Signaler un abus** avant ou après l’avoir lu : choisissez un motif, ajoutez un message facultatif, puis cliquez sur **Envoyer le signalement**. Les administrateurs de l’organisation sont alertés ; ni le texte du secret ni sa clé ne leur sont transmis, et un signalement ne supprime rien à lui seul. Le même bouton est présent sur la page qui indique que le service est temporairement indisponible.
 
 Si la page indique **Secret temporairement indisponible**, l’organisation a fermé le service de secrets express : **rien n’a été consommé**, et le lien refonctionne dès la réouverture du service. Cliquez sur **Réessayer** plus tard. Un secret qui expire entre-temps est perdu : demandez à son auteur d’en créer un nouveau.
 

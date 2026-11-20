@@ -6,7 +6,7 @@
 //
 // The API never returns the download link of a transfer nor the content of its files: these
 // screens show metadata only.
-import type { components } from '../../../shared/api/schema';
+import { transferOriginValues, type components } from '../../../shared/api/schema';
 import type { ErrorView } from '../../../shared/api/problem';
 import type { StatusVariant } from '../../components/fields';
 import type { SelectOption } from '../../components/select';
@@ -116,7 +116,8 @@ const SCAN_VARIANTS: Readonly<Record<string, StatusVariant>> = {
   scan_error: 'error',
 };
 
-const ORIGINS: readonly string[] = ['internal', 'external', 'api', 'internal_remote', 'reply'];
+// Every origin of this version of the specification (drop_link since 2.0, reply since 1.1).
+const ORIGINS: readonly string[] = transferOriginValues;
 
 /** Badge of a transfer status; an unknown status shows its raw value with a neutral badge. */
 export function statusView(status: string, t: Translate): BadgeView {

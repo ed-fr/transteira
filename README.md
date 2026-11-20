@@ -26,7 +26,7 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 | 🏢 **Multi-entity** | One instance, many entities: each with its own domain, logo, language, SMTP and isolated data. |
 | 📦 **Very large files** | Up to 20 GB per transfer, resumable after a cut (tus), streamed end to end. |
 | 🔒 **Security** | AES-256-GCM encryption at rest, optional end-to-end encryption, antivirus, TOTP, security log ready for fail2ban and CrowdSec. |
-| 🤫 **One-time secrets** | Passwords and keys sealed in the browser, read once, then destroyed. |
+| 🤫 **One-time secrets** | Passwords and keys sealed in the browser, read once, then destroyed; also anonymous express text secrets (off by default). |
 | 👤 **No accounts** | Depositors prove their address with a code; external users deposit by invitation. |
 | 🛡️ **Controlled sharing** | Confidentiality levels, recipient verification, allowed domains, abuse detection. |
 | 🔑 **Enterprise** | Entra ID SSO, auditor role, signed PDF proofs of deposit and delivery. |
@@ -62,7 +62,9 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 - **Administration**: super admin and delegated admins per entity, transfer overview with early
   deletion and notification resend, invitations and blocklist, audit log, statistics dashboard,
   storage quota alerts; for the super admin, maintenance mode with per-language messages, disk
-  space alert and master key rotation from the console with TOTP re-confirmation.
+  space alert and master key rotation from the console with TOTP re-confirmation. Since 2.3, a
+  search by address or transfer across the entities one may see, and a System status box for the
+  super admin (see "Interface redesign" below).
 - **Accessible**: RGAA-minded interface in French and English, light and dark themes (following the
   system, switchable, remembered by a technical cookie).
 - **GDPR minded**: automatic expiry and purges, data subject search and erasure (audit log
@@ -116,8 +118,24 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
   administration (read-only for auditors) and creation through the API too
   ([format](docs/architecture/e2e-format.md)). **Enabled by default in every entity, existing
   ones included**; it can be turned off or restricted per entity.
+- **Express secret (V2.3)**: a page (`/x`), a text box and a link, with no authentication: text
+  only (10,000 characters at most), sealed in the browser like the one-time secrets, read once,
+  then destroyed after 1 hour, 1 day or 7 days at most. **Off by default in every entity**, turned
+  on by the entity's admin; the operator can close it for the whole instance with
+  `TT_EXPRESS_SECRETS_DISABLED`. Per-IP rate limit (10 per hour by default), cap on pending express
+  secrets per entity (1,000 by default), refusals in the security log. Also available through the
+  API (without a token, or with an API token of the entity that is allowed to) and through the
+  command-line client (`secret create`, `secret read`); examples in PowerShell, Python and Go
+  ([guide](docs/api/integration.md#14-express-secrets-by-script)).
+- **Interface redesign (V2.3)**: public pages as a centred card on the background image, with a
+  two-column deposit form (drop zone and file cards, chips for recipients, segmented selectors,
+  collapsible security options) and a download page with one row per file; administration with a
+  sidebar, key figure tiles with their trend, tables as cards with status pills and storage meters,
+  a search across entities and, for the super admin, a System status box. Fonts, colours,
+  contrast checks and the strict Content Security Policy are unchanged.
 - **Command-line client (V2)**: `transteira-cli` for scripted deposits and downloads with
-  automatic resume ([guide](docs/api/cli.md)).
+  automatic resume, and, since 2.3, `secret create` and `secret read` for express secrets
+  ([guide](docs/api/cli.md)).
 - **Signed releases (V2)**: multi-architecture image signed with cosign and published with its
   SBOM; compliance kit with a GDPR record of processing and an ISO 27001 Annex A mapping
   ([docs/compliance](docs/compliance/README.md)).
@@ -206,7 +224,9 @@ sequenceDiagram
 ### Life of a secret
 
 A one-time secret takes another path: it is encrypted in the browser, and the server never sees
-it in clear and does not scan it.
+it in clear and does not scan it. (The diagram is the one of the 2.1 secrets. An express secret
+skips the identification, can only be passed on as a link, lasts 1 hour, 1 day or 7 days, has no
+passphrase, file or read receipt, and its reading page says it is third-party content.)
 
 ```mermaid
 sequenceDiagram
@@ -242,7 +262,8 @@ sequenceDiagram
 [![Presentation video of TransTeira 2.1: title screen with the TransTeira logo and a play button](docs/assets/presentation-2.1.png)](https://github.com/ed-fr/transteira/releases/download/v2.1.0/presentation-transteira-2.1.mp4)
 
 **Presentation video** (3 min 30 s, silent, on-screen text in French, MP4 14 MB): the features, the
-novelties of 2.0 and the one-time secrets of 2.1, filmed on a demo instance.
+novelties of 2.0 and the one-time secrets of 2.1, filmed on a demo instance (interface before the
+2.3 redesign).
 
 | | |
 |---|---|
@@ -254,6 +275,8 @@ novelties of 2.0 and the one-time secrets of 2.1, filmed on a demo instance.
 | **Branding per entity**, with contrast checks | **Statistics** and storage quota |
 | !["Share a secret" form: a text to seal in the browser, a duration, an optional passphrase and the delivery by link or by email](docs/user/screenshots/en/secret-create.png) | ![Reveal page of a one-time secret: the secret is shown only after the button is pressed, and it is destroyed once read](docs/user/screenshots/en/secret-reveal.png) |
 | **Share a secret**: sealed in the browser, read once | **Reveal page**: nothing is consumed before the button |
+| ![Express secret page: a text box, a duration of 1 hour, 1 day or 7 days, and a button that seals the text in the browser, with no sign-in](docs/user/screenshots/en/express-create.png) | ![Reading page of an express secret: a notice that the text comes from a third party, and the button that shows it once](docs/user/screenshots/en/express-read.png) |
+| **Express secret**: no sign-in, text sealed in the browser | **Express reading page**: third-party notice, read once |
 
 The screenshots are generated by the end-to-end tests (`make screenshots`), in English and in
 French (the [user guides](docs/user/README.md) show all of them), so that they always match the
@@ -331,6 +354,7 @@ administration. The essential variables:
 | `TT_SYSTEM_SMTP_HOST`, `TT_SYSTEM_SMTP_FROM`… | System SMTP server for the disk space alert to the super admins. |
 | `TT_SETUP_TOKEN` | Optional setup token of the first super admin (otherwise printed in the logs). |
 | `TT_MAINTENANCE` | Start in maintenance mode (new deposits refused). |
+| `TT_EXPRESS_SECRETS_DISABLED` | Instance kill switch of the express secrets (creation and reading); recommended when no entity needs the service. |
 | `TT_CLAMAV_MAX_SCAN_BYTES`, `TT_SCAN_WORKERS` | Antivirus limits, aligned with `deploy/clamav/clamd.conf`. |
 | `TT_BACKUP_TIME`, `TT_BACKUP_KEEP` | Nightly database copy (UTC) and number of copies kept. |
 
@@ -350,9 +374,13 @@ Every variable, with its default and its limits, is documented in [`.env.example
 - [API specification](api/openapi.yaml), browsable at `https://<admin host>/api/docs` on a
   running instance
 - [API integration guide](docs/api/integration.md): API tokens and scripted, resumable uploads
-  with tus (bash/curl and PowerShell examples); [error codes](docs/api/errors.md)
+  with tus (bash/curl, PowerShell, Node, Python and Go examples, including
+  [one-time](docs/api/integration.md#13-one-time-secrets-by-script) and
+  [express secrets](docs/api/integration.md#14-express-secrets-by-script)); [error codes](docs/api/errors.md)
 - [Command-line client guide](docs/api/cli.md): `transteira-cli` deposits, downloads (including
-  end-to-end encrypted transfers) and verifies proofs from a terminal or a script
+  end-to-end encrypted transfers), verifies proofs and creates and reads express secrets
+  ([`secret create`](docs/api/cli.md#secret-create), [`secret read`](docs/api/cli.md#secret-read))
+  from a terminal or a script
 - [Provisioning API guide](docs/api/provisioning.md): provisioning tokens, creating entities for
   managed service providers, on-demand TLS
 - [Project structure](docs/architecture/project-structure.md)

@@ -292,7 +292,7 @@ screens; what each setting does and who may change it is described in
 | SMTP | server, port and security, optional username, password kept, replaced or removed (it must be typed again when the server, port or username changes), test email and SPF / DKIM / DMARC check |
 | Mail templates | one entry per template and language, marked when customised; editor with variable buttons (required variables flagged), line and column of server errors, preview, save and reset to the default |
 | Legal texts | legal notice and privacy policy per language, in Markdown, with a preview rendered by the server; saving an empty text deletes the document |
-| One-time secrets (since 2.1) | the settings of the module: enabled, durations and default, file and its maximum size, e-mail delivery and passphrase requirement, see [One-time secrets](tenants.md#one-time-secrets) |
+| One-time secrets (since 2.1) | the settings of the module: enabled, durations and default, file and its maximum size, e-mail delivery and passphrase requirement, see [One-time secrets](tenants.md#one-time-secrets); since 2.3 also the express secrets (anonymous mode, the three limits, the instance kill switch warning) and the emergency purge, see [Express secrets](tenants.md#express-secrets) |
 
 A tenant outside the admin's scope shows "not found". Leaving a screen with
 unsaved changes asks for a confirmation.
@@ -326,27 +326,80 @@ audited) are the same and are not repeated here.
 
 ### Dashboard
 
-The home page depends on the role:
+Since 2.3 the administration has a **sidebar** (on a small screen, the
+**Menu** button opens it) and a page header with the title, a greeting and
+the **Search** field. The sidebar holds the main navigation (**Home**,
+**Entities**, **My account**, and for the super admin **Administrators** and
+**System**), the block of the open entity with its two groups of screens
+(see below) and, at the bottom, the signed-in user, their role and **Sign
+out**. The home page depends on the role:
 
-- **Super admin**: a **Maintenance mode** card (on or off, with its start
-  date and the mention "forced by the environment" when it applies, and a
-  link to the maintenance screen), a **Disk** card (see
-  [System overview](#system-overview)) and the table of all tenants (name,
-  FQDN, status, storage used against the quota), loaded page by page, with
-  a link to the full **Entities** list.
-- **Delegated admin**: one card per attached tenant with the transfers and
-  the volume uploaded over the last 30 days, the current storage level and
-  quick links to its transfers, audit log and statistics. The cards load
-  independently (at most 4 requests at once); a card that fails shows its
-  own message and a **Try again** button. An admin attached to no tenant
-  is told to ask a super admin.
+- **Key figures** of the last 30 days, in tiles with a trend against the
+  previous 30 days (`previous` of the statistics, see
+  [Statistics](#statistics)): transfers, volume deposited and viruses
+  blocked, and a **Disk** tile for the super admin (the share of the data
+  disk used, with the alert threshold marked) or a **Storage** tile for the
+  other roles. The super admin's tiles come from one call to the global
+  statistics; the others are the sum of the statistics of the admin's
+  tenants (at most 4 requests at once), with one error and one **Try
+  again** button for any failure.
+- **Entities**: a card with at most 10 rows (name, domain, status, storage
+  meter and a **Configure** link) and **See all**.
+- **Super admin**: the **System status** box (see [System status](#system-status-since-23)).
+- **Delegated admin and auditor**: a **Shortcuts** card to the sections of
+  their entities (the consultation sections only for the auditor).
+- Always: a recommendation to enable two-factor authentication while it is
+  off on the account, and, for a delegated admin, a call to action for the
+  entities still being set up.
 
-Both see a recommendation to enable two-factor authentication while it is
-off on their account.
+The home page and its figures are described step by step in the
+[super admin](../user/en/super-admin.md) and
+[delegated admin](../user/en/delegated-admin.md) guides.
+
+### Transfer search (since 2.3)
+
+The **Search** field of the home page finds a transfer from anywhere in the
+administration (`POST /admin/transfers/search`, a `POST` so that the
+searched address never appears in a URL, a proxy log or the browser
+history). The screen keeps the query out of its address and out of the
+browser storage.
+
+- The query is **a transfer identifier** (`trf_…`, any case) or **a complete
+  mail address** (sender or recipient, exact match): no prefix or partial
+  matching. It is in the body only.
+- **Scope.** The super admin searches every active entity, a delegated admin
+  and an auditor the entities they are attached to. An identifier outside
+  the scope, or unknown, answers like no match (no existence oracle). An
+  **auditor searching an address** gets `403 read-only-role` (as for the
+  address filter of the transfer list); by identifier they may search.
+- **Size.** `limit` is 1 to 50 (20 by default), all entities together; each
+  entity contributes its newest matches only, and the answer says when
+  results were left out (`truncated`, `more`): the transfer list of the
+  entity filtered by the address then shows them all.
+- **Rate.** 30 searches per rolling minute and per administrator, then `429
+  rate-limited` with `Retry-After`. The refusal is **not** written to the
+  security log (the caller is authenticated).
+- **Not audited**, like the address filter of the transfer list.
+
+### System status (since 2.3)
+
+The **System status** box of the super admin home (`GET
+/admin/system/status`, **super admin only**: `403 forbidden` for a
+delegated admin, `403 read-only-role` for an auditor) shows: the state of
+the application, the database (engine and state), the antivirus (engine and
+state, `disabled` when `TT_ANTIVIRUS_ENGINE=none`), the file storage, the
+maintenance mode and its source (turned on by a super admin, or forced by
+the environment), **Express secrets** (whether the instance kill switch
+`TT_EXPRESS_SECRETS_DISABLED` is on), and the running version with the last
+outcome of the update check. The component states come from the same checks
+as `/healthz`, whose outcome is shared (at most 3 seconds old), so the box
+never adds a probe of its own. It serves the administration only: monitoring
+tools keep using `/healthz` and `/status` (see [Supervision](supervision.md)).
+The kill switch alone never makes the status `degraded`.
 
 ### Tenant navigation
 
-The sub-navigation of a tenant has two groups: **Configuration** (General,
+In the sidebar, the block of the open entity has two groups: **Configuration** (General,
 Branding, Network, SMTP, Mail templates, Legal texts, One-time secrets, see
 [Tenant configuration](#tenant-configuration)) and **Operations**
 (Transfers, Invitations, Blocklist, API tokens, One-time secrets, Audit log,
@@ -416,14 +469,17 @@ write personal data you do not need in the comment.
   adds `0.0.0.0/0` and `::/0` to the ranges and shows a warning: prefer
   narrow ranges, or at least set an expiry. An empty sender list lets the
   token deposit as any internal address, which the form points out (see
-  [API tokens](#api-tokens) for the semantics).
+  [API tokens](#api-tokens) for the semantics). Since 2.3 the form also
+  has the **Allowed to create express secrets** option (off by default);
+  the list shows it in an **Express secrets** column (**Allowed** or
+  **No**), and **Edit** can change it.
 - **The secret is shown once**, in a dialog that closes only once the
   secret has been copied successfully or the admin confirmed storing it
   (**I have stored this secret**); leaving the
   page before that asks for a confirmation. It is never shown again: hand
   it over through a channel you trust, never by mail in clear text.
-- **Edit** changes the name, ranges and senders (the secret and the expiry
-  do not change). **Revoke** asks you to type the token name; a revoked
+- **Edit** changes the name, ranges, senders and, since 2.3, the express
+  option (the secret and the expiry do not change). **Revoke** asks you to type the token name; a revoked
   token can no longer be edited.
 
 ### Audit log screen
@@ -449,8 +505,9 @@ write personal data you do not need in the comment.
 
 Choose the period (last 7 days, 30 days, the default, or 12 months). The
 screen shows the key figures (transfers deposited, volume deposited,
-downloads, volume downloaded, one-time secrets created, virus detections,
-highlighted when at least one), the current storage level and two bar charts (transfers and volume
+downloads, volume downloaded, one-time secrets created (express secrets
+included), virus detections, highlighted when at least one), the current
+storage level and two bar charts (transfers and volume
 per day, or per month for 12 months), each with a table of its values.
 The figures are indicative: the counters are written about every 30
 seconds (see [Statistics](#statistics) for their definitions).
@@ -486,8 +543,9 @@ address and results are forgotten when you leave the screen.
 ## System in the web interface
 
 The **System** entry of the main menu is shown to the **super admin
-only**. Its sub-navigation has five screens: **Overview**, **Maintenance**,
-**Settings**, **Audit log** and **Master key**. A delegated admin has no
+only**. Its block in the sidebar lists the system screens (**Overview**,
+**Maintenance**, **Settings**, **Webhooks**, **Audit log**, **Security
+log**, **Master key** and **Provisioning tokens**). A delegated admin has no
 **System** entry, and the `/system` addresses show "page not found" (the
 server also answers `403` to the underlying calls, except
 `GET /admin/system/maintenance`, readable by every admin for the
@@ -499,17 +557,13 @@ operations described in [Maintenance mode](#maintenance-mode),
 
 ### Super admin dashboard
 
-The home page of the super admin starts with two cards, above the tenant
-table:
-
-- **Maintenance mode**: on or off, with the start date and "(forced by the
-  environment)" when `TT_MAINTENANCE=true` imposes it, and a link to the
-  maintenance screen.
-- **Disk**: the disk meter, the alert threshold and the alert state, as on
-  the [System overview](#system-overview), and a short warning when the
-  alert is not sent by mail. The card loads on its own (from the global
-  statistics); if it fails, it shows its message and a **Try again**
-  button without affecting the rest of the page.
+The home page of the super admin is described in [Dashboard](#dashboard):
+key figures with the **Disk** tile (the disk meter, the alert threshold and
+the alert state, and a short warning when the alert is not sent by mail),
+the **Entities** card and the **System status** box, which carries the
+maintenance mode (on or off, with its source and a link to the maintenance
+screen). The tiles load from one call to the global statistics; if it fails,
+the page shows its message and a **Try again** button.
 
 ### System overview
 
@@ -530,10 +584,14 @@ table:
   (see `.env.example`) and restart: the super admins then receive it, and
   an additional alert address can be set in the
   [settings](#system-settings-screen).
+- **Key figures** of the period (transfers, volume, viruses blocked) with
+  the trend against the previous period of the same length (7 and 30 days
+  only, never for 12 months).
 - **Entities**: one row per active tenant, with its name (link to the
-  tenant), the transfers and the volume uploaded over the period, and its
-  storage level ("12 GiB of 100 GiB (12 %)" with a written badge, warning
-  from 80 % of the quota, full from 100 %).
+  tenant), the transfers and the volume uploaded, the virus detections, the
+  downloads and the volume downloaded over the period, and its storage level
+  ("12 GiB of 100 GiB (12 %)" with a written badge, warning from 80 % of the
+  quota, full from 100 %).
 - The figures are indicative: the counters are written about every 30
   seconds.
 
@@ -776,7 +834,9 @@ never readable (it is encrypted in the browser, see the
 - **List** (`GET …/secrets`, filters `state`: `pending`, `active` and the
   ended states, and `sender`): metadata only (sender, delivery, dates, state,
   end reason, declared file size). Ended secrets stay listed as tombstones for
-  30 days. An auditor may read the list but not filter by sender (`403
+  30 days. Since 2.3 an express secret shows the **Express** marker and the
+  creator kind `anonymous` (or `api_token`), and has no sender address; the
+  screen shows the `sec_` identifier of each row. An auditor may read the list but not filter by sender (`403
   read-only-role`).
 - **Delete** (`DELETE …/secrets/{secretId}`): a pending or active secret is
   ended at once, its keys are destroyed and its file removed. `204` also when
@@ -785,10 +845,98 @@ never readable (it is encrypted in the browser, see the
 - **Settings** (`GET` and `PUT …/secret-settings`, delegated admin and super
   admin, `403` for an auditor): `enabled`, `durations` (from `1h`, `12h`,
   `1d`, `3d`, `7d`, `30d`), `defaultDuration`, `fileAllowed`, `fileMaxBytes`
-  (1 to 25 MiB), `emailAllowed` and `emailRequiresPassphrase`. Audited as
-  `secret.settings_updated`. **The module is on by default**, existing
+  (1 to 25 MiB), `emailAllowed` and `emailRequiresPassphrase` and, since 2.3,
+  the express settings (see [Express secrets](#express-secrets-since-23)).
+  Audited as `secret.settings_updated`. **The module is on by default**, existing
   entities included (see [Upgrade](upgrade.md#from-20-to-21)); the defaults
   are in [Tenants](tenants.md#one-time-secrets).
+
+### Express secrets (since 2.3)
+
+An express secret is a one-time **text** secret created without any
+authentication, from any network, by whoever reaches the FQDN of the entity
+(`POST /api/v1/express-secrets`): it is sealed in the browser like a 2.1
+secret, with no passphrase, no file, no mail and no read receipt, lasts 1
+hour, 1 day or 7 days, and is destroyed at its first reading or at expiry.
+The service is **off by default in every entity** and is open to abuse by
+nature: read the [threat model](../security/threat-model.md) and the legal advice of [Tenants](tenants.md#express-secrets)
+before opening it.
+
+- **Settings** (`PUT …/secret-settings`, optional members: an absent member
+  keeps its stored value, so a 2.1 client never resets them):
+  `expressEnabled` (off), `expressPerHourPerIp` (10, from 1 to 1 000),
+  `expressPerHourPerToken` (100, from 1 to 10 000) and `expressMaxPending`
+  (1 000 live express secrets, from 1 to 100 000). The `GET` and the `PUT`
+  also answer `expressInstanceDisabled` (read only, ignored when sent): true
+  while the instance kill switch is on, in which case the stored
+  `expressEnabled` has no effect. **A delegated admin can only lower the
+  three limits** (at most the greater of the default and the current value,
+  so that a value raised by the super admin survives a re-save of the form):
+  above it the whole replacement is refused with `403 forbidden` and nothing is
+  stored, and the refusal is neither audited nor written to the security
+  log. The super admin keeps the full bounds. A delegated admin can turn
+  `expressEnabled` on. The limits are checked in this order: validation (400),
+  then the lower-only rule (403).
+- **Markers in the list.** `express` and the creator kind `anonymous`
+  (no token) or `api_token`; no sender address.
+- **Find a secret from its link** (`POST …/secrets/lookup`, body `{link}`):
+  the full link or the bare `tts_` token. The server keeps the token and
+  drops the fragment (the key) unread; neither is stored, logged or audited.
+  It works for any secret of the entity (2.1 or express, live or ended
+  within the last 30 days) and answers its metadata only. Delegated admins,
+  super admin **and auditors** may use it. An unknown token or a token of
+  another entity answers `404 not-found` with no security event. Audited as
+  `secret.looked_up` (object the `sec_` identifier) **only when a secret is
+  found**.
+- **Emergency purge** (`POST …/express-secrets/purge`, no body): deletes
+  every **live anonymous** express secret of the entity at once (state
+  `deleted`, end reason `deleted_by_admin`, keys destroyed: crypto-erasure).
+  Not touched: the express secrets created with an API token, the 2.1
+  secrets and the ended ones. Delegated admin and super admin only (`403
+  read-only-role` for an auditor). Audited **once** as
+  `secret.express_purged` with the count, not once per secret. It does not
+  change `expressEnabled`.
+- **Abuse reports.** The reader of an express secret can report it
+  (`POST /api/v1/secret-links/{token}/abuse-reports`, also after reading),
+  3 reports per day for one secret and 5 per hour per client and entity. The
+  report names the secret (`secretId`), has no transfer and no sender; its
+  reporter is the anonymous, unverified reader of the secret. It reaches the
+  delegated admins like a transfer report (mail and webhook, see the
+  abuse alerts of [Tenants](tenants.md#mail-templates)), and appears in the
+  abuse reports list. The report holds the `sec_` identifier, never the link:
+  find the secret in the secrets list, and delete it there or, from the
+  report detail, with **Delete this secret** (an admin who may change the
+  entity). Reports stay open during the maintenance mode.
+- **Emergency playbook**, from the least to the most radical:
+  1. **Delete the secret** reported (the list, or the report).
+  2. **Purge** the live anonymous secrets (immediate, the service stays open).
+  3. **Turn `expressEnabled` off** (immediate, no restart): no new anonymous
+     creation, and the **reading of the anonymous secrets is blocked too**
+     (`403 express-secrets-disabled`, nothing consumed: they become readable
+     again if the service reopens before they expire). The express secrets
+     created with a token stay readable, and tokens with `expressAllowed`
+     can still create.
+  4. **Disable `expressAllowed`** on the tokens at fault, or revoke them.
+  5. **Kill switch** `TT_EXPRESS_SECRETS_DISABLED=true` (restart of the
+     container): refuses every express creation, with or without a token,
+     and every reading, on all entities. The super admin sees its state in
+     the System status box.
+
+  Then look for the `express_ip` and `express_refused` lines in the
+  [security log](security-log.md); a client that floods `express_ip` is
+  banned by the shipped fail2ban and CrowdSec rules.
+- **What it keeps.** An express secret has no address: it cannot be found
+  or erased by [address](#data-subject-rights-gdpr). The IP address of an
+  anonymous creator stays in the audit log (`secret.created`, actor kind
+  `anonymous`) for 12 months; nothing else identifies the creator.
+- **Limits of the service.** Nothing alerts you when an entity reaches
+  `expressMaxPending` (the only trace is `express_refused` with
+  `reason="limit"` in the security log): the anonymous creations are then
+  refused until secrets are read or expire (7 days at most). The live express secrets
+  created **with API tokens** are not capped by `expressMaxPending`, and
+  each token with `expressAllowed` has its own hourly limit, so several
+  tokens multiply what can be created. Allow express on as few tokens as
+  possible.
 
 ### API tokens
 
@@ -805,14 +953,15 @@ tus uploads, error handling) is described in
 - **Create** (`POST …/api-tokens`): a name (1 to 100 characters), the
   allowed IP ranges (`allowedCidrs`, 1 to 100 IPv4 or IPv6 CIDR prefixes,
   mandatory), the allowed senders (`allowedSenders`, optional, recommended,
-  see below) and an optional expiry (`expiresAt`; none by default). The
+  see below), an optional expiry (`expiresAt`; none by default) and, since
+  2.3, `expressAllowed` (default false, see below). The
   response holds the secret (`tt_` followed by 43 characters) **once**:
   TransTeira stores only its SHA-256 fingerprint. Give it to the person in
   charge of the script through a channel you trust, and never by mail in
   clear text.
 - **Change** (`PATCH …/api-tokens/{tokenId}`, JSON Merge Patch): rename it
   or replace its allowed ranges or allowed senders (`[]` lifts the sender
-  restriction); the secret does not change. The expiry
+  restriction), or switch `expressAllowed`; the secret does not change. The expiry
   cannot be changed: create a new token instead. A revoked token cannot be
   changed (409).
 - **Revoke** (`DELETE …/api-tokens/{tokenId}`): effective on the next
@@ -832,8 +981,20 @@ What a token can do, and the rules you choose for it:
 
 - It is valid only on the FQDN of its tenant, never on another tenant's
   FQDN nor on the admin host, and only for deposits: create, follow,
-  finalize or cancel a transfer, and upload its files. It never reaches the
-  administration.
+  finalize or cancel a transfer, and upload its files; since 2.1, create
+  one-time secrets (`POST /secrets`, which needs a sender address like a
+  transfer); since 2.3, create express secrets when `expressAllowed` is on.
+  It never reaches the administration.
+- **Express secrets (`expressAllowed`, since 2.3).** An explicit opt-in,
+  **off by default, existing tokens included**. Without it, a token calling
+  `POST /express-secrets` gets `403 express-token-not-allowed` and an
+  `express_refused reason="token"` line. With it, the token creates express
+  secrets even when the anonymous mode of the entity is off, from its
+  allowed ranges, with no sender, at most `expressPerHourPerToken` per hour
+  (100 by default, `429 rate-limited` with `Retry-After`, scope
+  `express_token`, which the shipped ban rules ignore); the instance kill
+  switch refuses it all the same. The creation is audited as `secret.created`
+  (`details.express`), plus `api_token.used`.
 - **Allowed ranges.** Requests from any other client address get
   `403 ip-not-allowed` and a `deposit_refused reason="ip"` line in the
   [security log](security-log.md). List the exact addresses the scripts
@@ -934,9 +1095,10 @@ message, see [errors](../api/errors.md#maintenance)):
   after the maintenance;
 - finalizing a transfer (`POST /transfers/{id}/finalize`);
 - creating an invitation (`POST /invitations`);
-- creating a one-time secret (`POST /secrets`), uploading its file (`PUT /secrets/{id}/file`) and sending it by e-mail (`POST /secrets/{id}/send`).
+- creating a one-time secret (`POST /secrets`), uploading its file (`PUT /secrets/{id}/file`) and sending it by e-mail (`POST /secrets/{id}/send`);
+- since 2.3, creating an express secret (`POST /express-secrets`), with or without an API token.
 
-Reading a secret (status, reveal, file download) keeps working, like downloads.
+Reading a secret (status, reveal, file download) keeps working, like downloads, and so do the abuse reports on secrets (`POST /secret-links/{token}/abuse-reports`).
 
 Everything else keeps working: downloads, the public tenant information
 (`GET /tenant` reports `maintenance: true`, the `maintenanceMessage` for
@@ -1110,6 +1272,8 @@ optional details.
 | `recipient` | `link` for a download through the shared transfer link |
 | `api_token` | the token's identifier |
 | `system` | the name of a component (for example `lifecycle`) |
+| `provisioning_token` | the identifier of a provisioning token (`prv_…`, since 1.2) |
+| `anonymous` | `-`: since 2.3, the creator of an anonymous express secret, who has no identity; the client IP of the entry is the only trace |
 
 Details never hold a secret nor a mail address: TransTeira refuses to write
 them. They carry identifiers and counts (for example `fileCount`,
@@ -1123,12 +1287,12 @@ them. They carry identifiers and counts (for example `fileCount`,
 | Tenant configuration | `tenant.created`, `tenant.updated`, `tenant.branding_updated`, `tenant.asset_uploaded`, `tenant.asset_deleted`, `tenant.network_updated`, `tenant.recipient_rules_updated` (the domains), `tenant.confidentiality_updated` (the level keys), `tenant.smtp_updated`, `tenant.template_updated`, `tenant.template_reset`, `tenant.legal_updated`, `tenant.deletion_started`, `tenant.deleted` |
 | Configuration export and import (2.0) | `tenant.exported` (on the exported tenant; details: `includeBranding`), `tenant.imported` (on the new tenant; details: the name and FQDN of the new tenant, the `sourceVersion` and `exportedAt` of the file and, in `counts`, the size of each imported section and the number of webhooks not recreated, never a setting value) |
 | Transfers | `transfer.created`, `transfer.finalized`, `transfer.downloaded` (start of a file or archive download, never HEAD requests or resumed ranges; details: the file ID or `archive`), `transfer.deleted` (admin, with the redacted reason), `transfer.notification_resent` (number of recipients only), `transfer.recipient_refused` (refused by the recipient domain rules, for a secret e-mail too, with `object: secret` in the details; details: the refused domains; never written to the security log) |
-| One-time secrets (2.1) | `secret.created`, `secret.sent` (the recipient domain only, never the address), `secret.revealed`, `secret.file_downloaded`, `secret.expired`, `secret.deleted`, `secret.locked` (5 wrong passphrases), `secret.settings_updated` |
+| One-time secrets (2.1) | `secret.created`, `secret.sent` (the recipient domain only, never the address), `secret.revealed`, `secret.file_downloaded`, `secret.expired`, `secret.deleted`, `secret.locked` (5 wrong passphrases), `secret.settings_updated`, and since 2.3 `secret.looked_up` (an admin found a secret from its link; object the `sec_` identifier, never the link) and `secret.express_purged` (the emergency purge, object kind `tenant`, `details.count`; replaces the per-secret `secret.deleted`). `secret.created` of an express secret carries `details.express: true` and `details.creatorKind` (`anonymous` or `api_token`) |
 | Invitations and addresses | `invitation.created`, `invitation.used`, `invitation.revoked`, `address.verified` |
 | Antivirus | `file.infected` (signature name), `file.not_scanned` (reason `too_large`, `encrypted`, `disabled` or, since 2.0, `e2e`) |
 | Quotas | `quota.warning` (80 %), `quota.reached` (100 %), see [Tenants](tenants.md#quota-alerts) |
 | Blocklist | `blocklist.updated` (`op`, `kind`, `entryId`, and the value for a domain or a fingerprint) |
-| API tokens | `api_token.created`, `api_token.updated`, `api_token.revoked` (by an admin; object: the token, never its secret), `api_token.used` (once per transfer created with the token; actor: the sender address, as a `depositor`, so a GDPR erasure of that address pseudonymises it; object: the token) |
+| API tokens | `api_token.created`, `api_token.updated`, `api_token.revoked` (by an admin; object: the token, never its secret), `api_token.used` (once per transfer created with the token and, since 2.3, once per express secret created with it, `details.object` `secret` and `details.objectId`). For a transfer or a one-time secret the actor is the sender address, as a `depositor`, so a GDPR erasure of that address pseudonymises it; for an express secret there is no sender: the actor is the token itself (actor kind `api_token`), no address is involved |
 | Data subject rights | `data_subject.searched`, `data_subject.erased` (counts only; object: the pseudonym) |
 | Instance (no tenant) | `maintenance.enabled`, `maintenance.disabled` (message languages only), `config.updated` (system settings: names of the changed fields only), `disk.alert_raised`, `disk.alert_cleared` (system actor `disk`), `antivirus.alert_raised`, `antivirus.alert_cleared` (system actor `antivirus`, see [Antivirus](antivirus.md#when-clamd-is-unavailable-fail-closed)), `master_key.rotation_started`, `master_key.rotation_completed`, `master_key.rotation_failed` (see [Master key](master-key.md#audit)) |
 
@@ -1216,6 +1380,11 @@ address gives another pseudonym.
   if the person must no longer be allowed as a sender.
 - **Client IP addresses** in the audit log, until their 12-month retention
   ends (legitimate security interest), now attached to the pseudonym.
+- **Express secrets** (since 2.3) have no address, so a search by address
+  cannot find them and an erasure does not touch them: they end by reading or
+  expiry (7 days at most), or by deletion or purge. The IP address of an
+  anonymous creator, in the audit log, is not attached to any address and
+  stays until its 12-month retention ends.
 - **Mails already queued** for sending still go out: a notification, a
   confirmation or a resend already handed to the mail queue, or waiting in
   the retrier after a refusal (retried for up to the retry period), is not
@@ -1257,10 +1426,16 @@ and `GET /admin/system/stats` (super admin only, 403 otherwise), with
 | `transferCount`, `bytesUploaded` | Transfers **finalized** during the period and their declared size, whatever happened to them afterwards (deleted, expired, rejected). |
 | `downloadCount` | Distinct download **starts** during the period: a file read from its first byte (whole, or a range starting at 0), or the archive. HEAD requests and resumed ranges are not counted. Repeated starts of the same file (or of the archive) of a transfer by the same client (IPv4 address, or IPv6 /64) count once per hour, and at most 1,000 starts of one transfer count per hour whatever the clients; the same rule applies to the `transfer.downloaded` audit events and to the download count of each transfer. |
 | `bytesDownloaded` | Plaintext bytes actually served to recipients during the period, counted exactly (not deduplicated). |
-| `secretsCreated` | Since 2.1. One-time secrets created during the period, whatever happened to them afterwards (a count only, counted at creation, with the `secret.created` audit event). The Statistics screen shows it, the global statistics add it per tenant. |
+| `secretsCreated` | Since 2.1. One-time secrets created during the period (express secrets included since 2.3), whatever happened to them afterwards (a count only, counted at creation, with the `secret.created` audit event). The Statistics screen shows it, the global statistics add it per tenant. |
 | `virusDetections` | Files found infected during the period. |
 | `storageUsedBytes`, `storageQuotaBytes`, `storageUsedRatio` | Current values, not limited to the period: declared size of the transfers uploading, scanning or available, plus, since 2.1, the declared size of the stored one-time secret files (pending ones included), against the quota (the ratio may exceed 1). |
 | `series` | One point per UTC day for `7d` and `30d` (today included), one per calendar month for `12m` (the current one included, dated on the 1st); days without activity are present with zeros. |
+
+Since 2.3, `previous` (`TenantStats` and each row of the global statistics, **7 and 30 days only**,
+never for 12 months) gives the same counters over the previous period of the same length, for
+the trends of the screens: it is complete, whereas the requested period includes today, still in
+progress. The rows of the global statistics also carry `virusDetections`, `downloadCount` and
+`bytesDownloaded`.
 
 The global statistics add the disk holding the data directory (total, used
 = total − free, ratio, the alert threshold of the

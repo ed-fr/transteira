@@ -128,3 +128,60 @@ Accepted limits of the design, documented in the threat model, not to be reporte
   that has no passphrase (T-349, P83; require a passphrase for e-mail delivery to avoid it);
 - malicious locking of a secret by someone who holds the full link (T-352, P80);
 - the encrypted channel that the antivirus cannot scan, enabled by default (T-343, T-372, P81).
+
+### Express secrets (2.3)
+
+The express secret is an anonymous public endpoint (`POST /api/v1/express-secrets`): text only,
+sealed in the browser, read once, no identification. It is off by default in every entity.
+
+In scope:
+
+- creating an express secret while the service is closed: the instance kill switch
+  (`TT_EXPRESS_SECRETS_DISABLED`), `expressEnabled` off, or an entity still in setup (T-389);
+- creating one with an API token that does not have `expressAllowed` (P91);
+- bypassing the per-IP limit, the per-token limit or the cap of pending express secrets (T-391,
+  T-393), including by forging `X-Forwarded-For` (T-394);
+- an anonymous cross-site creation or report, which the server refuses through `Origin` and
+  `Sec-Fetch-Site` (T-395, P85);
+- reading, or consuming, an express secret while the service is closed (P90);
+- the text, the key, the full link or a `tts_` token reaching the server, the logs or the audit
+  log (T-399, T-402);
+- access to the express secrets of another entity, including a token presented under another
+  host (T-390);
+- a delegated admin raising the express limits above their defaults (10 per hour per address,
+  100 per hour per token, 1,000 pending): only the super admin can, a delegated admin can only
+  lower them or keep a value the super admin raised (T-418);
+- changing the express settings or `expressAllowed` without the right (T-403).
+
+Accepted limits of the design, documented in the threat model, not to be reported as bugs:
+
+- illicit content or an anonymous mailbox: the server cannot read the texts, so it cannot moderate
+  them (T-396, T-407, T-408, P86, P90); the entity states a contact for abuse reports in its legal
+  notice;
+- phishing under the entity's domain and branding, mitigated by the third-party notice on the
+  reading page (T-397, P88);
+- filling the cap of pending express secrets, which closes the anonymous service of the entity
+  until the secrets are read or expire (T-392);
+- a mail gateway sandbox or a link preview that consumes an express link (T-401);
+- attribution limited to the IP address of the creator (VPN, Tor, shared NAT; T-404);
+- live links made unreadable while the service is closed (T-389, P90): nothing is consumed, and a
+  secret that expires meanwhile is lost;
+- no cap on the live express secrets created with API tokens: token creations are not blocked by
+  the cap of pending express secrets, so several tokens that have `expressAllowed` multiply the
+  number of live secrets (residual of T-393, T-418).
+
+### Administration search (2.3)
+
+In scope:
+
+- a search that answers about an entity outside the scope of the admin, or that shows a transfer
+  or an address of another entity (T-409, T-410);
+- an auditor obtaining by the search what the audit restrictions refuse them (T-411);
+- the text of a search, or a pasted secret link, kept in a log or in the audit log (T-402, T-408).
+
+Accepted limits of the design, documented in the threat model, not to be reported as bugs:
+
+- searches are not recorded in the audit log (T-414, P95);
+- an address searched through the "more" link can appear in the access logs of the reverse proxy
+  (T-168, T-412);
+- the super admin's search queries every active entity, within the limits of the server (T-413).

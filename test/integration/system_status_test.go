@@ -16,7 +16,8 @@ const pathSystemStatus = "/api/v1/admin/system/status"
 // TestSystemStatus (T-415, T-416): the super admin reads the component
 // states, validated against the contract, in agreement with /healthz and
 // without any error message; the maintenance forced by the environment is
-// reported; a delegated admin gets 403 and a visitor 401, both within the
+// reported, and the express kill switch off (TestExpressKillSwitch covers
+// it on); a delegated admin gets 403 and a visitor 401, both within the
 // contract.
 func TestSystemStatus(t *testing.T) {
 	t.Parallel()
@@ -38,6 +39,9 @@ func TestSystemStatus(t *testing.T) {
 				Enabled bool   `json:"enabled"`
 				Source  string `json:"source"`
 			} `json:"maintenance"`
+			Express *struct {
+				InstanceDisabled *bool `json:"instanceDisabled"`
+			} `json:"expressSecrets"`
 			Version struct {
 				UpdateCheckEnabled bool    `json:"updateCheckEnabled"`
 				LatestVersion      *string `json:"latestVersion"`
@@ -46,13 +50,14 @@ func TestSystemStatus(t *testing.T) {
 		mustJSON(t, resp.body, &got)
 		if got.Status != "ok" || got.Database.Engine != e.Name || got.Database.Status != "ok" ||
 			got.Storage.Status != "ok" || !got.Maint.Enabled || got.Maint.Source != "environment" ||
-			got.Version.UpdateCheckEnabled || got.Version.LatestVersion != nil {
+			got.Version.UpdateCheckEnabled || got.Version.LatestVersion != nil ||
+			got.Express == nil || got.Express.InstanceDisabled == nil || *got.Express.InstanceDisabled {
 			t.Errorf("getSystemStatus = %s", resp.body)
 		}
 		var raw map[string]json.RawMessage
 		mustJSON(t, resp.body, &raw)
-		if len(raw) != 7 {
-			t.Errorf("getSystemStatus has %d members, want 7: %s", len(raw), resp.body)
+		if len(raw) != 8 {
+			t.Errorf("getSystemStatus has %d members, want 8: %s", len(raw), resp.body)
 		}
 		if h := healthOf(t, a.server); h.Status != got.Status {
 			t.Errorf("/healthz = %+v, status = %s", h, got.Status)

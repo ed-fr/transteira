@@ -14,10 +14,10 @@ Open the link in the email, or scan the QR code with your phone's camera. The pa
 - **Message from the sender**: the message written by the sender, if there is one, in a bubble;
 - a warning banner when some files could not be analysed by the antivirus (see [Files not analysed by the antivirus](topic:download-not-scanned));
 - the **Download all files (ZIP)** button, with the approximate size of the archive;
-- the list of files, one line per file: its type, name, an antivirus badge (**Scanned** or **Not scanned**), its size, its SHA-256 fingerprint in abbreviated form with a **Copy** button, and a download button;
-- at the bottom of the card, the links **Reply with files** (when the sender allows it) and **Report an abuse**.
+- the list of files, one line per file: its type, name, an antivirus badge (**Scanned**, or **Not scanned: too large**, **Not scanned: encrypted**, **Not scanned: antivirus disabled** or **Not scanned: end-to-end encrypted**), its size, its SHA-256 fingerprint in abbreviated form with a **Copy** button, and a download button;
+- at the bottom of the card, the links **Reply with files** (when the organisation allows it, see the section Reply to a transfer) and **Report an abuse**.
 
-![The download page: the heading with the number of files, the sender, the information pills (expiry, confidentiality level, total size), the message from the sender in a bubble, the button to download all files as a ZIP archive, and one line per file with its Scanned badge, size, abbreviated SHA-256 fingerprint with a Copy button, and a download button; at the bottom, the links Reply with files and Report an abuse](../screenshots/en/download.png)
+![The download page: the heading with the number of files, the sender, the information pills (expiry, confidentiality level, downloads left, total size), the message from the sender in a bubble, a warning banner about a file that could not be analysed, the button to download all files as a ZIP archive, and one line per file with its Scanned or Not scanned: too large badge, size, abbreviated SHA-256 fingerprint with a Copy button, and a download button](../screenshots/en/download.png)
 
 The page is available in English and French: use the **Language** menu in the header of the page to change it. The round **Help** button (**?**) in the header, and the **Help** link in the footer, open this guide.
 
@@ -27,9 +27,13 @@ The sender may have asked each recipient to confirm their email address. In that
 
 Before anything else, the page **Confirm your address** shows your address partly hidden, for example `j***@example.com`.
 
+![The Confirm your address page with the partly hidden address and the button to send a code](../screenshots/en/download-verify.png)
+
 1. Click **Send me a code**. A 6-digit code is sent to your address; check your spam folder if it does not arrive.
 2. Type the code in the **Verification code** field, then click **Verify**. The code is valid for 15 minutes.
 3. The password form appears if the transfer is also protected by a password, otherwise the list of files.
+
+![The code entry form with the Verification code field and the Verify button](../screenshots/en/download-verify-code.png)
 
 If the code is wrong, the page shows **The code is not correct.** and the number of attempts remaining. You have 2 attempts: after that, or when the code has expired, the page asks you to request a new code with **Send me a code** (or **Send a new code**). The number of codes you can request in an hour is limited: if the page asks you to wait, try again after the countdown.
 
@@ -105,7 +109,7 @@ If the fingerprints differ, the file was damaged during the download: download i
 
 Every file is analysed by an antivirus before it is made available. A file in which a threat is detected is deleted and never reaches you.
 
-Some files, however, cannot be analysed. In that case the page shows a warning banner **N files could not be analysed by the antivirus** (**Open them only if you trust the sender.**), and each file concerned carries a **Not scanned** badge (the badge of the other files reads **Scanned**) with one of these mentions, spelled out in full for screen readers:
+Some files, however, cannot be analysed. In that case the page shows a warning banner **N files could not be analysed by the antivirus** (**Open them only if you trust the sender.**), and each file concerned carries a badge **Not scanned: too large**, **Not scanned: encrypted** or **Not scanned: antivirus disabled** (the badge of the other files reads **Scanned**), with one of these mentions spelled out in full for screen readers:
 
 - **Not analysed by the antivirus: this file is too large to be analysed.** The file is larger than the size the antivirus can check.
 - **Not analysed by the antivirus: this file is encrypted or protected by a password.** The antivirus cannot look inside an encrypted file or archive.
@@ -138,7 +142,7 @@ The download works as usual, with a few differences:
 - **Your browser decrypts while downloading.** The file is checked as it goes (size and SHA-256 fingerprint). If it is damaged or altered, the download fails: do not use what may have been saved, and start again.
 - **All files in a ZIP archive**: your browser builds the archive. It is not compressed.
 - **Two fingerprints** are shown. The fingerprint of the original file is declared by the sender and checked during the download. The fingerprint of the encrypted file is computed by the server.
-- **No antivirus analysis**: the files are marked "not analysed: end-to-end encrypted". Apply the precautions of the section [Files not analysed by the antivirus](topic:download-not-scanned).
+- **No antivirus analysis**: the files carry the badge **Not scanned: end-to-end encrypted**. Apply the precautions of the section [Files not analysed by the antivirus](topic:download-not-scanned).
 - If the number of downloads is limited, the ZIP archive counts as **one** download, not one per file.
 
 A recent browser is required, with background services ("Service Workers") allowed. In some private browsing modes they are disabled: the browser then decrypts in memory, up to 512 MiB. Beyond that, the page suggests another browser (Firefox, Chrome, Edge or Safari, outside private browsing).
@@ -148,11 +152,11 @@ A recent browser is required, with background services ("Service Workers") allow
 
 If this transfer looks suspicious to you (malicious file, phishing, illegal content, spam, unknown sender), click **Report an abuse** at the bottom of the download card.
 
-1. Choose the category: **Malware**, **Phishing**, **Illegal content**, **Spam**, **Unknown sender** or **Other**.
+1. Choose the **Reason for the report**: **Virus or malicious software**, **Phishing (fake login page, scam)**, **Illegal content**, **Spam**, **Unknown or unexpected sender** or **Other reason**.
 1. Optionally add a message of at most 1,000 characters, in plain text.
 1. Send the report.
 
-![The Report an abuse dialog: list of categories, optional message field with its character counter and Send button](../screenshots/en/download-report.png)
+![The Report an abuse dialog: list of categories, optional message field with its character counter and Send the report button](../screenshots/en/download-report.png)
 
 The administrators of the entity are alerted and decide what to do: **a report does not delete or block anything automatically**. Do not use the button to ask for the deletion of a legitimate transfer: contact the sender instead.
 
@@ -180,6 +184,8 @@ To reply:
 1. Choose how long the files stay available among the durations offered, add a message and the files, then send, as described in [Send files](topic:deposit).
 
 The usual rules apply to your reply: maximum size per transfer, quotas for external people, antivirus scan (an infected file is deleted and you are told) and abuse detection. Your reply must be finished before the original transfer expires: if it expires or is deleted during the upload, the reply is refused with the message **Transfer no longer available**. It is also refused if the original sender can no longer receive it (blocked address, or no longer part of the organization).
+
+![The reply form: the notice Your reply goes to followed by the address of the original sender, the message, the duration and the drop zone](../screenshots/en/reply-form.png)
 
 The sender receives your reply by mail, with a warning that it comes from outside and that your address was verified by code.
 
@@ -214,13 +220,13 @@ The error pages you may meet:
 
 ### Express secrets
 
-A secret created from the **Express secret** page, or with a token by a script, has no identified author: anybody can create one. The page then shows, under the title, a banner **Content created by an unverified third party: {your organisation} is not its author.** It stays visible after the secret is shown.
+An express secret, created from the **Express secret** page or by a script (with or without a token), has no identified author: anybody can create one. The page then shows, under the title, a banner **Content created by an unverified third party: {your organisation} is not its author.** It stays visible after the secret is shown.
 
 ![Read a secret page of an express secret, with the banner about content created by an unverified third party](../screenshots/en/express-read.png)
 
 The organisation did not write this text and did not check it. **Do not follow the instructions it contains** (a link to open, a payment to make, a password to type somewhere) without checking them by another means, for example by calling the person you think sent it. The text is always shown as plain text: a link written in it is not clickable, and nothing in it is run.
 
-If the secret looks fraudulent or illegal, click **Report an abuse** before or after reading it: choose a category, add an optional message, and send. The administrators of the organisation are alerted; neither the text of the secret nor its key is sent to them, and a report does not delete anything by itself. The same button is on the page that says the service is temporarily unavailable.
+If the secret looks fraudulent or illegal, click **Report an abuse** before or after reading it: choose a reason, add an optional message, and click **Send the report**. The administrators of the organisation are alerted; neither the text of the secret nor its key is sent to them, and a report does not delete anything by itself. The same button is on the page that says the service is temporarily unavailable.
 
 If the page says **Secret temporarily unavailable**, the organisation has closed the express secret service: **nothing was consumed**, and the link works again once the service reopens. Click **Try again** later. A secret that expires in the meantime is lost: ask the person who sent it to create a new one.
 

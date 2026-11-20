@@ -624,3 +624,29 @@ func TestTextProposalAntivirusDisabled(t *testing.T) {
 		t.Errorf("antivirus claimed: %s", p.Markdown)
 	}
 }
+
+// TestTextProposalSecretFacts checks that the express and one-time secrets
+// facts reach the legal text proposals: the express paragraph needs the
+// entity switch and no instance kill switch, while the abuse contact line of
+// the legal notice is always there.
+func TestTextProposalSecretFacts(t *testing.T) {
+	for _, kill := range []bool{false, true} {
+		storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+			ctx := context.Background()
+			ev := newSetupEnv(t, e, func(o *Options) { o.ExpressKillSwitch = kill })
+			in := SecretSettingsOf(tenant.DefaultSecretSettings())
+			in.Enabled, in.ExpressEnabled = true, new(true)
+			_, err := ev.svc.UpdateSecretSettings(ctx, ev.super, ev.s.ID, in, clientIP)
+			mustNoErr(t, "enable", err)
+			legal, err := ev.svc.TextProposal(ctx, ev.super, ev.s.ID, store.LegalNotice, "en")
+			mustNoErr(t, "legal", err)
+			priv, err := ev.svc.TextProposal(ctx, ev.super, ev.s.ID, store.PrivacyPolicy, "en")
+			mustNoErr(t, "privacy", err)
+			express := strings.Contains(priv.Markdown, "Express secrets")
+			if express == kill || !strings.Contains(legal.Markdown, "abuse reports") ||
+				!strings.Contains(priv.Markdown, "One-time secrets") {
+				t.Errorf("kill=%v: express %v\n%s", kill, express, priv.Markdown)
+			}
+		})
+	}
+}

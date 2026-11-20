@@ -86,11 +86,11 @@ Fill in the fields:
 - **Delete the transfer after the first download** (Security options): the transfer is deleted, for all recipients, once one of them has downloaded all the files, either as one ZIP archive or file by file. The deletion happens a few minutes later.
 - **Limit the number of downloads** (Security options): optional. Turning the switch on reveals the **Maximum number of downloads** field, from 1 to 1000. The transfer counts every start of a download, by all the recipients together (an interrupted download that resumes counts once). Once the number is reached, the transfer can no longer be downloaded and is deleted a few minutes later. With the switch off there is no limit, unless the chosen level sets a cap: the switch is then on and locked.
 - **Encrypt end to end in my browser** (Security options): offered if your organisation allows it (or required, or absent if it forbids it). Your files are encrypted before they leave your computer: see [End-to-end encryption](topic:deposit-e2e). This option does not exist for a deposit through a drop link.
-- **Files to send**: drag your files onto the drop zone, or click **Choose files**. To remove a file from the list, use the remove button of its card. A gauge below the list shows the number of files and their total size against the limit of the transfer; if you go over it, the gauge turns red and says **Over the limit**.
+- **Drop zone** (titled **Drag and drop your files here**, or **… your files or folders here** when folders are accepted; screen readers announce it as **Files to send**): drag your files onto it, or click **Choose files**. To remove a file from the list, use the remove button of its card. A gauge below the list shows the number of files and their total size against the limit of the transfer; if you go over it, the gauge turns red and says **Over the limit of …** followed by the limit.
 
 <!-- rules: levels -->
 
-A transfer can contain up to 20 GB in total; your organisation may have set a lower limit. The hint under **Files to send** shows the actual limits (total size and number of files).
+A transfer can contain up to 20 GB in total; your organisation may have set a lower limit. The hint under the drop zone (**Up to … in total and … files per transfer.**) shows the actual limits (total size and number of files).
 
 <!-- rules: limits -->
 
@@ -140,7 +140,7 @@ Each file gets one of these antivirus results:
 - **no threat found**: the file is delivered;
 - **threat detected, file deleted**: the file is not delivered and you receive an alert by email;
 - **not analysed (file too large)** or **not analysed (encrypted archive)**: the file is delivered, you are told by email and the recipients are warned on the download page;
-- **not analysed (antivirus disabled)**: the antivirus is turned off for your entity (or for the whole service), so the file is delivered without being checked; you are told by email (reason "antivirus disabled") and the recipients are warned on the download page;
+- **not analysed: antivirus disabled**: the antivirus is turned off for your entity (or for the whole service), so the file is delivered without being checked; you are told by email (reason "antivirus disabled") and the recipients are warned on the download page;
 - **analysis failed, file withheld**: the file is not delivered.
 
 If no file at all can be delivered, the page shows **Transfer refused** and the recipients are not notified.
@@ -184,7 +184,7 @@ The **Link only** option (no email sent to the recipients) lets you pass the dow
 In the [New transfer](topic:deposit-options) form, turn on the **Link only (no e-mail to the recipients)** switch, under the recipients:
 
 - the **Recipients** become optional. If you fill them in, they are recorded but **receive no email**;
-- the option is incompatible with recipient verification: turning one on turns the other off;
+- the option is incompatible with recipient verification: turning **Link only** on turns the verification off and locks its switch (**Not available for a link-only transfer.**). Conversely, when the chosen confidentiality level requires recipient verification, the **Link only** switch is locked (**Not available: the chosen confidentiality level requires recipient verification.**);
 - the antivirus analysis and the other rules apply as usual.
 
 When you click **Send**, the link is shown **only once**, at the end of the deposit. Click **Copy the link** and keep it before leaving the page: it appears neither in the confirmation email nor in [My transfers](topic:my-transfers). The link works only once the antivirus analysis is over; the confirmation email then tells you. Since anyone holding the link can download, pass it on through a trusted channel and protect the transfer with a password given separately.
@@ -220,7 +220,7 @@ For a [link-only](topic:link-only) transfer, the screen shows the **complete lin
 
 Good to know:
 
-- **No antivirus analysis.** The server cannot read the files, so they are never analysed. They are marked "not analysed: end-to-end encrypted", for you and for the recipients.
+- **No antivirus analysis.** The server cannot read the files, so they are never analysed. The sender summary shows them as "not analysed (encrypted end to end)", and the download page of the recipients marks them **Not scanned: end-to-end encrypted**.
 - **No ZIP archive on the server.** Recipients decrypt in their browser, which builds the archive itself.
 - The server still sees the size and number of files, the sender, the recipients and the dates.
 - A recent browser is required (encryption, background tasks and data streams). Without it, the switch cannot be used.
@@ -254,11 +254,11 @@ With **I copy the link myself**, the **Secret created** screen shows the full li
 
 **Keep secrets short-lived.** Once the secret is read, the server destroys its content and its keys. A backup of the server made while the secret was still waiting, however, keeps the encrypted text, and cannot be erased afterwards. What protects the secret then is its key (the end of the link) and the passphrase. So choose the **shortest duration** that suits you, and use a passphrase, especially for delivery by email.
 
-**Express secret.** If your organisation offers it, a separate **Express secret** page (a link in the header of the public pages) shares a short text without any identification; it has none of the options above.
+**Express secret.** If your organisation offers it, a separate **Express secret** page (a link in the header of the public pages; **1 day** is preselected) shares a short text without any identification; it has none of the options above.
 
 **Invited external people.** If you were invited, you can also share a secret, by email only and only to the person who invited you: the form shows **The link will be sent by email to…** followed by their address, and there is nothing to choose. The tab is absent if your organisation does not allow secrets by email. See [Sending files with an invitation](topic:invitation).
 
-**From a script.** An API token can create secrets through the API (see `docs/api/` in the TransTeira repository). The command-line client `transteira-cli` does not handle secrets.
+**From a script.** An API token can create secrets through the API (see `docs/api/` in the TransTeira repository). The command-line client `transteira-cli` creates **express secrets** (`transteira-cli secret create`, anonymously with `--anonymous` or with a token that the administrator of your entity has allowed to create express secrets, even when the Express secret page is off) and reads a secret link **once** (`transteira-cli secret read`). It does not handle the secrets with a passphrase or a file: open their link in a browser. A token configuration that is broken or not needed no longer blocks `secret create --anonymous` nor `secret read`. See `docs/api/cli.md` in the TransTeira repository.
 
 ### My secrets
 
@@ -290,7 +290,7 @@ The **Secret created** screen then shows the **full link**, key included, with t
 - Do not put the link in a ticket, a wiki or any place that many people read.
 - Never forward a link you received: pass on the secret itself instead.
 
-Your organisation does not know who you are: it only keeps the address your connection comes from, in its audit log, for 12 months, never the content. The recipient sees a banner saying that the content was created by an unverified third party, and can report an abuse.
+Your organisation does not know who you are: it only keeps the address your connection comes from, in its audit log, and in its security log when a creation is refused, for 12 months, never the content. The recipient sees a banner saying that the content was created by an unverified third party, and can report an abuse.
 
 **When to prefer another tool.** Use [Share a secret](topic:secret-share) instead if you need a passphrase, a small file, an email delivery with a read receipt, or if you want to find your secrets again in [My transfers](topic:my-transfers).
 
@@ -299,9 +299,12 @@ Your organisation does not know who you are: it only keeps the address your conn
 - **Enter the text of the secret.**: the text is empty.
 - **The text is too long: 10,000 characters at most.**: shorten it, or send it through [Share a secret](topic:secret-share) or a transfer.
 - **The text contains invalid characters**: remove the characters that your keyboard or a copy and paste added by mistake, then try again.
-- **Too many secrets were created from your connection. Try again from …**: the hourly limit is reached for your network address. The button stays disabled until the time shown.
+- **Too many secrets created from your connection. Try again from …**: the hourly limit is reached for your network address. The button stays disabled until the time shown.
 - **Too many express secrets are waiting to be read on this service. Try again later.**: the service is full for now.
 - **… no longer offers express secrets.**: the service was closed by your organisation while you were typing.
+- **The secret could not be encrypted in this browser. Try again with an up-to-date browser.**: use a recent browser.
+- **The service refused this secret. Reload the page and try again.**: reload the page, then type the text again.
+- **Browser not supported**: the page replaces the form when the browser has no cryptography available. Use an up-to-date browser over a secure connection (HTTPS).
 - **The service is under maintenance**: try again later, see [Service under maintenance](topic:maintenance).
 
 If the page says that your organisation does not offer express secrets, the service is off for this entity.
@@ -313,7 +316,7 @@ Without creating an account, you can manage the transfers you sent: see where th
 
 ### Getting your access link
 
-1. Open the **My transfers** page of the sending site (the address ends with `/me`; the confirmation email of each transfer also contains the link).
+1. Click **My transfers** in the header of the sending site, or open its `/me` page (the confirmation email of each transfer also contains the link). On a narrow screen, the **My transfers** and **Express secret** links of the header shrink to an icon (a list and a padlock) and keep their name as a tooltip.
 1. Enter your email address and click the button to receive a link.
 
 ![My transfers page with the field Your email address and the button to receive an access link](../screenshots/en/my-transfers-request.png)
@@ -415,9 +418,9 @@ If the page says the link was not found, it is incomplete, disabled, revoked or 
 
 To send files automatically (a nightly export, a tool that deposits files), the transfer form is not needed: ask the administrator of your entity for an **API token**. A token lets a script deposit files without a person verifying an address, within the limits the administrator set for it (allowed network addresses and senders).
 
-A token can also create one-time secrets through the API, but the command-line client below does not handle them: see [Share a secret](topic:secret-share).
+A token can also create one-time secrets through the API. It creates express secrets only if the administrator turned on **Allowed to create express secrets** for it, even when the Express secret page is off for anonymous visitors: see [Share a secret](topic:secret-share).
 
-Your administrator can also give you the command-line client `transteira-cli`, which deposits and downloads from a terminal or a script, with the token, and resumes an interrupted upload by itself. Its binaries are published with each release on GitHub, with a signature to check before running them. The full guide is `docs/api/cli.md` in the TransTeira repository. Never paste a token in a message or a shared document: it gives the same access as a script of your entity.
+Your administrator can also give you the command-line client `transteira-cli`, which deposits and downloads from a terminal or a script, with the token, and resumes an interrupted upload by itself. It also creates an express secret (`secret create`, with the token if it is allowed for express, or without any token with `--anonymous`) and reads a secret link once (`secret read`, which never needs a token and is refused for a secret with a passphrase or a file). Its binaries are published with each release on GitHub, with a signature to check before running them. The full guide is `docs/api/cli.md` in the TransTeira repository. Never paste a token in a message or a shared document: it gives the same access as a script of your entity.
 
 <!-- topic: deposit-problems -->
 ## Common problems
@@ -452,9 +455,9 @@ Your organisation writes the legal documents of the service.
 
 At the bottom of the page, the links **Legal notice** and **Privacy policy** open these documents (a link appears only when the document has been written). If a document is missing, the page shows **This document has not been published by this service.**
 
-![Legal notice page of the entity, with the footer links Legal notice and Help, and the header buttons Language, Dark theme and Help](../screenshots/en/legal-notice.png)
+![Legal notice page of the entity, with the footer links Legal notice and Help, and the header links and buttons My transfers, Express secret (when offered), Language, Dark theme and Help](../screenshots/en/legal-notice.png)
 
-The service uses only technical cookies, with no audience measurement. The header holds the **Language** list, the **Dark theme** button and a round **Help** link (**?**) to the help of the current screen; the footer repeats a **Help** link and shows "Powered by TransTeira".
+The service uses only technical cookies, with no audience measurement. The header holds the **My transfers** link, the **Express secret** link (when your organisation offers it), the **Language** list, the **Dark theme** button and a round **Help** link (**?**) to the help of the current screen; the footer repeats a **Help** link and shows "Powered by TransTeira".
 
 ### Dark theme
 

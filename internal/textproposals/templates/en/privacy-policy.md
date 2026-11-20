@@ -34,6 +34,10 @@ Files are encrypted on the server disks. When a transfer is deleted, the encrypt
 
 {{ANTIVIRUS}}
 
+{{SECRETS}}
+
+{{EXPRESS}}
+
 ## Cookies
 
 The service uses strictly technical cookies only, which are necessary for it to work. It uses no audience measurement cookie and no third-party cookie, which is why no consent banner is shown.

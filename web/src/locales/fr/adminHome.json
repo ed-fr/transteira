@@ -73,6 +73,11 @@
     "antivirusEngine": "Antivirus ({engine})",
     "storage": "Stockage des fichiers",
     "maintenance": "Mode maintenance",
+    "expressSecrets": "Secrets express",
+    "express": {
+      "closed": "Fermés pour l’instance",
+      "perTenant": "Réglés par entité"
+    },
     "manageMaintenance": "Gérer le mode maintenance",
     "status": {
       "operational": "Opérationnelle",

@@ -47,6 +47,25 @@ export function adminGuides(signedInRole: string | undefined): readonly GuideId[
 /** Prefix of the topics of the auditor guide: auditor-<topic> is the auditor version of <topic>. */
 export const AUDITOR_TOPIC_PREFIX = 'auditor-';
 
+/**
+ * Topics of the delegated-admin guide that the super-admin guide writes again for the super
+ * admin, with the topic of that version: the home page of the super admin (key figures with the
+ * disk, New entity, System status) is not the one of a delegated admin, so its help icon and the
+ * help link of its footer (topic "admin", the topic of the route "/") open admin-home-super.
+ */
+export const SUPER_ADMIN_TOPICS: Readonly<Record<string, string>> = { admin: 'admin-home-super' };
+
+/**
+ * Topic opened for a signed-in role: a signed-in super admin gets the super-admin version of a
+ * topic when there is one (SUPER_ADMIN_TOPICS), like the auditor gets auditor-<topic> (resolveHelp).
+ * Any other role, a visitor not signed in and any other topic keep the requested topic.
+ */
+export function roleTopic(topic: string | undefined, signedInRole: string | undefined): string | undefined {
+  return topic !== undefined && signedInRole === 'super_admin' && Object.hasOwn(SUPER_ADMIN_TOPICS, topic)
+    ? SUPER_ADMIN_TOPICS[topic]
+    : topic;
+}
+
 /** What the help screen shows. */
 export type HelpView =
   | { kind: 'index'; guides: HelpGuide[]; unknownTopic?: string }

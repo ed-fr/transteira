@@ -16,11 +16,26 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `anonymous`. Off by default per entity (`expressEnabled`), with an instance kill switch
   `TT_EXPRESS_SECRETS_DISABLED`; closing the service also blocks the reading of the secrets it
   covers. Limits: 10 creations per hour per client (IPv4 or IPv6 /64), 100 per hour per token,
-  1 000 live express secrets per entity (refusing anonymous creations only), all adjustable.
+  1 000 live express secrets per entity (refusing anonymous creations only), all adjustable
+  (`SecretSettings` gains `expressPerHourPerIp` 1-1000, `expressPerHourPerToken` 1-10000 and
+  `expressMaxPending` 1-100000; a replacement without them keeps the stored values). New problem
+  codes `express-secrets-disabled`, `express-token-not-allowed` and
+  `express-secret-limit-reached`; `getPublicTenant` gains `features.expressSecrets`. An anonymous
+  creation is refused cross-site (`Origin` and `Sec-Fetch-Site`, 403 `csrf-invalid`). Behaviour
+  change for existing secret-link clients: while the service is closed, reading a secret it covers
+  answers 403 `express-secrets-disabled` and consumes nothing.
 - Admin lookup of a secret from a pasted link (`POST /admin/tenants/{tenantId}/secrets/lookup`),
   purge of the live anonymous express secrets of an entity
   (`POST /admin/tenants/{tenantId}/express-secrets/purge`) and abuse reports on an express secret
   (`POST /secret-links/{token}/abuse-reports`).
+- Audit: new actor kind `anonymous`, new actions `secret.looked_up` and `secret.express_purged`,
+  express details on `secret.created` (creator kind `anonymous` or `api_token`) and on
+  `abuse.reported` (secret identifier); never the content, the key or a token.
+- Configuration export and import carry the express settings; an import never opens the anonymous
+  service (`expressEnabled` is forced to false, default limits when absent).
+- Abuse report e-mail: new variables `report_intro`, `report_object` and `secret_id`; a customized
+  template that shows neither `report_object` nor `secret_id` is replaced by the default one for
+  reports on secrets.
 - Security log event `express_refused` and `rate_limited` scopes `express_ip` and
   `express_token`; the shipped fail2ban and CrowdSec rules count `express_ip` only.
 - Migration 0036 (express settings of the entities, `secrets.express`, `api_tokens.express_allowed`,
@@ -28,11 +43,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Express secret, web interface: the `/x` page (text of 10 000 characters at most, durations 1 hour,
   1 day and 7 days, the link composed in the browser and shown once with a Copy button), a header
   link shown only when the entity offers the service, and on the `/s/` page a banner for content
-  created by an unverified third party, a "Report abuse" button and a "temporarily unavailable"
+  created by an unverified third party, a "Report an abuse" button and a "temporarily unavailable"
   page when the service is closed (nothing is consumed).
 - Express secret, administration: express section of the secrets settings (switch and limits),
   emergency purge, lookup of a secret from a pasted link, `expressAllowed` option of the API
-  tokens, express and anonymous markers in the lists, and abuse reports on secrets.
+  tokens, express and anonymous markers in the lists, and abuse reports on secrets. An auditor may
+  look a secret up from its link but cannot purge or delete.
 - Express secret, user documentation and integrated help: new "Express secret" section of the
   depositor guide (shown only when the entity offers it), express subsections of the recipient,
   delegated administrator, super administrator and auditor guides, the express rules in the
@@ -58,8 +74,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
   (`GET /admin/system/status`: database and antivirus engines and states, storage, maintenance,
   version, from the checks shared with `/healthz`), previous-period totals in the statistics of
   an entity and in each row of the global statistics (7 and 30 days), virus and download counters
-  in the global rows, and the primary color of each entity in the entity answers.
-
+  in the global rows, and the primary color of each entity in the entity answers. The search takes
+  an optional `limit` (default 20, at most 50).
 - Administration redesign, interface (specification section 13.2): cross-entity transfer search
   in the header of the home page and on the `/search` screen (transfer identifier or complete
   address; identifier only for an auditor; the query is never put in the address bar nor stored),
@@ -73,22 +89,58 @@ and the project follows [Semantic Versioning](https://semver.org/).
   entries, and the signed-in user and Sign out at the bottom. Every screen gets a page header
   (title, help, actions), cards, tables in cards with status pills and storage gauges, and 44 px
   targets. The home page shows a greeting line, indicator tiles with a neutral trend compared
-  with the previous 30 days (disk tile for the super admin), an entities card limited to ten rows
-  with "See all", and a System status box; the system overview gains the same tiles and the
+  with the previous 30 days (disk tile for the super admin, storage tile for the other roles), an
+  entities card limited to ten rows with "See all", a System status box for the super admin and a
+  Shortcuts card for the others; the system overview gains the same tiles and the
   virus and download columns. User guides, integrated help and screenshots updated.
-- `AbuseReport` of the admin API: `transferId` and `senderEmail` are no longer required (a report
-  on a secret has neither) and `secretId` is added.
+- Admin API: `AbuseReport.transferId`, `AbuseReport.senderEmail` and `AdminSecret.senderEmail` are
+  no longer required (absent for a report on, or a row of, an express secret); `AbuseReport.secretId`,
+  `AdminSecret.express` and the `AdminSecret.creatorKind` value `anonymous` are added.
+- Express limits can only go down for a delegated admin (threat T-418): in
+  `updateSecretSettings`, a limit above the greater of its default (10, 100, 1 000) and the stored
+  value is refused with 403 `forbidden` and nothing is stored (not audited); a value raised by the
+  super admin can be re-saved or lowered, and the super admin keeps the full bounds.
+- `SystemStatus` gains the required member `expressSecrets.instanceDisabled` and `SecretSettings`
+  the read-only member `expressInstanceDisabled` (never exported, refused at import): the System
+  status box shows an "Express secrets" row and the Secrets settings screen a warning when
+  `TT_EXPRESS_SECRETS_DISABLED` is on.
+- Abuse report detail: "Delete this secret" button for a report on a secret (delegated admin and
+  super admin, not the auditor), and the `sec_` identifier shown under the creation date in the
+  secrets list.
+- Legal text proposals: the legal notice gets an abuse-report contact line to complete, and the
+  privacy policy a paragraph on one-time secrets and on express secrets when they are enabled
+  (English and French).
+- Coverage gate: `internal/api/public` is held at 100 %.
 - Public pages redesign (specification section 13.2): glass header with "My transfers", the
   express secret, language, theme and help; rounded card on the background image; discreet footer
   with "Powered by TransTeira". The deposit is a two-column card (drop zone, file cards and volume
   gauge; sender banner, recipient chips, segmented duration and confidentiality level, collapsible
   "Security options" block with switches). The download page shows "N files for you", information
   pills, one line per file with an antivirus badge and an abbreviated SHA-256 fingerprint with a
-  Copy button, and "Reply with files" and "Report an abuse" at the bottom. The administration is
-  unchanged at that step, except the branding preview. User guides, integrated help and screenshots updated.
+  Copy button, and "Reply with files" and "Report an abuse" at the bottom. The branding preview of
+  the administration mirrors the new public pages. User guides, integrated help and screenshots
+  updated.
 - ESLint 10.15.0 and typescript-eslint 8.73.0 in `web` and `test/e2e`: they pull minimatch 11.0.9,
   which fixes GHSA-g3hv-75wg-m249 (denial of service in glob matching). Lint tools only, nothing
   of them is shipped in the binary.
+
+### Fixed
+
+- Administration: the security event type `express_refused` has a label, a report on an express
+  secret names its reporter ("The anonymous reader of the express secret, not verified", also in
+  the abuse e-mail), the transfer origin `drop_link` is labelled instead of shown raw, and a test
+  now checks that every translated enumeration value has a key in both languages.
+- Help: the home page of a super admin opens the super admin guide, the reply page opens "Reply to
+  a transfer", and the administrator edit screen shows its help icon while loading and on error.
+- Command-line client: `secret read` and `secret create --anonymous` no longer read or validate the
+  token configuration (`TT_TOKEN`, `TT_TOKEN_FILE`, profile token), so an unused broken token no
+  longer makes them fail; `secret read` no longer accepts `--token-file`.
+
+### Security
+
+- golang.org/x/crypto 0.59.0 (GO-2026-5932 in golang.org/x/crypto/openpgp, a package TransTeira
+  never imports), with golang.org/x/sys 0.50.0, golang.org/x/term 0.48.0, golang.org/x/text 0.44.0
+  and golang.org/x/sync 0.25.0.
 
 ## [2.2.0] - 2026-11-11
 

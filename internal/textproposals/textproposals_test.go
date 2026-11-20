@@ -226,3 +226,50 @@ func FuzzPropose(f *testing.F) {
 		}
 	})
 }
+
+// TestProposeSecretsAndExpress checks the optional paragraphs of the
+// one-time and express secrets, and the abuse contact line of the legal
+// notice, present whatever the facts.
+func TestProposeSecretsAndExpress(t *testing.T) {
+	for _, lang := range []string{i18n.French, i18n.English} {
+		off := facts()
+		on := facts()
+		on.ExpressOffered, on.SecretsEnabled = true, true
+		legalOff, _ := textproposals.Propose(textproposals.LegalNotice, lang, off)
+		legalOn, _ := textproposals.Propose(textproposals.LegalNotice, lang, on)
+		privOff, _ := textproposals.Propose(textproposals.PrivacyPolicy, lang, off)
+		privOn, _ := textproposals.Propose(textproposals.PrivacyPolicy, lang, on)
+		for name, md := range map[string]string{"legalOff": legalOff, "legalOn": legalOn, "privOff": privOff, "privOn": privOn} {
+			if strings.Contains(md, "{{") || strings.Contains(md, "\n\n\n") {
+				t.Errorf("%s %s: leftover placeholder or blank run", lang, name)
+			}
+		}
+		// The abuse reports exist for the transfers and every secret, so the
+		// legal notice always carries its abuse contact marker.
+		abuseMarker := map[string]string{"fr": "[À compléter : contact pour les signalements d'abus]", "en": "[To complete: contact for abuse reports]"}[lang]
+		if strings.Count(legalOff, abuseMarker) != 1 || legalOn != legalOff {
+			t.Errorf("%s: the legal notice has its abuse contact marker whatever the facts", lang)
+		}
+		if len(privOn) <= len(privOff) || !strings.Contains(privOn, "7 ") || !strings.Contains(privOn, " 7") {
+			t.Errorf("%s: the privacy policy gains the secrets paragraphs", lang)
+		}
+		if !strings.Contains(privOn, "7 "+map[string]string{"fr": "mois", "en": "months"}[lang]) {
+			t.Errorf("%s: the express paragraph names the log retention", lang)
+		}
+		// Express without the 2.1 module, and the module without express.
+		onlyExpress := facts()
+		onlyExpress.ExpressOffered = true
+		onlySecrets := facts()
+		onlySecrets.SecretsEnabled = true
+		a, _ := textproposals.Propose(textproposals.PrivacyPolicy, lang, onlyExpress)
+		b, _ := textproposals.Propose(textproposals.PrivacyPolicy, lang, onlySecrets)
+		if len(a) <= len(privOff) || len(b) <= len(privOff) || len(a)+len(b) != len(privOn)+len(privOff) {
+			t.Errorf("%s: the two paragraphs are independent", lang)
+		}
+		legalExpress, _ := textproposals.Propose(textproposals.LegalNotice, lang, onlyExpress)
+		legalSecrets, _ := textproposals.Propose(textproposals.LegalNotice, lang, onlySecrets)
+		if legalExpress != legalOff || legalSecrets != legalOff {
+			t.Errorf("%s: the legal notice does not depend on the secrets facts", lang)
+		}
+	}
+}

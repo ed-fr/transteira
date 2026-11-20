@@ -238,6 +238,13 @@ Since 2.1, a provisioned entity has the one-time secrets module **enabled by def
 `ProvisionTenantRequest` body has no secret setting: the delegated admin or the super admin
 changes them afterwards with `PUT /admin/tenants/{tenantId}/secret-settings`.
 
+Since 2.3, the **express secrets are off** for a provisioned entity, and the provisioning request
+cannot turn them on. The delegated admin enables them with the same
+`PUT /admin/tenants/{tenantId}/secret-settings` (`expressEnabled`), and sets the opt-in
+`expressAllowed` on each API token that should create them (a ticketing tool, for example). A
+delegated admin can lower the express limits but not raise them above their defaults; only the
+super admin can.
+
 **The MSP's responsibilities** (threat model T-272, assumption H15):
 
 - It **chooses the address of the delegated admin** of each entity it creates. Whoever reads

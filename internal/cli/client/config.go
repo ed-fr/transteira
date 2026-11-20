@@ -100,6 +100,11 @@ type LoadOptions struct {
 	// RequireToken makes a missing token an error ([ErrNoToken]); deposits
 	// need one, downloads do not.
 	RequireToken bool
+	// NoToken skips the token resolution: TT_TOKEN, TT_TOKEN_FILE, the
+	// profile token and tokenFile and TokenFile are neither read nor
+	// validated, and the Config has no token. For the calls that never
+	// send one; it wins over RequireToken.
+	NoToken bool
 	// Getenv reads the environment; nil means os.Getenv.
 	Getenv func(string) string
 }
@@ -222,10 +227,12 @@ func Load(opts LoadOptions) (Config, error) {
 	if cfg.URL, err = NormalizeURL(rawURL); err != nil {
 		return Config{}, err
 	}
-	if cfg.Token, err = resolveToken(opts.TokenFile, getenv, prof); err != nil {
-		return Config{}, err
+	if !opts.NoToken {
+		if cfg.Token, err = resolveToken(opts.TokenFile, getenv, prof); err != nil {
+			return Config{}, err
+		}
 	}
-	if cfg.Token == "" && opts.RequireToken {
+	if cfg.Token == "" && opts.RequireToken && !opts.NoToken {
 		return Config{}, ErrNoToken
 	}
 	cfg.Sender = strings.TrimSpace(first(opts.Sender, getenv(EnvSender), prof.Sender))

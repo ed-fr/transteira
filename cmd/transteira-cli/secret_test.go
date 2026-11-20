@@ -185,6 +185,30 @@ func TestSecretCreateTokens(t *testing.T) {
 	}
 }
 
+// TestSecretNoTokenResolution checks that a broken but unused token
+// configuration does not fail "secret read" nor "secret create --anonymous".
+func TestSecretNoTokenResolution(t *testing.T) {
+	env(t)
+	t.Setenv("TT_TOKEN", "not-a-token")
+	t.Setenv("TT_TOKEN_FILE", "/nonexistent/token")
+	got, _ := fakeSecretCreate(t, sampleCreated(), nil)
+	if code, _, e := invoke(t, "x", "secret", "create", "--url", testURL, "--anonymous"); code != exitOK || !got.Anonymous {
+		t.Fatalf("create --anonymous: %d %q", code, e)
+	}
+	read, _ := fakeSecretRead(t, &secret.Revealed{Text: "x"}, nil)
+	if code, _, e := invoke(t, "", "secret", "read", testSecretLink); code != exitOK || read.Token != testSecretToken {
+		t.Fatalf("read: %d %q", code, e)
+	}
+	// secret read has no --token-file.
+	if code, _, e := invoke(t, "", "secret", "read", "--token-file", "t", testSecretLink); code != exitUsage || !strings.Contains(e, "token-file") {
+		t.Fatalf("read --token-file: %d %q", code, e)
+	}
+	// Without --anonymous the broken token still fails secret create.
+	if code, _, _ := invoke(t, "x", "secret", "create", "--url", testURL); code == exitOK {
+		t.Fatal("create with a broken token succeeded")
+	}
+}
+
 func TestSecretCreateOutput(t *testing.T) {
 	env(t)
 	fakeSecretCreate(t, sampleCreated(), nil)
@@ -283,7 +307,7 @@ func TestSecretReadUsage(t *testing.T) {
 }
 
 func TestSecretReadText(t *testing.T) {
-	flags := secretSetup(t)
+	flags := secretSetup(t)[:2] // --url only: secret read has no --token-file
 	got, gotClient := fakeSecretRead(t, &secret.Revealed{Text: "exact\ntext"}, nil)
 
 	// Link on the standard input: no warning, only the text on stdout,

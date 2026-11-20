@@ -53,7 +53,7 @@
   },
   "abuseReports": {
     "title": "Abuse reports",
-    "intro": "Reports made by recipients from the download page. The message is plain text, to be read with caution."
+    "intro": "Reports made by recipients from the download page, and by readers of an express secret from its read page. The message is plain text, to be read with caution."
   },
   "security": {
     "title": "Security log",

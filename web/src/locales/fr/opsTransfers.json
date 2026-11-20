@@ -12,7 +12,8 @@
     "external": "Invité externe",
     "api": "Jeton d’API",
     "internal_remote": "Interne depuis l’extérieur",
-    "reply": "Réponse"
+    "reply": "Réponse",
+    "drop_link": "Lien de dépôt"
   },
   "scan": {
     "pending": "En attente d’analyse",

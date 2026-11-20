@@ -358,6 +358,11 @@ delegated admins configure, branding, internal IP ranges and email domains,
 SMTP settings and mail templates. Every new tenant has the **one-time secrets
 module enabled by default**: review its settings (durations, file, e-mail
 delivery) in [Tenants](../operations/tenants.md#one-time-secrets).
+Since 2.3, the **express secrets** (a one-time text created without any
+authentication) are **off in every tenant** until an admin turns them on in the
+same settings, and the variable `TT_EXPRESS_SECRETS_DISABLED=true` closes them for the
+whole instance: see [Express secrets](../operations/tenants.md#express-secrets)
+before opening them.
 
 For each tenant:
 
@@ -422,7 +427,7 @@ wrong ([Reverse proxy](reverse-proxy.md#tt_trusted_proxies)).
 TransTeira writes a dedicated security log (failed codes, wrong transfer
 passwords, failed admin logins, invalid API tokens, invalid secret links and wrong secret passphrases,
 unknown FQDNs, refused
-deposits, rate limiting) with the real client IP, at
+deposits, express secrets refused (`express_refused`), rate limiting) with the real client IP, at
 `/var/lib/docker/volumes/transteira_logs/_data/security.log` on the host.
 
 - Format and rotation (logrotate with `create 0640 10001 10001`):

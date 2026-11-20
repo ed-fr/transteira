@@ -25,6 +25,8 @@ statistics) is described in [Administration](admin.md).
 | Default language | yes | yes |
 | Branding, IP ranges and domains, SMTP, mail templates, legal texts | yes | yes |
 | One-time secrets settings (since 2.1) | yes | yes |
+| Express secrets settings (since 2.3): the anonymous mode | yes | yes |
+| Express limits (since 2.3) | yes, within the full bounds | lower only, see [Express secrets](#express-secrets) |
 
 A delegated admin never sees another tenant: its identifier answers 404, as
 an unknown one would. Deletion is reserved to the super admin and answers
@@ -123,6 +125,16 @@ If a customised template cannot be read when a mail is sent, the default
 one is used and a warning is logged: mails are never lost because of a
 customisation.
 
+**Abuse report (`abuse_report`) since 2.3.** The mail to the delegated admins
+can be about a transfer or an express secret, so it gains the variables
+`report_intro` (first sentence), `report_object` (the reported object: the
+transfer and its sender, or the secret) and `secret_id` (the `sec_` identifier,
+empty for a transfer). A customisation saved before 2.3 does not show them:
+it keeps rendering the reports on transfers, and **the default template is used
+for the reports on secrets** (a mail that did not name the secret would be
+useless). To keep a customisation for both, add `report_object` or
+`secret_id` to its HTML and text bodies.
+
 ## Quota alerts
 
 The super admin sets the storage quota of each tenant. The storage used is
@@ -178,7 +190,8 @@ usage in the global statistics.
 Since 2.1, each tenant can let its users share one-time secrets, encrypted in
 the browser (see the [user guides](../user/en/delegated-admin.md)). Both the
 super admin and the delegated admins of the tenant can change all the
-settings (decision P72, threat model T-374), which are also exported and
+settings below (decision P72, threat model T-374; the express limits of
+[Express secrets](#express-secrets) can only be lowered by a delegated admin), which are also exported and
 imported with the configuration (`secretSettings`).
 
 | Setting | Default | Bounds |
@@ -204,6 +217,56 @@ imported with the configuration (`secretSettings`).
   its number of transfers for the abuse detection (alert only, never the volume).
 - The list of the secrets of the tenant (metadata only) and their deletion
   are in [Administration](admin.md#one-time-secrets).
+
+## Express secrets
+
+Since 2.3, a tenant can also let anyone who reaches its FQDN create an
+**express secret**: a one-time text, sealed in the browser, shared through a
+link, with no authentication at all (see the
+[user guides](../user/en/depositor.md) and
+[Express secrets](admin.md#express-secrets-since-23) for the operation). The
+settings are on the same screen and in the same `secretSettings` as the
+module above; both the super admin and the delegated admins of the tenant can
+change them, within the rules below. They are exported and imported with the
+configuration, but **an import always sets `expressEnabled` to false** in the
+new entity, whatever the file says (opening an anonymous service on a new
+host name is a deliberate act).
+
+| Setting | Default | Bounds (super admin) | Delegated admin |
+|---|---|---|---|
+| `expressEnabled` | **off** | | can turn it on or off |
+| `expressPerHourPerIp` | 10 | 1 to 1 000 | lower only |
+| `expressPerHourPerToken` | 100 | 1 to 10 000 | lower only |
+| `expressMaxPending` | 1 000 | 1 to 100 000 | lower only |
+
+- **Off by default, existing entities included.** After the upgrade to 2.3,
+  nobody can create anonymous express secrets until an admin turns the mode on.
+- **Lower only.** A delegated admin can set a limit at most to the greater of
+  its default and its current value, so a value raised by the super admin survives
+  the re-save of the form; above that, the whole save is refused (`403
+  forbidden`, nothing stored). The reason: the ciphertexts of every entity share
+  one database, and an anonymous service can fill it.
+- **Independent of `enabled`** (the 2.1 module): `enabled` governs the
+  authenticated secrets only, `expressEnabled` the anonymous ones only. An API
+  token additionally needs `expressAllowed` on the token (see
+  [API tokens](admin.md#api-tokens)); it can then create express secrets even
+  when `expressEnabled` is off.
+- **Instance kill switch.** `TT_EXPRESS_SECRETS_DISABLED=true` (environment,
+  restart) closes the creation and the reading of express secrets on every
+  entity, whatever these settings say, and the 2.1 secrets are not affected.
+  The screen shows a warning while it is on, and the super admin home shows
+  its state.
+- **Expiry.** An express secret lasts 1 hour, 1 day or 7 days, whatever the
+  durations offered to the 2.1 secrets.
+- **Before opening the service**, complete the
+  [legal notice and privacy policy](#legal-notice-and-privacy-policy) of the
+  entity: who answers to the abuse reports (the notice has a line to complete
+  for it), that the text is sealed in the browser and unreadable by the entity,
+  that it is destroyed at the first reading or at expiry (7 days at most), and
+  that the IP address of the creator is kept 12 months in the audit log (no
+  address is collected). The **Use the proposed text** button of the legal
+  screens always writes the abuse contact line of the notice, and the sentence of the privacy policy when the mode is on. Decide who handles the
+  abuse reports and the [emergency purge](admin.md#express-secrets-since-23).
 
 ## Legal notice and privacy policy
 

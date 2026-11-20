@@ -33,6 +33,8 @@ interface Section {
   topic?: string;
   /** Alternative texts of the screenshots of the section. */
   images: string[];
+  /** Feature flag of a `<!-- when: flag -->` marker: the embedded help hides the section when it is off. */
+  when?: string;
   /** Links to other help topics ([text](topic:x)) of the section. */
   topicLinks: { text: string; topic: string }[];
 }
@@ -61,10 +63,16 @@ function outline(lang: Lang, guide: GuideId): Outline {
   const source = fs.readFileSync(path.join(REPO_ROOT, 'docs', 'user', lang, `${guide}.md`), 'utf8');
   const sections: Section[] = [];
   let pendingTopic: string | undefined;
+  let pendingWhen: string | undefined;
   for (const line of source.split(/\r?\n/)) {
     const marker = /^<!--\s*topic:\s*(\S+)\s*-->$/.exec(line.trim());
     if (marker) {
       pendingTopic = marker[1];
+      continue;
+    }
+    const gate = /^<!--\s*when:\s*(\S+)\s*-->$/.exec(line.trim());
+    if (gate) {
+      pendingWhen = gate[1];
       continue;
     }
     const heading = /^(#{1,3})\s+(.*)$/.exec(line);
@@ -74,10 +82,12 @@ function outline(lang: Lang, guide: GuideId): Outline {
         title: plain(heading[2]!),
         level,
         topic: level === 1 ? guide : pendingTopic,
+        when: pendingWhen,
         images: [],
         topicLinks: [],
       });
       pendingTopic = undefined;
+      pendingWhen = undefined;
       continue;
     }
     const current = sections[sections.length - 1];
@@ -164,9 +174,15 @@ async function expectGuideImagesLoaded(page: Page, expectedAlts: string[]): Prom
   }
 }
 
-/** Alternative texts of every screenshot of a guide, in order. */
+/**
+ * Alternative texts of the screenshots a guide renders, in order. The sections gated by a `when`
+ * marker are skipped: their features are off on the entities these tests use, so the embedded help
+ * hides them.
+ */
 function guideImages(lang: Lang, guide: GuideId): string[] {
-  return outline(lang, guide).sections.flatMap((s) => s.images);
+  return outline(lang, guide)
+    .sections.filter((s) => !s.when)
+    .flatMap((s) => s.images);
 }
 
 /** Creates an available transfer of entity A (API token) and returns the path of its download page. */
@@ -367,13 +383,32 @@ test.describe('admin contextual help', () => {
     });
   }
 
-  test('footer link of the dashboard opens the home page section; screenshots load', async ({ page }) => {
-    await page.goto(`${ORIGINS.admin}/admin/`);
-    await expect(page.getByRole('heading', { name: msg('en', 'admin.home.title'), level: 1 })).toBeVisible();
-    await footerHelp(page).click();
-    await expectHelpSection(page, 'en', 'delegated-admin', 'admin', '/admin');
-    await expectGuideImagesLoaded(page, guideImages('en', 'delegated-admin'));
+  test('help of the dashboard opens the super-admin home section, from the footer and from the icon', async ({
+    page,
+  }) => {
+    // The URL keeps the topic of the screen (admin); a super admin gets the super-admin guide
+    // section admin-home-super instead of the delegated admin one.
+    const homeTitle = msg('en', 'admin.home.title');
+    const superHome = section('en', 'super-admin', 'admin-home-super');
+    const guideTitle = outline('en', 'super-admin').title;
+    for (const entry of ['footer', 'icon'] as const) {
+      await page.goto(`${ORIGINS.admin}/admin/`);
+      await expect(page.getByRole('heading', { name: homeTitle, level: 1 })).toBeVisible();
+      if (entry === 'footer') await footerHelp(page).click();
+      else
+        await page
+          .getByRole('link', { name: msg('en', 'help.icon', { title: homeTitle }), exact: true })
+          .click();
+      await expect(page).toHaveURL(/\/admin\/help\/admin$/);
+      await expect(sectionHeading(page, superHome)).toBeFocused();
+      await expect(page).toHaveTitle(
+        new RegExp(`^${escapeRegExp(superHome.title)} – ${escapeRegExp(guideTitle)}`),
+      );
+    }
+    await expectGuideImagesLoaded(page, guideImages('en', 'super-admin'));
+  });
 
+  test('the super-admin guide opens by its topic; screenshots load', async ({ page }) => {
     // The super-admin guide opens for a super admin, directly by its topic (the build refuses a
     // topic: link from the delegated-admin guide to the super-admin guide).
     await page.goto(`${ORIGINS.admin}/admin/help/super-admin`);

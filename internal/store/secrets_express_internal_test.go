@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/netip"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -761,4 +762,57 @@ func TestSecretsExpressFaults(t *testing.T) {
 		t.Errorf("purge resumed = %d, %v", n, err)
 	}
 	f.assertNoOrphanKeys(t, "purge faults")
+}
+
+// TestSecretsExpressConcurrentLimits checks that parallel creations never
+// over-admit: the tenant cap of the live anonymous express secrets
+// (MaxPending) and the hourly limit of one API token each accept exactly
+// their limit among N+k simultaneous calls (threat model, express cap).
+func TestSecretsExpressConcurrentLimits(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		f := newSecretFixture(t, e)
+		const limit, extra = 5, 7
+		f.setExpress(t, f.a, func(s *tenant.ExpressSettings) {
+			s.Enabled, s.MaxPending, s.PerHourPerToken = true, limit, limit
+		})
+		tok := f.expressToken(t, f.a)
+		race := func(name, tokenID string, wantErr error) {
+			t.Helper()
+			var wg sync.WaitGroup
+			errs := make([]error, limit+extra)
+			for i := range errs {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					c := f.expressInput(newProofs())
+					c.APITokenID, c.Now = tokenID, f.now
+					_, errs[i] = f.repo.CreateExpress(ctx, f.a, c)
+				}()
+			}
+			wg.Wait()
+			accepted, refused := 0, 0
+			for _, err := range errs {
+				switch {
+				case err == nil:
+					accepted++
+				case errors.Is(err, wantErr):
+					refused++
+				default:
+					t.Errorf("%s: unexpected error %v", name, err)
+				}
+			}
+			if accepted != limit || refused != extra {
+				t.Errorf("%s: %d accepted, %d refused, want %d and %d", name, accepted, refused, limit, extra)
+			}
+		}
+		race("anonymous cap", "", ErrExpressLimit)
+		// The token secrets are not stopped by the cap but by the hourly
+		// limit of the token (a fresh hour: the anonymous ones are live
+		// for an hour at least, the token ones count on their own).
+		race("token hourly limit", tok, ErrExpressTokenRate)
+		f.assertNoOrphanKeys(t, "concurrent limits")
+	})
 }

@@ -31,4 +31,10 @@ describe('public routes', () => {
     expect(isHelpRoute({ pattern: '/help/print' })).toBe(true);
     expect(isHelpRoute({ pattern: '/d/:token' })).toBe(false);
   });
+
+  it('opens the reply section of the recipient guide from the reply screen', () => {
+    const reply = matchRoutes(routes, notFoundRoute, '/d/dl_abc/reply').route;
+    expect(reply.helpTopic).toBe('download-reply');
+    expect(matchRoutes(routes, notFoundRoute, '/d/dl_abc').route.helpTopic).toBe('download');
+  });
 });

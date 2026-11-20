@@ -459,3 +459,16 @@ func FuzzConfig(f *testing.F) {
 		}
 	})
 }
+
+func TestLoadNoToken(t *testing.T) {
+	setGOOS(t, "linux")
+	noDefaultDir(t)
+	env := map[string]string{EnvURL: "https://a.example.com", EnvToken: "tt_bad", EnvTokenFile: "/nonexistent"}
+	if _, err := Load(LoadOptions{Getenv: envOf(env)}); err == nil {
+		t.Fatal("a broken token configuration is read without NoToken")
+	}
+	cfg, err := Load(LoadOptions{NoToken: true, RequireToken: true, TokenFile: "/nonexistent", Getenv: envOf(env)})
+	if err != nil || cfg.Token != "" {
+		t.Fatalf("NoToken: %+v %v", cfg, err)
+	}
+}

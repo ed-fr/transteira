@@ -91,6 +91,29 @@ func expressPatch(in SecretSettingsInput) (store.ExpressPatch, error) {
 	}, nil
 }
 
+// expressRaised reports whether in sets an express limit above both its
+// default and its stored value (a zero stored limit read as its default):
+// what only the super admin may do (threat model T-418). A delegated admin
+// may lower a limit, set it back to its default, or send back unchanged a
+// value the super admin raised; the express ciphertexts are kept in the
+// database shared by every tenant, outside the storage quota.
+func expressRaised(stored tenant.ExpressSettings, in SecretSettingsInput) bool {
+	cur, def := stored.WithDefaults(), tenant.DefaultExpressSettings()
+	for _, m := range []struct {
+		in           *int
+		stored, dflt int
+	}{
+		{in.ExpressPerHourPerIP, cur.PerHourPerIP, def.PerHourPerIP},
+		{in.ExpressPerHourPerToken, cur.PerHourPerToken, def.PerHourPerToken},
+		{in.ExpressMaxPending, cur.MaxPending, def.MaxPending},
+	} {
+		if m.in != nil && *m.in > max(m.stored, m.dflt) {
+			return true
+		}
+	}
+	return false
+}
+
 // expressSettings returns the express settings stored with the members of
 // in that are set, checked as [expressPatch] does (a zero stored limit
 // read as its default).
@@ -160,12 +183,28 @@ func (s *Service) GetSecretSettings(ctx context.Context, p adminauth.Principal, 
 // statement, store.ExpressPatch): a 2.1 client never writes back an
 // anonymous mode that a concurrent update just closed. The delegated admins of the
 // tenant and the super admin may call it, the anonymous mode of the
-// express secrets included. The settings apply to the secrets created
+// express secrets included. The three express limits only go down for a
+// delegated admin (since 2.3, threat model T-418): a limit set above both
+// its default and its stored value is ErrForbidden and nothing is stored;
+// the super admin sets them within their bounds. The body is checked
+// first, so an invalid member (a limit out of bounds included) is an
+// *InvalidError for every administrator, as UpdateTenant checks the bounds
+// of the transfer limit before its ceiling. The read of the stored limits,
+// the check and the write are serialized with the other changes of the
+// tenant rows (Service.mu), so that a stale replacement never writes a
+// limit above both its default and the value stored at the time of the
+// write; a client that sends every express member back may still restore
+// a limit up to its default, or reopen the anonymous mode (the
+// administration screen sends only the members the admin changed). The
+// settings apply to the secrets created
 // afterwards: the existing ones are untouched (lowering the cap of live
 // express secrets deletes nothing), except that turning the anonymous mode
 // off closes the reading of the anonymous express secrets. Audited as
-// secret.settings_updated with the names of the changed members.
+// secret.settings_updated with the names of the changed members; a refusal
+// is not audited.
 func (s *Service) UpdateSecretSettings(ctx context.Context, p adminauth.Principal, tid tenant.ID, in SecretSettingsInput, ip netip.Addr) (SecretSettingsInput, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	before, err := s.writable(ctx, p, tid)
 	if err != nil {
 		return SecretSettingsInput{}, err
@@ -177,6 +216,9 @@ func (s *Service) UpdateSecretSettings(ctx context.Context, p adminauth.Principa
 	express, err := expressPatch(in)
 	if err != nil {
 		return SecretSettingsInput{}, err
+	}
+	if superAdmin(p) != nil && expressRaised(before.Express, in) {
+		return SecretSettingsInput{}, ErrForbidden
 	}
 	t, err := s.repo.setSecretSettings(ctx, tid, next, express)
 	switch {

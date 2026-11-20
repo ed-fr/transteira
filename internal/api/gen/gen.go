@@ -5228,7 +5228,7 @@ type SecretList struct {
 
 // SecretLookup Since 2.3. Body of `lookupTenantSecret`: a secret link as received, or its bare token. The fragment (`#k=...`) is ignored and dropped unread; the token is hashed, never stored, logged nor audited.
 type SecretLookup struct {
-	// Link Full link `https://<fqdn>/s/<token>[#k=<key>]` or bare token (`tts_` and 43 base62 characters). No token extractable: `400 validation-failed` (`invalid-format`).
+	// Link Full link `https://<fqdn>/s/<token>[#k=<key>]` or bare token (`tts_` and 43 base62 characters). A `?query` part is dropped and a bare `/s/<token>` path accepted. Errors: `400 validation-failed` on `/link`, `required` (blank), `too-long` or `invalid-format` (no token extractable).
 	Link string `json:"link"`
 }
 
@@ -5303,13 +5303,16 @@ type SecretSettings struct {
 	// ExpressEnabled Since 2.3. Anonymous express secrets (`createExpressSecret` without credential) are offered on the tenant. Off by default. Independent of `enabled`: it does not govern the 2.1 module, and the 2.1 switch does not govern express secrets. Creations with an API token of the tenant are accepted even when off; the instance kill switch `TT_EXPRESS_SECRETS_DISABLED` refuses both whatever this setting. Always present in answers; absent in a replacement keeps the current value. Forced to false by a configuration import.
 	ExpressEnabled *bool `json:"expressEnabled,omitempty"`
 
-	// ExpressMaxPending Since 2.3. Live (`active`) express secrets the tenant may hold, anonymous and token ones together; when reached, anonymous creations are refused (`429 express-secret-limit-reached`), token creations still accepted. Default 1000. Always present in answers; absent in a replacement keeps the current value.
+	// ExpressInstanceDisabled Since 2.3. Read only: the instance kill switch `TT_EXPRESS_SECRETS_DISABLED` is on (environment, read at start). Then no express secret can be created, anonymous or with an API token, nor read, on any tenant, whatever `expressEnabled` stores (it is kept, and applies again once the switch is off). Always present in the answers of `getSecretSettings` and `updateSecretSettings`; ignored in a replacement. Never part of a configuration export: `importTenant` refuses it as an unknown member.
+	ExpressInstanceDisabled *bool `json:"expressInstanceDisabled,omitempty"`
+
+	// ExpressMaxPending Since 2.3. Live (`active`) express secrets the tenant may hold, anonymous and token ones together; when reached, anonymous creations are refused (`429 express-secret-limit-reached`), token creations still accepted. Default 1000. The super admin sets any value from 1 to 100000; a delegated admin only a value at most the greater of the default (1000) and the current value (`403 forbidden` above it, see `updateSecretSettings`). Always present in answers; absent in a replacement keeps the current value.
 	ExpressMaxPending *int `json:"expressMaxPending,omitempty"`
 
-	// ExpressPerHourPerIp Since 2.3. Anonymous express creations allowed per client (IPv4 address or IPv6 /64) in the sliding last hour, on this tenant. Default 10. Always present in answers; absent in a replacement keeps the current value.
+	// ExpressPerHourPerIp Since 2.3. Anonymous express creations allowed per client (IPv4 address or IPv6 /64) in the sliding last hour, on this tenant. Default 10. The super admin sets any value from 1 to 1000; a delegated admin only a value at most the greater of the default (10) and the current value (`403 forbidden` above it, see `updateSecretSettings`). Always present in answers; absent in a replacement keeps the current value.
 	ExpressPerHourPerIp *int `json:"expressPerHourPerIp,omitempty"`
 
-	// ExpressPerHourPerToken Since 2.3. Express creations allowed per API token in the sliding last hour (instead of the per-IP limit). Default 100. Always present in answers; absent in a replacement keeps the current value.
+	// ExpressPerHourPerToken Since 2.3. Express creations allowed per API token in the sliding last hour (instead of the per-IP limit). Default 100. The super admin sets any value from 1 to 10000; a delegated admin only a value at most the greater of the default (100) and the current value (`403 forbidden` above it, see `updateSecretSettings`). Always present in answers; absent in a replacement keeps the current value.
 	ExpressPerHourPerToken *int `json:"expressPerHourPerToken,omitempty"`
 
 	// FileAllowed Default true.
@@ -5648,6 +5651,12 @@ type SystemStatus struct {
 		Engine SystemStatusDatabaseEngine `json:"engine"`
 		Status ComponentHealth            `json:"status"`
 	} `json:"database"`
+
+	// ExpressSecrets The express secrets (specification section 22.2) at the instance level.
+	ExpressSecrets struct {
+		// InstanceDisabled The instance kill switch `TT_EXPRESS_SECRETS_DISABLED` is on (environment, read at start): no express secret can be created, anonymous or with an API token, nor read, on any tenant, whatever `SecretSettings.expressEnabled` stores. One-time secrets of 2.1 are not affected. Not a failure: `status` does not depend on it. As `SecretSettings.expressInstanceDisabled`.
+		InstanceDisabled bool `json:"instanceDisabled"`
+	} `json:"expressSecrets"`
 	Maintenance struct {
 		// Enabled Maintenance mode is in effect, as `Maintenance.enabled`.
 		Enabled bool `json:"enabled"`

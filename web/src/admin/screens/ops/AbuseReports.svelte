@@ -5,16 +5,19 @@
   // - columns: date, category, reporter, status; a button opens the detail (a dialog);
   // - detail: category, reporter (verified address, or the number of the recipient link used,
   //   unverified, or a shared link), sender, the message as TEXT (never HTML), the transfer (a
-  //   link to its detail while it exists) or, since 2.3, the express secret (its identifier and a
-  //   link to the secrets screen, where it is found from its link; never a transfer link), and
-  //   close (with an optional note) or reopen.
+  //   link to its detail while it exists) or, since 2.3, the express secret (its identifier, a
+  //   link to the secrets screen, whose list shows the identifier, and for an admin who may change
+  //   the tenant a "Delete this secret" button: after a confirmation, deleteTenantSecret, as from
+  //   the secrets list, 204 even when the secret already ended; never a transfer link), and close
+  //   (with an optional note) or reopen.
   // The tenant navigation is in the sidebar (SidebarTenantBlock of AdminShell).
   import { tick, untrack } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, Dialog, HelpIcon, TextArea, announce } from '../../../shared/components';
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
-  import { adminApi } from '../../api';
+  import { adminApi, adminSession } from '../../api';
+  import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import DataTable from '../../components/DataTable.svelte';
   import PageHeader from '../../components/PageHeader.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
@@ -26,6 +29,7 @@
     NOTE_MAX_LENGTH,
     addressText,
     afterUpdate,
+    canDeleteReportedSecret,
     categoryLabel,
     loadedText,
     noteTooLong,
@@ -65,6 +69,12 @@
   let busy = $state(false);
   let detailError = $state('');
   let noteError = $state('');
+
+  // Deletion of the reported express secret (since 2.3), from the detail.
+  let secretConfirmOpen = $state(false);
+  let secretDeleted = $state<string | undefined>(undefined);
+  let secretDoneEl: HTMLParagraphElement | undefined = $state();
+  const canDeleteSecret = $derived(canDeleteReportedSecret(report, adminSession.me?.role));
 
   const loadError = $derived(!list.loaded && typeof list.error === 'string' ? list.error : '');
   const moreError = $derived(list.loaded && typeof list.error === 'string' ? list.error : '');
@@ -151,6 +161,7 @@
     note = '';
     detailError = '';
     noteError = '';
+    secretDeleted = undefined;
     detailOpen = true;
     void checkTransfer(row);
     try {
@@ -196,6 +207,35 @@
   async function closed(): Promise<void> {
     await tick();
     heading?.focus();
+  }
+
+  // deleteTenantSecret answers 204 even for a secret already read, expired or deleted; a 404 (no
+  // such secret any more) is taken as done too, as in the secrets list.
+  async function deleteSecret(): Promise<string | void> {
+    const secretId = report?.secretId;
+    if (secretId === undefined) {
+      return;
+    }
+    try {
+      await adminApi.delete('/admin/tenants/{tenantId}/secrets/{secretId}', {
+        path: { tenantId, secretId },
+      });
+    } catch (err) {
+      const view = describeError(i18n, err);
+      if (view.status !== 404) {
+        return view.message;
+      }
+    }
+    secretDeleted = secretId;
+    announce(t('opsAbuse.detail.secretDeleted'));
+  }
+
+  // The button is gone once the secret is deleted: the focus goes to the result text.
+  async function secretConfirmClosed(): Promise<void> {
+    if (secretDeleted !== undefined && secretDeleted === report?.secretId) {
+      await tick();
+      secretDoneEl?.focus();
+    }
   }
 </script>
 
@@ -325,6 +365,17 @@
         <dt>{t('opsAbuse.detail.secret')}</dt>
         <dd class="tt-break">
           <code>{report.secretId}</code>
+          {#if secretDeleted === report.secretId}
+            <p class="tt-abuse-secret tt-abuse-secret__done" tabindex="-1" bind:this={secretDoneEl}>
+              {t('opsAbuse.detail.secretDeleted')}
+            </p>
+          {:else if canDeleteSecret}
+            <span class="tt-abuse-secret tt-abuse-secret__action">
+              <Button variant="secondary" onclick={() => (secretConfirmOpen = true)}>
+                {t('opsAbuse.detail.deleteSecret')}
+              </Button>
+            </span>
+          {/if}
           <span class="tt-abuse-secret">
             <a href={nav.href(tenantPath(tenantId, 'secrets'))} use:nav.link
               >{t('opsAbuse.detail.secretLink')}</a
@@ -359,7 +410,7 @@
       <TextArea
         id="{uid}-note"
         label={t('opsAbuse.detail.noteLabel')}
-        hint={t('opsAbuse.detail.noteHint')}
+        hint={t(canDeleteSecret ? 'opsAbuse.detail.noteHintSecret' : 'opsAbuse.detail.noteHint')}
         bind:value={note}
         counterMax={NOTE_MAX_LENGTH}
         rows={3}
@@ -368,6 +419,20 @@
     {/if}
     {#if detailError !== ''}
       <Alert severity="error">{detailError}</Alert>
+    {/if}
+    {#if report.secretId !== undefined && canDeleteSecret}
+      <!-- Inside the detail dialog: the confirmation opens over it (top layer) and gives the focus
+           back to it when it closes. -->
+      <ConfirmDialog
+        bind:open={secretConfirmOpen}
+        title={t('opsAbuse.detail.deleteSecretTitle')}
+        text={t('opsAbuse.detail.deleteSecretText', { id: report.secretId })}
+        confirmLabel={t('opsAbuse.detail.deleteSecretConfirm')}
+        busyLabel={t('opsAbuse.detail.deleteSecretBusy')}
+        danger
+        onconfirm={deleteSecret}
+        onclose={() => void secretConfirmClosed()}
+      />
     {/if}
   {/if}
   {#snippet actions()}
@@ -395,6 +460,11 @@
 <style>
   .tt-abuse-secret {
     display: block;
+  }
+
+  .tt-abuse-secret__action,
+  .tt-abuse-secret__done {
+    margin: var(--tt-space-2) 0;
   }
 
   .tt-abuse-message {

@@ -366,6 +366,11 @@ administrateurs délégués configurer, l’habillage, les plages d’adresses I
 les réglages SMTP et les modèles de mails. Chaque nouvelle entité a le **module des
 secrets à usage unique activé par défaut** : vérifiez ses réglages (durées, fichier,
 envoi par mail) dans [Entités](../../operations/tenants.md#one-time-secrets).
+Depuis la 2.3, les **secrets express** (un texte à usage unique créé sans aucune
+authentification) sont **désactivés dans toutes les entités** tant qu’un administrateur ne les
+active pas dans les mêmes réglages, et la variable `TT_EXPRESS_SECRETS_DISABLED=true` les ferme
+pour toute l’instance : voir [Secrets express](../../operations/tenants.md#express-secrets)
+avant de les ouvrir.
 
 Pour chaque entité :
 
@@ -429,7 +434,7 @@ incorrecte ([Reverse proxy](../reverse-proxy.md#tt_trusted_proxies)).
 
 TransTeira écrit un journal de sécurité dédié (codes erronés, mauvais mots de passe
 de transfert, échecs de connexion admin, jetons d’API invalides, liens de secret invalides et mauvaises phrases secrètes, FQDN inconnus, dépôts
-refusés, limitation de débit) avec l’IP réelle du client, dans
+refusés, secrets express refusés (`express_refused`), limitation de débit) avec l’IP réelle du client, dans
 `/var/lib/docker/volumes/transteira_logs/_data/security.log` sur l’hôte.
 
 - Format et rotation (logrotate avec `create 0640 10001 10001`) :
